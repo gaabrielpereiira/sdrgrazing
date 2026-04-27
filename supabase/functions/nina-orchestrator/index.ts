@@ -95,6 +95,41 @@ const cancelAppointmentTool = {
   }
 };
 
+// Tool definition for transferring conversation to a human attendant.
+// Replaces the old practice of writing "🔔 ATENDIMENTO NECESSÁRIO" as plain text
+// (which leaked the internal alert to the customer's WhatsApp).
+const requestHandoffTool = {
+  type: "function",
+  function: {
+    name: "request_human_handoff",
+    description: "Transfere a conversa para um atendente humano e cria uma notificação interna na plataforma. Use SEMPRE que o cliente precisar de atendimento humano (reclamação, status de pedido, cancelamento, boleto/NF, lead qualificado, ou qualquer assunto fora do escopo da IA). NUNCA escreva mensagens internas como '🔔 ATENDIMENTO NECESSÁRIO' no chat — use esta ferramenta.",
+    parameters: {
+      type: "object",
+      properties: {
+        reason: {
+          type: "string",
+          enum: ["complaint", "order_status", "cancel_change", "payment_invoice", "qualified_lead", "other"],
+          description: "Motivo da transferência (uso interno)."
+        },
+        urgency: {
+          type: "string",
+          enum: ["normal", "urgent"],
+          description: "Urgência. Use 'urgent' para reclamações ou problemas com entrega/pagamento; 'normal' para o restante."
+        },
+        summary: {
+          type: "string",
+          description: "Resumo curto (1-2 linhas) do que o cliente precisa, para o atendente humano. NUNCA será visto pelo cliente."
+        },
+        customer_message_for_client: {
+          type: "string",
+          description: "Mensagem AMIGÁVEL e curta que SERÁ enviada ao cliente confirmando que um atendente vai assumir. Ex: 'Entendido! Vou acionar um especialista agora. Em instantes alguém estará com você. ✨'"
+        }
+      },
+      required: ["reason", "urgency", "summary", "customer_message_for_client"]
+    }
+  }
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -724,6 +759,9 @@ async function processQueueItem(
     tools.push(cancelAppointmentTool);
     console.log('[Nina] AI scheduling enabled, adding appointment tools (create, reschedule, cancel)');
   }
+  // Always expose human handoff tool — IA usa para transferir para atendente
+  // sem vazar mensagem interna para o cliente.
+  tools.push(requestHandoffTool);
 
   // Build request body
   const requestBody: any = {
@@ -776,6 +814,7 @@ async function processQueueItem(
   let appointmentCreated = null;
   let appointmentRescheduled = null;
   let appointmentCancelled = null;
+  let handoffRequested: any = null;
   
   for (const toolCall of toolCalls) {
     if (toolCall.function?.name === 'create_appointment') {
@@ -861,6 +900,70 @@ async function processQueueItem(
         console.error('[Nina] Error parsing cancel_appointment arguments:', parseError);
       }
     }
+
+    if (toolCall.function?.name === 'request_human_handoff') {
+      try {
+        const args = JSON.parse(toolCall.function.arguments);
+        console.log('[Nina] Processing request_human_handoff tool call:', args);
+
+        // 1) Mark conversation as needing/under human handling
+        await supabase
+          .from('conversations')
+          .update({ status: 'human' })
+          .eq('id', conversation.id);
+
+        // 2) Build a friendly title for the notification
+        const contactName =
+          conversation.contact?.name ||
+          conversation.contact?.call_name ||
+          conversation.contact?.phone_number ||
+          'Cliente';
+
+        const reasonLabels: Record<string, string> = {
+          complaint: 'Reclamação',
+          order_status: 'Status de pedido',
+          cancel_change: 'Cancelamento/alteração',
+          payment_invoice: 'Boleto / Nota fiscal',
+          qualified_lead: 'Lead qualificado',
+          other: 'Atendimento',
+        };
+        const reasonLabel = reasonLabels[args.reason] || 'Atendimento';
+        const isUrgent = args.urgency === 'urgent';
+
+        const title = isUrgent
+          ? `🚨 URGENTE — ${reasonLabel}: ${contactName}`
+          : `${reasonLabel}: ${contactName}`;
+
+        const body = [
+          args.summary || '',
+          message?.content ? `Última mensagem do cliente: "${message.content}"` : ''
+        ].filter(Boolean).join('\n\n');
+
+        // 3) Insert internal notification (visible only on the platform)
+        await supabase.from('notifications').insert({
+          type: isUrgent ? 'handoff_urgent' : 'handoff_requested',
+          title,
+          body,
+          conversation_id: conversation.id,
+          contact_id: conversation.contact_id,
+          metadata: {
+            reason: args.reason,
+            urgency: args.urgency,
+            triggered_by: 'nina',
+          },
+        });
+
+        // 4) Replace any AI text content with the safe customer-facing message.
+        //    Critical: prevents the model's internal "🔔 ATENDIMENTO NECESSÁRIO ..."
+        //    text from ever reaching the customer's WhatsApp.
+        aiContent = args.customer_message_for_client?.trim() ||
+          'Entendido! Vou acionar um dos nossos especialistas agora para te ajudar. Em instantes alguém estará com você. ✨';
+
+        handoffRequested = { reason: args.reason, urgency: args.urgency };
+      } catch (parseError) {
+        console.error('[Nina] Error parsing request_human_handoff arguments:', parseError);
+      }
+    }
   }
 
   // If no content and we only got tool calls, generate a default response
@@ -876,7 +979,45 @@ async function processQueueItem(
     }
   }
 
-  // Fallback for empty AI response - use default greeting instead of throwing error
+  // SAFETY NET: if the model still tries to write internal handoff text
+  // (e.g. "🔔 ATENDIMENTO NECESSÁRIO ..." or "LEAD QUALIFICADO — PASSAR PARA ATENDIMENTO HUMANO"),
+  // intercept it: do the handoff via notification AND replace with a customer-friendly message.
+  // This prevents the internal alert from leaking into the customer's WhatsApp.
+  if (aiContent && /🔔|ATENDIMENTO NECESS|PASSAR PARA ATENDIMENTO HUMANO|Mensagem original:/i.test(aiContent)) {
+    console.warn('[Nina] Detected internal handoff text in AI output — intercepting and converting to platform notification.');
+    try {
+      const contactName =
+        conversation.contact?.name ||
+        conversation.contact?.call_name ||
+        conversation.contact?.phone_number ||
+        'Cliente';
+
+      await supabase
+        .from('conversations')
+        .update({ status: 'human' })
+        .eq('id', conversation.id);
+
+      await supabase.from('notifications').insert({
+        type: 'handoff_requested',
+        title: `Atendimento necessário: ${contactName}`,
+        body: [
+          'A IA sinalizou que esta conversa precisa de um atendente humano.',
+          message?.content ? `Última mensagem do cliente: "${message.content}"` : ''
+        ].filter(Boolean).join('\n\n'),
+        conversation_id: conversation.id,
+        contact_id: conversation.contact_id,
+        metadata: { triggered_by: 'safety_net', original_text: aiContent.slice(0, 500) },
+      });
+
+      handoffRequested = handoffRequested || { reason: 'other', urgency: 'normal' };
+      aiContent = 'Entendido! Vou acionar um dos nossos especialistas agora para te ajudar. Em instantes alguém estará com você. ✨';
+    } catch (e) {
+      console.error('[Nina] Safety-net handoff failed:', e);
+      // Even on failure, never let the internal text reach the customer.
+      aiContent = 'Vou te conectar com um especialista. Em instantes alguém estará com você. ✨';
+    }
+  }
+
   if (!aiContent) {
     console.warn('[Nina] Empty AI response received, using fallback');
     aiContent = 'Olá! Como posso ajudar você hoje? 😊';
@@ -1145,6 +1286,11 @@ Trigger para oferecer agendamento:
 - Lead demonstrou interesse claro no Viver de IA
 - Lead atende critérios de qualificação
 - Momento natural da conversa (não force)
+
+Transferência para humano:
+- Quando o cliente precisar de atendimento humano (reclamação, status de pedido, cancelamento, boleto/NF, ou qualquer assunto fora do seu escopo), use SEMPRE a ferramenta request_human_handoff.
+- NUNCA escreva no chat mensagens internas como "🔔 ATENDIMENTO NECESSÁRIO", "ASSUNTO:", "Mensagem original:" ou listas de campos internos. Essas mensagens vão direto para o WhatsApp do cliente.
+- Ao chamar a ferramenta, preencha customer_message_for_client com uma mensagem amigável e curta (essa SIM vai para o cliente).
 </tool_usage_protocol>
 
 <cognitive_process>
