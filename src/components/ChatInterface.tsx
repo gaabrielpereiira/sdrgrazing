@@ -296,6 +296,41 @@ const ChatInterface: React.FC = () => {
     }
 
     if (msg.type === MessageType.AUDIO) {
+      // Audio still being downloaded from WhatsApp servers
+      if (!msg.mediaUrl) {
+        const mediaId = msg.metadata?.media_id;
+        const retryDownload = async () => {
+          if (!mediaId) return;
+          try {
+            const { supabase } = await import('@/integrations/supabase/client');
+            toast.info('Baixando áudio...');
+            const { error } = await supabase.functions.invoke('download-whatsapp-media', {
+              body: { message_id: msg.id, media_id: mediaId }
+            });
+            if (error) throw error;
+            toast.success('Áudio baixado, atualizando...');
+          } catch (e: any) {
+            toast.error('Falha ao baixar áudio: ' + (e.message || 'erro'));
+          }
+        };
+        return (
+          <div className="flex items-center gap-2 min-w-[220px] py-2 text-xs opacity-80">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span>Carregando áudio…</span>
+            {mediaId && (
+              <button
+                onClick={retryDownload}
+                className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded hover:bg-white/10 transition"
+                title="Tentar baixar novamente"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Recarregar</span>
+              </button>
+            )}
+          </div>
+        );
+      }
+
       const isPlaying = playingAudioId === msg.id;
       const duration = audioDurations[msg.id] || 0;
       const progress = audioProgress[msg.id] || 0;

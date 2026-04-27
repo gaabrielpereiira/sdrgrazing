@@ -1,47 +1,64 @@
-# Habilitar anexos no chat
+# Corrigir áudios no chat
 
-Hoje o botão de clipe (📎) no `ChatInterface` está desabilitado com tooltip "Em breve". O backend já está preparado: `whatsapp-sender` aceita `image`, `audio` e `document`, e o bucket público `whatsapp-media` já existe. Só falta a parte do frontend.
+## Causa raiz (confirmada nos logs)
 
-## O que vai mudar
+No `whatsapp-webhook/index.ts` (linha 286), o disparo do `download-whatsapp-media` cobre apenas `image`, `video` e `document` — **`audio` está fora da lista**. Por isso, todo áudio recebido é gravado em `messages` com `media_url = NULL` e o player do chat não tem o que tocar (botão fica desabilitado).
 
-1. **Botão de anexo funcional** no rodapé do chat
-   - Remover o `disabled`.
-   - Ao clicar, abre um menu com opções:
-     - 🖼️ Imagem (jpg, png, webp, gif)
-     - 🎵 Áudio (mp3, ogg, m4a)
-     - 📄 Documento (pdf, doc, docx, xls, xlsx)
-   - Cada opção abre o seletor nativo (`<input type="file">`) já filtrado pelo accept correto.
+O `message-grouper` baixa o áudio só para fazer transcrição (Whisper), mas joga o buffer fora — não sobe no bucket nem preenche `media_url`.
 
-2. **Pré-visualização antes de enviar**
-   - Após selecionar o arquivo, mostrar um card flutuante acima do input com:
-     - Miniatura (imagem) ou ícone (áudio/documento) + nome do arquivo + tamanho.
-     - Campo de legenda opcional (apenas para imagem).
-     - Botões "Cancelar" e "Enviar".
-   - Validações: tamanho máximo 16 MB (limite do WhatsApp Cloud API) e tipos permitidos.
+Resultado no banco:
 
-3. **Upload + envio**
-   - Upload do arquivo para o bucket `whatsapp-media` em `outbound/{conversationId}/{timestamp}-{nome}.ext`.
-   - Pegar a URL pública.
-   - Inserir no banco:
-     - `messages` com `type` = image/audio/document, `media_url`, `media_type`, `content` (legenda ou nome do arquivo) e `status = 'processing'`.
-     - `send_queue` com `message_type` correspondente, `media_url`, `content`, `priority = 2` e `message_id` referenciando a mensagem criada.
-   - Disparar `whatsapp-sender` igual já é feito para texto.
-   - Atualização otimista na UI para o anexo aparecer instantaneamente na conversa.
+```
+type=audio | media_url=NULL  ← 2 áudios órfãos
+```
 
-4. **Renderização de mensagens com mídia outgoing**
-   - Garantir que mensagens enviadas pelo humano com `media_url` apareçam corretamente no histórico (imagem inline, player de áudio, link de download para documento). O player de áudio já existe; vamos reaproveitar e adicionar os casos de imagem/documento para o lado outgoing.
+## O que vou fazer
 
-## Arquivos afetados
+### 1. Webhook: incluir `audio` (e `voice`) no download
+- Em `supabase/functions/whatsapp-webhook/index.ts`, adicionar `'audio'` à lista que dispara `download-whatsapp-media`, usando `message.audio?.id` como `media_id`.
+- A função `download-whatsapp-media` já trata `audio/ogg` corretamente (mapeia `.ogg`), então sobe no bucket público `whatsapp-media` e atualiza `messages.media_url` automaticamente. Sem mudanças nessa função.
 
-- `src/services/api.ts` — nova função `sendMediaMessage(conversationId, file, { type, caption })` que faz upload, cria a mensagem e enfileira.
-- `src/hooks/useConversations.ts` — expor `sendMediaMessage` com optimistic update.
-- `src/components/ChatInterface.tsx` — habilitar botão Paperclip, adicionar menu de tipos, input file oculto, modal de preview/legenda, e renderização de mídia outgoing.
-- (Opcional) novo subcomponente `src/components/chat/AttachmentPreview.tsx` para o card de pré-visualização.
+### 2. Player tolerante quando `media_url` ainda não chegou
+- Em `src/components/ChatInterface.tsx`, quando `msg.type === AUDIO` e `msg.mediaUrl` for null, mostrar um indicador "Carregando áudio…" em vez de um botão desabilitado silencioso. O Realtime já atualiza a mensagem assim que o `download-whatsapp-media` preencher a URL.
 
-## Notas técnicas
+### 3. Resgatar os 2 áudios já órfãos no banco (best-effort)
+- Os áudios recebidos antes desse fix têm `media_id` salvo em `messages.metadata.media_id`. O link da Meta dura ~30 dias, então provavelmente ainda dá pra baixar.
+- Adicionar um botão discreto **"Recarregar mídia"** no player de áudio quando `mediaUrl` for null e existir `metadata.media_id`. Ao clicar, chama `download-whatsapp-media` com aquele `media_id` e o `message_id`. Útil também para qualquer falha futura.
 
-- Bucket `whatsapp-media` já é público — sem nova migration necessária.
-- WhatsApp Cloud API exige URL pública acessível para `link`; a URL pública do Supabase Storage atende.
-- Limite de 16 MB respeita o teto da Cloud API para qualquer tipo de mídia (na prática áudio é 16 MB, documento 100 MB, imagem 5 MB; vamos usar limites por tipo: imagem 5 MB, áudio 16 MB, documento 100 MB).
-- Sem mudanças no `whatsapp-sender` — ele já trata os 3 tipos.
-- Sem mudanças de RLS — políticas existentes em `messages`/`send_queue` já permitem inserts autenticados.
+### 4. Documentação
+- Atualizar `mem://features/audio-flow-complete-implementation` mencionando o download para storage no webhook (não só STT no grouper).
+
+## Fora do escopo
+- **ElevenLabs (TTS):** sem fix de código possível — sua API key é Free e a Meta retornou `402 paid_plan_required`. Resolva fazendo upgrade do plano da ElevenLabs ou trocando a key. Posso melhorar a mensagem de erro do botão de teste num próximo passo se quiser.
+- **Lovable AI (créditos):** os logs também mostram `[Nina] AI response error: 402 Not enough credits` no `nina-orchestrator` e no STT do áudio (`message-grouper`). Isso significa que a Nina não responde nem transcreve até você adicionar créditos em Lovable Cloud → AI. Não é parte desse fix.
+
+## Detalhes técnicos
+
+**Diff conceitual no webhook** (linha ~286):
+```ts
+// antes
+if (['image', 'video', 'document'].includes(message.type)) {
+  const mediaId = message.image?.id || message.video?.id || message.document?.id;
+
+// depois
+if (['image', 'video', 'document', 'audio'].includes(message.type)) {
+  const mediaId = message.image?.id || message.video?.id 
+                || message.document?.id || message.audio?.id;
+```
+
+**Player (`ChatInterface.tsx`)** — adicionar branch para áudio sem URL:
+```tsx
+if (!msg.mediaUrl) {
+  return (
+    <div className="flex items-center gap-2 text-xs opacity-70">
+      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      <span>Carregando áudio…</span>
+      {msg.metadata?.media_id && (
+        <button onClick={retryDownload}>Recarregar</button>
+      )}
+    </div>
+  );
+}
+```
+
+Tudo isso é frontend + edição do webhook + uma migration zero. Sem nova tabela, sem nova função.

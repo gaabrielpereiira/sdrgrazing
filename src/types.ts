@@ -303,6 +303,7 @@ export interface UIMessage {
   fromType: MessageFromType;
   mediaUrl: string | null;
   whatsappMessageId: string | null;
+  metadata?: Record<string, any>;
 }
 
 // ============= Utility Functions =============
@@ -351,7 +352,8 @@ export function transformDBToUIMessage(msg: DBMessage): UIMessage {
     status: mapDBMessageStatus(msg.status),
     fromType: msg.from_type,
     mediaUrl: msg.media_url,
-    whatsappMessageId: msg.whatsapp_message_id
+    whatsappMessageId: msg.whatsapp_message_id,
+    metadata: msg.metadata || {}
   };
 }
 

@@ -282,9 +282,9 @@ serve(async (req) => {
 
           console.log('[Webhook] Created message:', dbMessage.id, 'for conversation:', conversation.id);
 
-          // 4b. Trigger media download for image/video/document (non-blocking)
-          if (['image', 'video', 'document'].includes(message.type)) {
-            const mediaId = message.image?.id || message.video?.id || message.document?.id;
+          // 4b. Trigger media download for image/video/document/audio (non-blocking)
+          if (['image', 'video', 'document', 'audio'].includes(message.type)) {
+            const mediaId = message.image?.id || message.video?.id || message.document?.id || message.audio?.id;
             if (mediaId) {
               EdgeRuntime.waitUntil(
                 fetch(`${supabaseUrl}/functions/v1/download-whatsapp-media`, {
