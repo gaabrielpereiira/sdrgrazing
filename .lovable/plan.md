@@ -1,48 +1,77 @@
-## Diagnóstico
+# Plano: Atividades agendadas no chat + Indicador de atendente
 
-Confirmei no banco de dados:
-- A notificação **foi criada com sucesso** pelo orchestrator às 14:12:17 (título: "🚨 URGENTE — Reclamação: Gabriel Pereira", `is_read=false`)
-- A tabela `notifications` está corretamente na publicação `supabase_realtime`
-- A política RLS permite leitura por qualquer usuário autenticado
-- O componente `NotificationsBell` está renderizado no `Sidebar` e o hook `useNotifications` faz fetch inicial + subscrição realtime
+## O que será adicionado
 
-Ou seja, **a notificação existe no backend** — o problema é que o sino no Sidebar não está exibindo o badge / popover não lista o item para o usuário. Provavelmente:
+### 1. Atividades/Lembretes da conversa (com data e hora)
+Dentro de cada conversa no chat, será possível criar tarefas como "Ligar para o cliente amanhã às 14h", "Enviar proposta sexta", etc. Essas atividades aparecem de forma visível e disparam lembretes quando chega a hora.
 
-1. O `unreadCount` não está sendo recalculado/exibido corretamente em algum estado
-2. A subscrição realtime do `notifications-feed` pode estar conflitando com outros canais
-3. Pode faltar `REPLICA IDENTITY FULL` na tabela (afeta updates), mas o fetch inicial deveria pegar mesmo assim
-4. Pode haver erro silencioso de RLS quando `auth.role()` retorna algo diferente de `'authenticated'` no client
+**Onde aparece:**
+- **Painel direito do chat**: nova seção "Atividades & Lembretes" logo abaixo de "Responsável", com:
+  - Botão "+ Nova atividade" (abre modal com título, descrição opcional, data/hora, tipo: ligar/enviar mensagem/reunião/outro)
+  - Lista das próximas atividades pendentes (ordenadas por data), com botão "Concluir" e "Editar"
+  - Atividades vencidas aparecem destacadas em vermelho
+- **Header do chat**: badge amarelo "⏰ Lembrete em 2h" quando houver atividade pendente próxima (< 24h)
+- **Lista de conversas (sidebar esquerda)**: ícone de relógio ao lado do nome do contato quando há atividade pendente para hoje
+- **Sino de notificações** (já existente): notificação criada automaticamente quando a hora da atividade chega
 
-## Plano de correção
+### 2. Indicador de atendente no chat
+Saber visualmente quem está conversando com cada cliente.
 
-### 1. Ajustar a tabela `notifications` (migração)
-- Adicionar `REPLICA IDENTITY FULL` para garantir payloads completos no realtime
-- Confirmar/re-adicionar à publicação `supabase_realtime` (idempotente)
-- Adicionar índice em `(is_read, created_at DESC)` para performance do badge
+**Onde aparece:**
+- **Header do chat (topo)**: ao lado do status (Nina/Humano), mostra avatar + nome do atendente responsável (ex: "👤 João Silva"). Se ninguém atribuído e status=humano, mostra "Sem responsável" em laranja como alerta.
+- **Lista de conversas**: pequeno avatar do responsável no canto inferior do item da lista (quando atribuído)
 
-### 2. Tornar o `useNotifications` mais resiliente
-- Logar erros e contagem retornada (`console.info('[Notifications] fetched X, unread Y')`)
-- Adicionar polling de fallback a cada 15s caso a subscrição falhe (mesmo padrão usado em `useConversations`)
-- Garantir que o canal realtime tenha nome único (ex.: `notifications-feed-${random}`) para evitar colisão entre múltiplas montagens
-- Ordenar por `created_at DESC` consistentemente após inserts
+## Detalhes técnicos
 
-### 3. Garantir notificação também em handoff manual
-Atualmente só o orchestrator (AI) cria notificação. Quando o **usuário muda manualmente** o status para `human` pela UI (como aconteceu nos logs: `status updated to nina` → `human`), nenhuma notificação é gerada para outros membros da equipe.
+### Banco de dados
+Reaproveitar a tabela existente `deal_activities` não serve (é vinculada a deal). Criar nova tabela:
 
-Em `src/services/api.ts`, no método que altera `conversations.status` para `human`, **inserir também** uma notificação do tipo `handoff_manual` na tabela `notifications`, contendo o nome do contato e link para a conversa.
+```sql
+CREATE TABLE public.conversation_activities (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id uuid NOT NULL,
+  contact_id uuid NOT NULL,
+  title text NOT NULL,
+  description text,
+  activity_type text NOT NULL DEFAULT 'call', -- call|message|meeting|other
+  scheduled_at timestamptz NOT NULL,
+  is_completed boolean NOT NULL DEFAULT false,
+  completed_at timestamptz,
+  reminder_sent boolean NOT NULL DEFAULT false,
+  created_by uuid,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+-- RLS permissivo (single-tenant) + index em scheduled_at + adicionar à publicação realtime
+```
 
-### 4. Melhorar feedback visual no `NotificationsBell`
-- Mostrar pequeno indicador de "ao vivo" quando o canal realtime estiver `SUBSCRIBED`
-- Quando o popover abrir, fazer um `refetch()` defensivo para garantir sincronização
+### Edge function de lembrete
+Nova função `activity-reminder-checker` (chamada a cada minuto via setTimeout auto-agendado, padrão já usado pelo message-grouper):
+- Busca atividades com `scheduled_at <= now()` e `reminder_sent = false` e `is_completed = false`
+- Para cada uma, insere em `notifications` (`type='activity_reminder'`) e marca `reminder_sent = true`
+- Aciona-se também manualmente quando uma atividade é criada com horário próximo
 
-### 5. Marcar notificação atual como visível
-Após o deploy da migração, abrir o sino mostrará a notificação pendente do Gabriel Pereira que ficou "perdida".
+### Frontend
+- **`src/services/api.ts`**: adicionar `fetchConversationActivities(convId)`, `createConversationActivity()`, `updateConversationActivity()`, `completeConversationActivity()`, `deleteConversationActivity()`
+- **`src/hooks/useConversationActivities.ts`** (novo): hook com realtime subscription na tabela, retorna atividades da conversa selecionada
+- **`src/components/chat/ActivitiesPanel.tsx`** (novo): seção do painel direito com lista + botão criar
+- **`src/components/chat/ActivityModal.tsx`** (novo): modal para criar/editar com date/time picker (shadcn Calendar + Input time)
+- **`src/components/ChatInterface.tsx`**:
+  - Importar e renderizar `ActivitiesPanel` no painel direito (após "Responsável")
+  - No header do chat: adicionar badge de lembrete próximo + bloco do responsável (avatar + nome buscado de `teamMembers` via `assignedUserId`)
+  - Na lista de conversas (item): ícone relógio se houver atividade hoje, mini-avatar do responsável
+- **`src/hooks/useNotifications.ts`**: já trata novos tipos genericamente; ao clicar em notificação `activity_reminder`, navegar para `/chat?conversation=<id>`
 
-## Arquivos afetados
+### Fluxo de criação
+Ao salvar nova atividade pelo modal:
+1. Insere em `conversation_activities`
+2. Toast "Atividade agendada para DD/MM às HH:mm"
+3. Realtime atualiza painel imediatamente
+4. Quando `scheduled_at` chegar, edge function gera notificação no sino
 
-- `supabase/migrations/<nova>.sql` — REPLICA IDENTITY + índice + publicação
-- `src/hooks/useNotifications.ts` — logs, polling fallback, canal único, refetch
-- `src/components/NotificationsBell.tsx` — indicador de live + refetch ao abrir
-- `src/services/api.ts` — criar notificação em handoff manual
-
-Sem mudanças em edge functions — o orchestrator já está correto.
+## Resumo do entregável
+- Tabela nova `conversation_activities` + migration
+- Edge function `activity-reminder-checker` (auto-agendada)
+- Hook + 2 componentes novos no chat
+- Edição de `ChatInterface.tsx` para mostrar responsável no header e integrar painel de atividades
+- Notificações de lembrete no sino existente

@@ -149,6 +149,54 @@ export type Database = {
         }
         Relationships: []
       }
+      conversation_activities: {
+        Row: {
+          activity_type: string
+          completed_at: string | null
+          contact_id: string
+          conversation_id: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_completed: boolean
+          reminder_sent: boolean
+          scheduled_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          activity_type?: string
+          completed_at?: string | null
+          contact_id: string
+          conversation_id: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_completed?: boolean
+          reminder_sent?: boolean
+          scheduled_at: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          activity_type?: string
+          completed_at?: string | null
+          contact_id?: string
+          conversation_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_completed?: boolean
+          reminder_sent?: boolean
+          scheduled_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       conversation_states: {
         Row: {
           conversation_id: string

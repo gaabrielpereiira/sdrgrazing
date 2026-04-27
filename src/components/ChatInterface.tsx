@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck, 
   Smile, Play, Loader2, MessageSquare, Info, X, Mail, 
-  Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon
+  Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon, Bell, AlertTriangle
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition } from '../types';
 import { Button } from './Button';
@@ -17,6 +17,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from './ui/alert-dialog';
+import { ActivitiesPanel } from './chat/ActivitiesPanel';
+import { useAllPendingActivities } from '@/hooks/useConversationActivities';
 
 const ChatInterface: React.FC = () => {
   const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
@@ -39,7 +41,12 @@ const ChatInterface: React.FC = () => {
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
   
   const activeChat = conversations.find(c => c.id === selectedChatId);
+  const pendingActivities = useAllPendingActivities();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const assignedMember = activeChat?.assignedUserId
+    ? teamMembers.find(m => m.id === activeChat.assignedUserId)
+    : null;
   
   // Format audio time helper
   const formatAudioTime = (seconds: number): string => {
@@ -404,6 +411,27 @@ const ChatInterface: React.FC = () => {
                   
                   <div className="flex items-center mt-2 gap-1.5">
                     {renderStatusBadge(chat.status)}
+                    {pendingActivities[chat.id] && (
+                      <span
+                        className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] rounded-md font-medium flex items-center gap-1"
+                        title={`Lembrete: ${new Date(pendingActivities[chat.id].nextAt).toLocaleString('pt-BR')}`}
+                      >
+                        <Bell className="w-2.5 h-2.5" />
+                        {pendingActivities[chat.id].count}
+                      </span>
+                    )}
+                    {chat.assignedUserId && (() => {
+                      const m = teamMembers.find(tm => tm.id === chat.assignedUserId);
+                      if (!m) return null;
+                      return (
+                        <img
+                          src={m.avatar}
+                          alt={m.name}
+                          title={`Responsável: ${m.name}`}
+                          className="w-4 h-4 rounded-full ring-1 ring-slate-700"
+                        />
+                      );
+                    })()}
                     {chat.tags.slice(0, 1).map(tag => (
                       <span key={tag} className="px-2 py-0.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-[10px] rounded-md font-medium">
                         {tag}
@@ -440,9 +468,26 @@ const ChatInterface: React.FC = () => {
                   <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
                 </div>
                 <div className="ml-3">
-                  <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 flex-wrap">
                     {activeChat.contactName}
                     {renderStatusBadge(activeChat.status)}
+                    {assignedMember ? (
+                      <span
+                        className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-cyan-500/10 text-cyan-300 border-cyan-500/30 flex items-center gap-1"
+                        title={`Atendente responsável: ${assignedMember.name}`}
+                      >
+                        <img src={assignedMember.avatar} alt={assignedMember.name} className="w-3.5 h-3.5 rounded-full" />
+                        {assignedMember.name}
+                      </span>
+                    ) : activeChat.status === 'human' ? (
+                      <span
+                        className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-orange-500/10 text-orange-300 border-orange-500/30 flex items-center gap-1"
+                        title="Nenhum atendente atribuído"
+                      >
+                        <AlertTriangle className="w-3 h-3" />
+                        Sem responsável
+                      </span>
+                    ) : null}
                   </h2>
                   <p className="text-xs text-cyan-500 font-medium">{activeChat.contactPhone}</p>
                 </div>
@@ -798,6 +843,15 @@ const ChatInterface: React.FC = () => {
                     ))}
                   </select>
                 </div>
+
+                <div className="h-px bg-slate-800/50 w-full"></div>
+
+                {/* Activities & Reminders */}
+                <ActivitiesPanel
+                  conversationId={activeChat.id}
+                  contactId={activeChat.contactId}
+                  contactName={activeChat.contactName}
+                />
 
                 <div className="h-px bg-slate-800/50 w-full"></div>
 
