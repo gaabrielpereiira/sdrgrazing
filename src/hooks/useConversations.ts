@@ -317,6 +317,13 @@ export function useConversations(options?: { active?: boolean }) {
         (payload) => {
           console.log('[Realtime] Conversation UPDATE:', payload.new);
           const updated = payload.new as any;
+          
+          // If is_active no longer matches our filter, remove it from this view
+          if (typeof updated.is_active === 'boolean' && updated.is_active !== isActiveFilter) {
+            setConversations(prev => prev.filter(c => c.id !== updated.id));
+            return;
+          }
+          
           setConversations(prev => {
             return prev.map(conv => {
               if (conv.id === updated.id) {
