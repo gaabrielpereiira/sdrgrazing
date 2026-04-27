@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, Plus, Phone, MessageSquare, Calendar as CalendarIcon, Sparkles, Check, Trash2, Clock } from 'lucide-react';
+import { Plus, Phone, MessageSquare, Calendar as CalendarIcon, Sparkles, Check, Trash2, Clock } from 'lucide-react';
 import { useConversationActivities, ConversationActivity, ActivityType } from '@/hooks/useConversationActivities';
 import { ActivityModal } from './ActivityModal';
 
