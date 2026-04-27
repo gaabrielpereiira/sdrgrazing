@@ -846,6 +846,15 @@ const ChatInterface: React.FC = () => {
 
                 <div className="h-px bg-slate-800/50 w-full"></div>
 
+                {/* Activities & Reminders */}
+                <ActivitiesPanel
+                  conversationId={activeChat.id}
+                  contactId={activeChat.contactId}
+                  contactName={activeChat.contactName}
+                />
+
+                <div className="h-px bg-slate-800/50 w-full"></div>
+
                 {/* Tags */}
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
