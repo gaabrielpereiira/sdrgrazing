@@ -17,6 +17,10 @@ export function useConversations() {
   const [conversations, setConversations] = useState<UIConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [realtimeConnected, setRealtimeConnected] = useState(true);
+  
+  // Polling fallback when Realtime fails
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   // Track processed message IDs to prevent duplicates across re-renders
   const processedMessageIds = useRef(new Set<string>());
