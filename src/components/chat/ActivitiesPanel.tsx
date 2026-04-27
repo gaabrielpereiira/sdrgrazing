@@ -107,13 +107,20 @@ export const ActivitiesPanel: React.FC<Props> = ({ conversationId, contactId, co
 
   return (
     <div className="space-y-3">
-      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-        <span className="flex items-center gap-2">
-          <Bell className="w-4 h-4" />
-          Atividades & Lembretes
+      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2 min-w-0">
+          <Clock className="w-4 h-4 shrink-0" />
+          <span className="truncate">Atividades & Lembretes</span>
           {pending.length > 0 && (
-            <span className="px-1.5 py-0.5 bg-cyan-500/20 text-cyan-300 rounded text-[10px] normal-case font-semibold">
-              {pending.length}
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] normal-case font-semibold whitespace-nowrap ${
+                formatWhen(pending[0].scheduled_at).overdue
+                  ? 'bg-rose-500/20 text-rose-300'
+                  : 'bg-amber-500/20 text-amber-300'
+              }`}
+              title={pending.length > 1 ? `Próxima de ${pending.length} pendentes` : 'Próxima atividade'}
+            >
+              {formatWhen(pending[0].scheduled_at).fmt}
             </span>
           )}
         </span>
