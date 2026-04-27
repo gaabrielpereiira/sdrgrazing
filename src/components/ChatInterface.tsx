@@ -411,6 +411,27 @@ const ChatInterface: React.FC = () => {
                   
                   <div className="flex items-center mt-2 gap-1.5">
                     {renderStatusBadge(chat.status)}
+                    {pendingActivities[chat.id] && (
+                      <span
+                        className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] rounded-md font-medium flex items-center gap-1"
+                        title={`Lembrete: ${new Date(pendingActivities[chat.id].nextAt).toLocaleString('pt-BR')}`}
+                      >
+                        <Bell className="w-2.5 h-2.5" />
+                        {pendingActivities[chat.id].count}
+                      </span>
+                    )}
+                    {chat.assignedUserId && (() => {
+                      const m = teamMembers.find(tm => tm.id === chat.assignedUserId);
+                      if (!m) return null;
+                      return (
+                        <img
+                          src={m.avatar}
+                          alt={m.name}
+                          title={`Responsável: ${m.name}`}
+                          className="w-4 h-4 rounded-full ring-1 ring-slate-700"
+                        />
+                      );
+                    })()}
                     {chat.tags.slice(0, 1).map(tag => (
                       <span key={tag} className="px-2 py-0.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-[10px] rounded-md font-medium">
                         {tag}
