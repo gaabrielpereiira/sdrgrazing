@@ -1,71 +1,50 @@
-# Fix: "Failed to subscribe to the message_echoes webhook field"
+## Problema
 
-## Root cause
+A mensagem "Oi" do Gabriel chegou no webhook, mas nunca foi respondida pela Nina. Os logs mostram:
 
-When you subscribe to a webhook field (like `message_echoes`) in Meta for Developers, Meta sends a verification request (GET) and a test POST to your callback URL. Both requests come **without any Authorization header** — Meta has no way to send a Supabase JWT.
-
-The `whatsapp-webhook` Edge Function currently requires a JWT (the default). So Meta's request is rejected with **401 Unauthorized by the Supabase gateway before your code runs**, and Meta reports it as "Failed to subscribe to the message_echoes webhook field".
-
-This is the known post-remix limitation: `verify_jwt = false` settings are **not preserved when a project is remixed** (memory `backend/verify-jwt-remix-limitation`). Your verification logic itself is correct — I tested it and it returns the challenge as expected.
-
-## Fix
-
-Update `supabase/config.toml` to explicitly disable JWT verification for every Edge Function that is called by an external service or by another function without a user session. After redeploy, Meta's verification request will reach the function and the subscription will succeed.
-
-Functions that must be public:
-
-- `whatsapp-webhook` (called by Meta — this is your immediate blocker)
-- `message-grouper`, `nina-orchestrator`, `whatsapp-sender` (called by other functions / cron)
-- `simulate-webhook`, `simulate-audio-webhook`, `trigger-nina-orchestrator`, `trigger-whatsapp-sender` (test/trigger utilities)
-- `health-check` (used by status card before login in some flows)
-
-Functions that stay protected (require login): `test-whatsapp-message`, `test-elevenlabs-tts`, `generate-prompt`, `analyze-conversation`, `validate-setup`, `initialize-system`, `seed-appointments`.
-
-## Changes
-
-**`supabase/config.toml`** — append a `verify_jwt = false` block per public function:
-
-```toml
-project_id = "ggwqkyftxhgahqyevsac"
-
-[functions.whatsapp-webhook]
-verify_jwt = false
-
-[functions.message-grouper]
-verify_jwt = false
-
-[functions.nina-orchestrator]
-verify_jwt = false
-
-[functions.whatsapp-sender]
-verify_jwt = false
-
-[functions.simulate-webhook]
-verify_jwt = false
-
-[functions.simulate-audio-webhook]
-verify_jwt = false
-
-[functions.trigger-nina-orchestrator]
-verify_jwt = false
-
-[functions.trigger-whatsapp-sender]
-verify_jwt = false
-
-[functions.health-check]
-verify_jwt = false
+```
+[Webhook] Error creating contact: column "status" of relation "deals" does not exist
 ```
 
-Lovable Cloud will redeploy the functions automatically.
+### Causa raiz
 
-## After the fix — what to do in Meta
+Existem **dois triggers** disparando em `INSERT` na tabela `contacts`:
 
-1. Go to **Meta for Developers → your app → WhatsApp → Configuration**.
-2. Webhook callback URL: `https://ggwqkyftxhgahqyevsac.supabase.co/functions/v1/whatsapp-webhook`
-3. Verify token: `viver-ia-4olnkKFd0HKKzRKT` (already saved in your settings).
-4. Click **Verify and save** — should succeed.
-5. In **Webhook fields**, click **Subscribe** next to `messages` and `message_echoes`. Both will now work.
+1. `create_deal_for_new_contact` — correto (usa coluna `stage`)
+2. `auto_create_deal_on_contact` — **quebrado**: tenta inserir em `deals.status`, coluna que não existe nesta tabela (deals tem `stage`, não `status`)
 
-## Verification
+Quando o webhook tenta criar o contato do Gabriel, o trigger quebrado aborta o INSERT inteiro. Sem contato → sem conversa → sem mensagem salva → `message-grouper` e `nina-orchestrator` nunca são acionados → nada é enviado de volta.
 
-After redeploy I'll re-run a no-auth GET against the webhook to confirm Meta's exact request flow (no Authorization header) returns the challenge with HTTP 200.
+Além disso os dois triggers são redundantes — ambos criam um deal para cada novo contato, gerando duplicatas quando o trigger quebrado for corrigido.
+
+## Correção
+
+Criar uma migration que:
+
+1. **Remove o trigger quebrado** `auto_create_deal_on_contact` da tabela `contacts` e dropa a função `auto_create_deal_on_contact()` (que referencia coluna inexistente `deals.status`).
+2. **Mantém apenas** `create_deal_for_new_contact` como trigger único de auto-criação de deal (já está correto, usa `stage` e respeita `user_id`).
+3. **Garante o trigger ativo**: recria `CREATE TRIGGER trg_create_deal_for_new_contact AFTER INSERT ON contacts ...` caso não tenha sido preservado pelo remix.
+
+## Após aplicar
+
+A próxima mensagem recebida no webhook vai:
+1. Criar contato com sucesso
+2. Disparar `create_deal_for_new_contact` (deal criado corretamente)
+3. Enfileirar mensagem em `message_grouping_queue`
+4. `message-grouper` agrupa → `nina-orchestrator` gera resposta → `whatsapp-sender` envia
+
+Não é necessário reenviar a mensagem do teste anterior — basta o Gabriel mandar uma nova mensagem ("Oi" de novo, por exemplo) para validar.
+
+## Detalhes técnicos
+
+```sql
+DROP TRIGGER IF EXISTS auto_create_deal_on_contact ON public.contacts;
+DROP FUNCTION IF EXISTS public.auto_create_deal_on_contact();
+
+-- Garantir trigger correto ativo
+DROP TRIGGER IF EXISTS trg_create_deal_for_new_contact ON public.contacts;
+CREATE TRIGGER trg_create_deal_for_new_contact
+  AFTER INSERT ON public.contacts
+  FOR EACH ROW
+  EXECUTE FUNCTION public.create_deal_for_new_contact();
+```
