@@ -416,6 +416,57 @@ export function useConversations(options?: { active?: boolean }) {
     }
   }, []);
 
+  // Send a media message (image, audio, document)
+  const sendMediaMessage = useCallback(async (
+    conversationId: string,
+    file: File,
+    opts: { mediaType: 'image' | 'audio' | 'document'; caption?: string }
+  ) => {
+    const tempId = `temp-${Date.now()}`;
+    const objectUrl = URL.createObjectURL(file);
+    const uiType =
+      opts.mediaType === 'image' ? MessageType.IMAGE :
+      opts.mediaType === 'audio' ? MessageType.AUDIO :
+      MessageType.DOCUMENT;
+
+    const tempMessage: UIMessage = {
+      id: tempId,
+      content: opts.caption?.trim() || file.name,
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      direction: MessageDirection.OUTGOING,
+      type: uiType,
+      status: 'sent',
+      fromType: 'human',
+      mediaUrl: objectUrl,
+      whatsappMessageId: null,
+    };
+
+    setConversations(prev => prev.map(conv => {
+      if (conv.id === conversationId) {
+        return {
+          ...conv,
+          messages: [...conv.messages, tempMessage],
+          lastMessage: opts.mediaType === 'image' ? '📷 Imagem' : opts.mediaType === 'audio' ? '🎵 Áudio' : '📄 Documento',
+          lastMessageTime: 'Agora',
+        };
+      }
+      return conv;
+    }));
+
+    try {
+      await api.sendMediaMessage(conversationId, file, opts);
+    } catch (err: any) {
+      console.error('[useConversations] Error sending media:', err);
+      toast.error(err?.message || 'Erro ao enviar arquivo');
+      setConversations(prev => prev.map(conv => {
+        if (conv.id === conversationId) {
+          return { ...conv, messages: conv.messages.filter(m => m.id !== tempId) };
+        }
+        return conv;
+      }));
+    }
+  }, []);
+
   // Update conversation status
   const updateStatus = useCallback(async (
     conversationId: string, 
