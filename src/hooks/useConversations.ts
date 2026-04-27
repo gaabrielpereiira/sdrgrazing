@@ -93,7 +93,7 @@ export function useConversations(options?: { active?: boolean }) {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.fetchConversations();
+      const data = await api.fetchConversations({ active: isActiveFilter });
       
       // Reset processed IDs on fresh fetch and populate with existing messages
       processedMessageIds.current.clear();
@@ -111,7 +111,7 @@ export function useConversations(options?: { active?: boolean }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isActiveFilter]);
 
   // Polling helpers
   const startPolling = useCallback(() => {
