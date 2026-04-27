@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck, 
   Smile, Play, Loader2, MessageSquare, Info, X, Mail, 
-  Tag, Bot, User, Pause, Brain, Plus
+  Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition } from '../types';
 import { Button } from './Button';
@@ -12,9 +12,15 @@ import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { api } from '@/services/api';
 import { TagSelector } from './TagSelector';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
+} from './ui/alert-dialog';
 
 const ChatInterface: React.FC = () => {
-  const { conversations, loading, sendMessage, updateStatus, markAsRead, assignConversation } = useConversations();
+  const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
+  const { conversations, loading, sendMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation } = useConversations({ active: chatTab === 'active' });
   const { sdrName, companyName } = useCompanySettings();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
@@ -63,10 +69,17 @@ const ChatInterface: React.FC = () => {
     
     if (conversationParam && conversations.some(c => c.id === conversationParam)) {
       setSelectedChatId(conversationParam);
-    } else if (conversations.length > 0 && !selectedChatId) {
+    } else if (conversations.length > 0 && (!selectedChatId || !conversations.some(c => c.id === selectedChatId))) {
       setSelectedChatId(conversations[0].id);
+    } else if (conversations.length === 0) {
+      setSelectedChatId(null);
     }
   }, [conversations, selectedChatId]);
+
+  // Reset selection when switching tabs
+  useEffect(() => {
+    setSelectedChatId(null);
+  }, [chatTab]);
 
   // Mark as read when selecting conversation
   useEffect(() => {
@@ -187,17 +200,30 @@ const ChatInterface: React.FC = () => {
 
   const renderMessageContent = (msg: UIMessage) => {
     if (msg.type === MessageType.IMAGE) {
+      if (!msg.mediaUrl) {
+        return (
+          <div className="mb-1 flex items-center gap-2 px-3 py-6 rounded-lg bg-slate-900/60 border border-slate-700/50 text-slate-400 text-xs">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Baixando imagem do WhatsApp...
+          </div>
+        );
+      }
       return (
         <div className="mb-1 group relative">
-          <img 
-            src={msg.mediaUrl || msg.content} 
-            alt="Anexo" 
-            className="rounded-lg max-w-full h-auto max-h-72 object-cover border border-slate-700/50 shadow-lg"
-            loading="lazy"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = 'https://placehold.co/300x200/1e293b/cbd5e1?text=Erro+Imagem';
-            }}
-          />
+          <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer">
+            <img 
+              src={msg.mediaUrl} 
+              alt={msg.content || 'Imagem'} 
+              className="rounded-lg max-w-full h-auto max-h-72 object-cover border border-slate-700/50 shadow-lg cursor-zoom-in"
+              loading="lazy"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'https://placehold.co/300x200/1e293b/cbd5e1?text=Erro+Imagem';
+              }}
+            />
+          </a>
+          {msg.content && msg.content !== '[imagem recebida]' && (
+            <p className="text-xs mt-1.5 opacity-90">{msg.content}</p>
+          )}
         </div>
       );
     }
@@ -310,7 +336,13 @@ const ChatInterface: React.FC = () => {
       <div className="w-80 lg:w-96 border-r border-slate-800 flex flex-col bg-slate-900/50 backdrop-blur-md z-20 flex-shrink-0">
         {/* Search Header */}
         <div className="p-4 border-b border-slate-800/50">
-          <h2 className="text-lg font-bold text-white mb-4 px-1">Chats Ativos</h2>
+          <h2 className="text-lg font-bold text-white mb-3 px-1">Conversas</h2>
+          <Tabs value={chatTab} onValueChange={(v) => setChatTab(v as 'active' | 'finished')} className="mb-3">
+            <TabsList className="grid grid-cols-2 w-full h-9">
+              <TabsTrigger value="active" className="text-xs">Ativas</TabsTrigger>
+              <TabsTrigger value="finished" className="text-xs">Finalizadas</TabsTrigger>
+            </TabsList>
+          </Tabs>
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
             <input 
@@ -445,6 +477,51 @@ const ChatInterface: React.FC = () => {
                   <Pause className="w-5 h-5" />
                 </Button>
                 <div className="h-6 w-px bg-slate-800 mx-1"></div>
+                {chatTab === 'active' ? (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-slate-400 hover:text-rose-400"
+                        title="Finalizar conversa"
+                      >
+                        <XCircle className="w-5 h-5" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="bg-slate-900 border-slate-800">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="text-white">Finalizar esta conversa?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-slate-400">
+                          A conversa será movida para a aba "Finalizadas". Você ainda poderá consultar todo o histórico e reabrir quando quiser.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-rose-600 hover:bg-rose-500 text-white"
+                          onClick={() => {
+                            if (activeChat) endConversation(activeChat.id);
+                          }}
+                        >
+                          Finalizar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-slate-400 hover:text-emerald-400"
+                    title="Reabrir conversa"
+                    onClick={() => {
+                      if (activeChat) reopenConversation(activeChat.id);
+                    }}
+                  >
+                    <RotateCcw className="w-5 h-5" />
+                  </Button>
+                )}
                 <Button 
                   variant="ghost" 
                   size="icon" 
@@ -521,60 +598,80 @@ const ChatInterface: React.FC = () => {
             </div>
 
             {/* Input Area */}
-            <div className="p-4 bg-slate-900/90 border-t border-slate-800 backdrop-blur-sm z-10">
-              <form onSubmit={handleSendMessage} className="flex items-end gap-3 max-w-4xl mx-auto">
-                <div className="flex items-center gap-1">
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="icon" 
-                    disabled
-                    title="Em breve: Emoji picker"
-                    className="text-slate-500 rounded-full cursor-not-allowed opacity-50"
+            {chatTab === 'finished' ? (
+              <div className="p-4 bg-slate-900/90 border-t border-slate-800 backdrop-blur-sm z-10">
+                <div className="max-w-4xl mx-auto flex items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <div className="flex items-center gap-3 text-sm text-slate-400">
+                    <XCircle className="w-5 h-5 text-rose-400" />
+                    <span>Esta conversa foi finalizada. Reabra para enviar novas mensagens.</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => activeChat && reopenConversation(activeChat.id)}
+                    className="text-emerald-400 hover:text-emerald-300 gap-2"
                   >
-                    <Smile className="w-5 h-5" />
-                  </Button>
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="icon"
-                    disabled
-                    title="Em breve: Enviar anexos"
-                    className="text-slate-500 rounded-full cursor-not-allowed opacity-50"
-                  >
-                    <Paperclip className="w-5 h-5" />
+                    <RotateCcw className="w-4 h-4" />
+                    Reabrir
                   </Button>
                 </div>
-                
-                <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500/50 transition-all shadow-inner">
-                  <textarea
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    placeholder={activeChat.status === 'nina' ? `${sdrName} está respondendo automaticamente...` : 'Digite sua mensagem...'}
-                    className="w-full bg-transparent border-none p-3.5 max-h-32 min-h-[48px] text-sm text-slate-200 focus:ring-0 resize-none outline-none placeholder:text-slate-600"
-                    rows={1}
-                  />
-                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-900/90 border-t border-slate-800 backdrop-blur-sm z-10">
+                <form onSubmit={handleSendMessage} className="flex items-end gap-3 max-w-4xl mx-auto">
+                  <div className="flex items-center gap-1">
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="icon" 
+                      disabled
+                      title="Em breve: Emoji picker"
+                      className="text-slate-500 rounded-full cursor-not-allowed opacity-50"
+                    >
+                      <Smile className="w-5 h-5" />
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="icon"
+                      disabled
+                      title="Em breve: Enviar anexos"
+                      className="text-slate-500 rounded-full cursor-not-allowed opacity-50"
+                    >
+                      <Paperclip className="w-5 h-5" />
+                    </Button>
+                  </div>
+                  
+                  <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500/50 transition-all shadow-inner">
+                    <textarea
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder={activeChat.status === 'nina' ? `${sdrName} está respondendo automaticamente...` : 'Digite sua mensagem...'}
+                      className="w-full bg-transparent border-none p-3.5 max-h-32 min-h-[48px] text-sm text-slate-200 focus:ring-0 resize-none outline-none placeholder:text-slate-600"
+                      rows={1}
+                    />
+                  </div>
 
-                <Button 
-                  type="submit" 
-                  disabled={!inputText.trim()}
-                  className={`rounded-full w-12 h-12 p-0 transition-all ${
-                    inputText.trim() 
-                      ? 'shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95' 
-                      : 'opacity-50 cursor-not-allowed'
-                  }`}
-                >
-                  <Send className="w-5 h-5 ml-0.5" />
-                </Button>
-              </form>
-            </div>
+                  <Button 
+                    type="submit" 
+                    disabled={!inputText.trim()}
+                    className={`rounded-full w-12 h-12 p-0 transition-all ${
+                      inputText.trim() 
+                        ? 'shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95' 
+                        : 'opacity-50 cursor-not-allowed'
+                    }`}
+                  >
+                    <Send className="w-5 h-5 ml-0.5" />
+                  </Button>
+                </form>
+              </div>
+            )}
           </div>
 
           {/* Right Profile Sidebar (CRM View) */}

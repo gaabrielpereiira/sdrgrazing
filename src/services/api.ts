@@ -1286,17 +1286,17 @@ export const api = {
   /**
    * Fetch conversations with messages from database
    */
-  fetchConversations: async (): Promise<UIConversation[]> => {
-    console.log('[API] Fetching conversations from Supabase...');
+  fetchConversations: async (opts?: { active?: boolean }): Promise<UIConversation[]> => {
+    const isActive = opts?.active ?? true;
+    console.log('[API] Fetching conversations from Supabase, active=', isActive);
     
-    // Fetch active conversations with contact data
     const { data: conversations, error: convError } = await supabase
       .from('conversations')
       .select(`
         *,
         contact:contacts(*)
       `)
-      .eq('is_active', true)
+      .eq('is_active', isActive)
       .order('last_message_at', { ascending: false })
       .limit(50);
 
@@ -1433,6 +1433,38 @@ export const api = {
     }
 
     console.log(`[API] Conversation ${conversationId} status updated to ${status}`);
+  },
+
+  /**
+   * Finalize a conversation (soft-close, marks as inactive)
+   */
+  endConversation: async (conversationId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('conversations')
+      .update({ is_active: false, status: 'paused' })
+      .eq('id', conversationId);
+
+    if (error) {
+      console.error('[API] Error ending conversation:', error);
+      throw error;
+    }
+    console.log(`[API] Conversation ${conversationId} finalized`);
+  },
+
+  /**
+   * Reopen a previously finalized conversation
+   */
+  reopenConversation: async (conversationId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('conversations')
+      .update({ is_active: true, status: 'human' })
+      .eq('id', conversationId);
+
+    if (error) {
+      console.error('[API] Error reopening conversation:', error);
+      throw error;
+    }
+    console.log(`[API] Conversation ${conversationId} reopened`);
   },
 
   /**
