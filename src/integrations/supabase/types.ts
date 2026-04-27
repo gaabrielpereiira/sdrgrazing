@@ -734,6 +734,42 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          body: string | null
+          contact_id: string | null
+          conversation_id: string | null
+          created_at: string
+          id: string
+          is_read: boolean
+          metadata: Json
+          title: string
+          type: string
+        }
+        Insert: {
+          body?: string | null
+          contact_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          metadata?: Json
+          title: string
+          type: string
+        }
+        Update: {
+          body?: string | null
+          contact_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          metadata?: Json
+          title?: string
+          type?: string
+        }
+        Relationships: []
+      }
       pipeline_stages: {
         Row: {
           ai_trigger_criteria: string | null

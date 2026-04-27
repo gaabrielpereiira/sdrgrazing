@@ -1,74 +1,106 @@
-# Plano: Imagens no chat + Finalizar/Reabrir conversas
 
-## Problema 1 — Imagens não carregam
+## Problema
 
-Hoje, quando o WhatsApp envia uma imagem, o webhook (`supabase/functions/whatsapp-webhook/index.ts`) só guarda o `media_id` da Meta no `metadata`. O campo `media_url` da tabela `messages` nunca é preenchido, então no frontend `<img src={msg.mediaUrl} />` fica vazio e cai no fallback "Erro Imagem".
+Hoje o prompt da Donatella instrui a IA a "acionar o atendente humano" enviando uma **mensagem interna** no formato:
 
-A Graph API só entrega o binário da mídia se autenticarmos com o `WHATSAPP_ACCESS_TOKEN`. Precisamos baixar a imagem e republicar em uma URL pública do Storage.
+```
+🔔 ATENDIMENTO NECESSÁRIO — ASSUNTO: ...
+- Nome: ...
+- Mensagem original: ...
+```
 
-## Problema 2 — Finalizar conversa manualmente
+Como **não existe nenhuma ferramenta real** de handoff registrada no `nina-orchestrator`, a IA acaba escrevendo essa mensagem como **texto normal** — e ela vai parar no WhatsApp do cliente. Resultado: o cliente vê o "alerta interno".
 
-A tabela `conversations` já tem `is_active` e `fetchConversations` já filtra `is_active = true`. Falta:
-- Botão de finalizar no chat
-- Uma aba para ver conversas finalizadas (com opção de reabrir)
-- Continuar podendo abrir e ler o histórico delas
+## Solução
+
+Trocar essa mensagem-texto por uma **tool real de handoff**. Quando a IA decidir transferir, ela chama a tool — não escreve texto. A tool:
+1. Marca a conversa como `status = 'human'` no banco.
+2. Cria uma **notificação** na plataforma para os usuários.
+3. Devolve para o cliente apenas a mensagem amigável (ex: "Vou chamar um especialista...").
+
+E adicionar uma **central de notificações** (sino no topo da Sidebar) para os usuários verem em tempo real.
+
+---
 
 ## Mudanças
 
-### 1. Storage e backend para mídia
+### 1. Banco — nova tabela `notifications`
 
-- **Migration**: criar bucket público `whatsapp-media` com policies de leitura pública e escrita para `service_role` / authenticated.
-- **Nova edge function `download-whatsapp-media`** (verify_jwt = false):
-  - Recebe `{ message_id, media_id, mime_type }`.
-  - Chama `GET https://graph.facebook.com/v20.0/{media_id}` com Bearer do `WHATSAPP_ACCESS_TOKEN` para obter a URL temporária.
-  - Faz `fetch` da URL com o mesmo Bearer (chunk-based para não estourar memória).
-  - Faz upload em `whatsapp-media/{conversation_id}/{message_id}.{ext}` via service role.
-  - Atualiza `messages.media_url` com a URL pública (`getPublicUrl`).
+```sql
+create table public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  type text not null,                -- 'handoff_requested', 'handoff_urgent', etc.
+  title text not null,
+  body text,
+  conversation_id uuid,
+  contact_id uuid,
+  metadata jsonb default '{}',
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+-- RLS: leitura/update por authenticated (single-tenant, padrão do projeto)
+-- Adicionar à publication supabase_realtime
+```
 
-- **Webhook (`whatsapp-webhook/index.ts`)**: para `image` (e também `video`/`document` por consistência), após criar a `messages`, dispara a função `download-whatsapp-media` com o `media_id`. Mesma estratégia já usada para áudio.
+### 2. `nina-orchestrator` — nova tool `request_human_handoff`
 
-- **Frontend (`ChatInterface.tsx`)**: o `<img>` já lê `msg.mediaUrl`. Sem mudança lógica — só ajustar o fallback para mostrar um placeholder mais amigável e exibir um spinner enquanto `mediaUrl` ainda é `null` (mensagem recém-recebida com download em andamento). O Realtime UPDATE da mensagem já está implementado e vai propagar a URL quando o download terminar.
+Definir tool com parâmetros:
+- `reason` (enum: `order_status`, `cancel_change`, `payment_invoice`, `complaint`, `qualified_lead`, `other`)
+- `summary` (resumo curto para o atendente)
+- `urgency` (`normal` | `urgent`)
+- `customer_message_for_client` (mensagem amigável que será enviada ao cliente — ex: "Vou chamar um especialista...")
 
-- Mesma lógica vale para `video` e `document` — exibir link/thumbnail simples para document/video.
+Quando a tool é chamada:
+1. `UPDATE conversations SET status='human' WHERE id=...`
+2. `INSERT INTO notifications (...)` com título estilo "Atendimento necessário — Maria Silva" e body contendo `summary` + última mensagem do cliente.
+3. Retorna ao cliente **apenas** `customer_message_for_client` (substitui qualquer texto que a IA tenha gerado junto, para evitar vazamento do alerta interno).
+4. Não chama mais a IA — encerra o turno.
 
-### 2. Finalizar e reabrir conversas
+Adicionar a tool ao array `tools` (junto com `create_appointment` etc.) sempre que estiver habilitada.
 
-- **`src/services/api.ts`**:
-  - `fetchConversations(opts?: { active?: boolean })` — quando `active === false`, busca `is_active = false`. Default mantém comportamento atual (`true`).
-  - `endConversation(conversationId)` — `update { is_active: false, status: 'paused' }`.
-  - `reopenConversation(conversationId)` — `update { is_active: true }`.
+### 3. Atualizar prompts
 
-- **`src/hooks/useConversations.ts`**:
-  - Aceitar `{ active }` como parâmetro do hook e repassar para `api.fetchConversations`.
-  - Expor `endConversation` e `reopenConversation` (com optimistic update + toast).
-  - Realtime UPDATE de conversation já atualiza `isActive` no estado; quando uma conversa é finalizada na aba "Ativas", removemos do array local; quando reaberta na aba "Finalizadas", também.
+No prompt **default** (`getDefaultSystemPrompt`) e instruir o usuário a atualizar o prompt **override** da Donatella:
+- Substituir os blocos `<immediate_handoff_triggers>` e `<handoff_protocol>` para dizer:
+  > "Quando precisar transferir para humano, **chame a ferramenta `request_human_handoff`**. NUNCA escreva mensagens internas como '🔔 ATENDIMENTO NECESSÁRIO' no texto da resposta — isso vai para o cliente."
+- A IA passa a usar a tool em vez do template `🔔 ...`.
 
-- **`src/components/ChatInterface.tsx`**:
-  - Adicionar `Tabs` no topo do painel esquerdo com **"Ativas"** e **"Finalizadas"**.
-  - Cada aba usa o mesmo componente, alternando o filtro do hook.
-  - No header do chat, novo botão **"Finalizar conversa"** (ícone `XCircle`) com `AlertDialog` de confirmação. Ao confirmar: chama `endConversation`, mostra toast e a conversa some da aba ativa.
-  - Na aba "Finalizadas", o input de mensagem fica desabilitado e aparece um banner "Conversa finalizada" com botão **"Reabrir conversa"**.
-  - Conversas finalizadas continuam clicáveis e mostram todo o histórico, mídia, notas e tags normalmente.
+Como o prompt da Donatella está no banco (`system_prompt_override`), faremos um **UPDATE** automático nele removendo os blocos com `🔔` e adicionando a instrução de usar a tool.
+
+### 4. Frontend — Central de notificações
+
+- Novo hook `useNotifications`: lê `notifications` ordenadas por `created_at desc`, com realtime subscription, expõe `unreadCount`, `markAsRead`, `markAllAsRead`.
+- Novo componente `NotificationsBell` (ícone `Bell` da lucide com badge de contagem) — colocado no topo da `Sidebar.tsx` (acima do menu) ou no header das páginas.
+- Popover/Dropdown listando as notificações: título, tempo relativo, e botão "Abrir conversa" que navega para `/chat?conversation=<id>` e marca como lida.
+- Toast (sonner) dispara automaticamente quando chega notificação nova via realtime.
+
+### 5. Realtime
+
+Adicionar `notifications` à publicação `supabase_realtime` na mesma migration.
+
+---
 
 ## Detalhes técnicos
 
+**Arquivos editados/criados:**
+- `supabase/migrations/<novo>.sql` — tabela `notifications`, RLS, realtime, UPDATE no `system_prompt_override`.
+- `supabase/functions/nina-orchestrator/index.ts` — definir `requestHandoffTool`, adicionar ao array de tools, processar `tool_calls` (atualizar conversa, inserir notificação, sobrescrever resposta com a mensagem amigável), atualizar `getDefaultSystemPrompt`.
+- `src/hooks/useNotifications.ts` (novo).
+- `src/components/NotificationsBell.tsx` (novo).
+- `src/components/Sidebar.tsx` — montar o sino.
+- `src/services/api.ts` — métodos `listNotifications`, `markNotificationRead`, `markAllNotificationsRead`.
+
+**Fluxo final:**
 ```text
-WhatsApp Webhook
-  └─> insert messages (media_url=null, metadata.media_id=...)
-        └─> invoke download-whatsapp-media (async)
-              ├─> GET graph.facebook.com/{media_id}  -> url temp
-              ├─> GET url temp (Bearer)              -> binary
-              ├─> upload storage whatsapp-media/...
-              └─> UPDATE messages SET media_url=<public url>
-                    └─> Realtime UPDATE -> frontend mostra <img>
+Cliente → "Meu pedido veio revirado"
+  → Nina decide handoff
+  → tool_call: request_human_handoff(reason=complaint, urgency=urgent, summary="...", customer_message_for_client="Vou chamar um especialista...")
+  → orchestrator:
+      • UPDATE conversations.status = 'human'
+      • INSERT notifications (Atendimento urgente — Gabriel)
+      • envia para o cliente APENAS "Vou chamar um especialista..."
+  → Sino na plataforma pisca + toast aparece para todos os usuários
+  → Atendente clica → vai direto para a conversa
 ```
 
-Bucket: `whatsapp-media` (public read, service role write).
-Secrets já existentes usados: `WHATSAPP_ACCESS_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`.
-
-`config.toml`: adicionar `verify_jwt = false` para `download-whatsapp-media`.
-
-## Fora de escopo
-
-- Não vou implementar download retroativo de imagens antigas que já chegaram sem `media_url` (elas continuarão mostrando placeholder). Posso fazer um script de backfill em uma próxima rodada se você quiser.
-- Não vou mexer em vídeo/documento além de salvar `media_url` — o player de vídeo/preview de PDF fica para depois.
+Cliente nunca mais recebe o "🔔 ATENDIMENTO NECESSÁRIO".
