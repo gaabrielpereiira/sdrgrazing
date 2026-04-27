@@ -493,6 +493,7 @@ const ChatInterface: React.FC = () => {
                   <p className="text-xs text-slate-500 truncate">
                     {chat.messages[chat.messages.length - 1]?.type === MessageType.IMAGE ? '📷 Imagem' : 
                      chat.messages[chat.messages.length - 1]?.type === MessageType.AUDIO ? '🎵 Áudio' : 
+                     chat.messages[chat.messages.length - 1]?.type === MessageType.DOCUMENT ? '📄 Documento' :
                      chat.lastMessage || 'Sem mensagens'}
                   </p>
                   
