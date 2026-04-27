@@ -69,10 +69,17 @@ const ChatInterface: React.FC = () => {
     
     if (conversationParam && conversations.some(c => c.id === conversationParam)) {
       setSelectedChatId(conversationParam);
-    } else if (conversations.length > 0 && !selectedChatId) {
+    } else if (conversations.length > 0 && (!selectedChatId || !conversations.some(c => c.id === selectedChatId))) {
       setSelectedChatId(conversations[0].id);
+    } else if (conversations.length === 0) {
+      setSelectedChatId(null);
     }
   }, [conversations, selectedChatId]);
+
+  // Reset selection when switching tabs
+  useEffect(() => {
+    setSelectedChatId(null);
+  }, [chatTab]);
 
   // Mark as read when selecting conversation
   useEffect(() => {
