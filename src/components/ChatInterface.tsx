@@ -41,7 +41,12 @@ const ChatInterface: React.FC = () => {
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
   
   const activeChat = conversations.find(c => c.id === selectedChatId);
+  const pendingActivities = useAllPendingActivities();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const assignedMember = activeChat?.assignedUserId
+    ? teamMembers.find(m => m.id === activeChat.assignedUserId)
+    : null;
   
   // Format audio time helper
   const formatAudioTime = (seconds: number): string => {
