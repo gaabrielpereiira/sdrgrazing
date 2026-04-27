@@ -900,6 +900,70 @@ async function processQueueItem(
         console.error('[Nina] Error parsing cancel_appointment arguments:', parseError);
       }
     }
+
+    if (toolCall.function?.name === 'request_human_handoff') {
+      try {
+        const args = JSON.parse(toolCall.function.arguments);
+        console.log('[Nina] Processing request_human_handoff tool call:', args);
+
+        // 1) Mark conversation as needing/under human handling
+        await supabase
+          .from('conversations')
+          .update({ status: 'human' })
+          .eq('id', conversation.id);
+
+        // 2) Build a friendly title for the notification
+        const contactName =
+          conversation.contact?.name ||
+          conversation.contact?.call_name ||
+          conversation.contact?.phone_number ||
+          'Cliente';
+
+        const reasonLabels: Record<string, string> = {
+          complaint: 'Reclamação',
+          order_status: 'Status de pedido',
+          cancel_change: 'Cancelamento/alteração',
+          payment_invoice: 'Boleto / Nota fiscal',
+          qualified_lead: 'Lead qualificado',
+          other: 'Atendimento',
+        };
+        const reasonLabel = reasonLabels[args.reason] || 'Atendimento';
+        const isUrgent = args.urgency === 'urgent';
+
+        const title = isUrgent
+          ? `🚨 URGENTE — ${reasonLabel}: ${contactName}`
+          : `${reasonLabel}: ${contactName}`;
+
+        const body = [
+          args.summary || '',
+          message?.content ? `Última mensagem do cliente: "${message.content}"` : ''
+        ].filter(Boolean).join('\n\n');
+
+        // 3) Insert internal notification (visible only on the platform)
+        await supabase.from('notifications').insert({
+          type: isUrgent ? 'handoff_urgent' : 'handoff_requested',
+          title,
+          body,
+          conversation_id: conversation.id,
+          contact_id: conversation.contact_id,
+          metadata: {
+            reason: args.reason,
+            urgency: args.urgency,
+            triggered_by: 'nina',
+          },
+        });
+
+        // 4) Replace any AI text content with the safe customer-facing message.
+        //    Critical: prevents the model's internal "🔔 ATENDIMENTO NECESSÁRIO ..."
+        //    text from ever reaching the customer's WhatsApp.
+        aiContent = args.customer_message_for_client?.trim() ||
+          'Entendido! Vou acionar um dos nossos especialistas agora para te ajudar. Em instantes alguém estará com você. ✨';
+
+        handoffRequested = { reason: args.reason, urgency: args.urgency };
+      } catch (parseError) {
+        console.error('[Nina] Error parsing request_human_handoff arguments:', parseError);
+      }
+    }
   }
 
   // If no content and we only got tool calls, generate a default response
