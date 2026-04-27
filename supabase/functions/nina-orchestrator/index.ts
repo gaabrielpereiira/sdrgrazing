@@ -979,7 +979,45 @@ async function processQueueItem(
     }
   }
 
-  // Fallback for empty AI response - use default greeting instead of throwing error
+  // SAFETY NET: if the model still tries to write internal handoff text
+  // (e.g. "🔔 ATENDIMENTO NECESSÁRIO ..." or "LEAD QUALIFICADO — PASSAR PARA ATENDIMENTO HUMANO"),
+  // intercept it: do the handoff via notification AND replace with a customer-friendly message.
+  // This prevents the internal alert from leaking into the customer's WhatsApp.
+  if (aiContent && /🔔|ATENDIMENTO NECESS|PASSAR PARA ATENDIMENTO HUMANO|Mensagem original:/i.test(aiContent)) {
+    console.warn('[Nina] Detected internal handoff text in AI output — intercepting and converting to platform notification.');
+    try {
+      const contactName =
+        conversation.contact?.name ||
+        conversation.contact?.call_name ||
+        conversation.contact?.phone_number ||
+        'Cliente';
+
+      await supabase
+        .from('conversations')
+        .update({ status: 'human' })
+        .eq('id', conversation.id);
+
+      await supabase.from('notifications').insert({
+        type: 'handoff_requested',
+        title: `Atendimento necessário: ${contactName}`,
+        body: [
+          'A IA sinalizou que esta conversa precisa de um atendente humano.',
+          message?.content ? `Última mensagem do cliente: "${message.content}"` : ''
+        ].filter(Boolean).join('\n\n'),
+        conversation_id: conversation.id,
+        contact_id: conversation.contact_id,
+        metadata: { triggered_by: 'safety_net', original_text: aiContent.slice(0, 500) },
+      });
+
+      handoffRequested = handoffRequested || { reason: 'other', urgency: 'normal' };
+      aiContent = 'Entendido! Vou acionar um dos nossos especialistas agora para te ajudar. Em instantes alguém estará com você. ✨';
+    } catch (e) {
+      console.error('[Nina] Safety-net handoff failed:', e);
+      // Even on failure, never let the internal text reach the customer.
+      aiContent = 'Vou te conectar com um especialista. Em instantes alguém estará com você. ✨';
+    }
+  }
+
   if (!aiContent) {
     console.warn('[Nina] Empty AI response received, using fallback');
     aiContent = 'Olá! Como posso ajudar você hoje? 😊';
