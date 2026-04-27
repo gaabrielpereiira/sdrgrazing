@@ -2,7 +2,8 @@
 export enum MessageType {
   TEXT = 'text',
   IMAGE = 'image',
-  AUDIO = 'audio'
+  AUDIO = 'audio',
+  DOCUMENT = 'document'
 }
 
 export enum MessageDirection {
