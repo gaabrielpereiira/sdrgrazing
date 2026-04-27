@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -17,6 +17,8 @@ export type PlatformNotification = {
 export function useNotifications() {
   const [notifications, setNotifications] = useState<PlatformNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const seenIdsRef = useRef<Set<string>>(new Set());
 
   const fetchNotifications = useCallback(async () => {
     const { data, error } = await supabase
@@ -26,28 +28,35 @@ export function useNotifications() {
       .limit(50);
 
     if (error) {
-      console.error('[useNotifications] Fetch error:', error);
+      console.error('[Notifications] Fetch error:', error);
       setLoading(false);
       return;
     }
-    setNotifications((data || []) as PlatformNotification[]);
+    const list = (data || []) as PlatformNotification[];
+    list.forEach((n) => seenIdsRef.current.add(n.id));
+    const unread = list.filter((n) => !n.is_read).length;
+    console.info(`[Notifications] fetched ${list.length}, unread ${unread}`);
+    setNotifications(list);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     fetchNotifications();
 
+    // Unique channel name to avoid collisions across mounts
+    const channelName = `notifications-feed-${Math.random().toString(36).slice(2, 8)}`;
     const channel = supabase
-      .channel('notifications-feed')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications' },
         (payload) => {
           const n = payload.new as PlatformNotification;
+          if (seenIdsRef.current.has(n.id)) return;
+          seenIdsRef.current.add(n.id);
+          console.info('[Notifications] 🔔 INSERT:', n.title);
           setNotifications((prev) => [n, ...prev].slice(0, 50));
-          toast(n.title, {
-            description: n.body || undefined,
-          });
+          toast(n.title, { description: n.body || undefined });
         }
       )
       .on(
@@ -58,9 +67,18 @@ export function useNotifications() {
           setNotifications((prev) => prev.map((x) => (x.id === n.id ? n : x)));
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.info('[Notifications] channel status:', status);
+        setRealtimeConnected(status === 'SUBSCRIBED');
+      });
+
+    // Polling fallback every 15s in case realtime drops
+    const pollInterval = setInterval(() => {
+      fetchNotifications();
+    }, 15000);
 
     return () => {
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
   }, [fetchNotifications]);
@@ -77,5 +95,13 @@ export function useNotifications() {
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  return { notifications, loading, unreadCount, markAsRead, markAllAsRead, refetch: fetchNotifications };
+  return {
+    notifications,
+    loading,
+    unreadCount,
+    realtimeConnected,
+    markAsRead,
+    markAllAsRead,
+    refetch: fetchNotifications,
+  };
 }
