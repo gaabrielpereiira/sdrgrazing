@@ -303,6 +303,7 @@ export interface UIMessage {
   fromType: MessageFromType;
   mediaUrl: string | null;
   whatsappMessageId: string | null;
+  metadata?: Record<string, any>;
 }
 
 // ============= Utility Functions =============
