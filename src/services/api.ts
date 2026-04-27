@@ -1506,6 +1506,8 @@ export const api = {
 
     return { id: msgData.id, mediaUrl: publicUrl };
   },
+
+  /**
    * Update conversation status (nina/human/paused).
    * When transitioning to 'human', automatically:
    *  - sends a friendly message to the customer informing a human is taking over
