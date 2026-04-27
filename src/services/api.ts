@@ -1416,12 +1416,22 @@ export const api = {
   },
 
   /**
-   * Update conversation status (nina/human/paused)
+   * Update conversation status (nina/human/paused).
+   * When transitioning to 'human', automatically:
+   *  - sends a friendly message to the customer informing a human is taking over
+   *  - creates an internal platform notification
    */
   updateConversationStatus: async (
-    conversationId: string, 
+    conversationId: string,
     status: 'nina' | 'human' | 'paused'
   ): Promise<void> => {
+    // Read the previous status so we only trigger side-effects on a real transition.
+    const { data: prev } = await supabase
+      .from('conversations')
+      .select('status, contact_id, contacts:contact_id(name, call_name, phone_number)')
+      .eq('id', conversationId)
+      .maybeSingle();
+
     const { error } = await supabase
       .from('conversations')
       .update({ status })
@@ -1433,6 +1443,46 @@ export const api = {
     }
 
     console.log(`[API] Conversation ${conversationId} status updated to ${status}`);
+
+    // Side-effects: only when actually transitioning into 'human' from a different state.
+    if (status === 'human' && prev && prev.status !== 'human' && prev.contact_id) {
+      try {
+        // 1) Friendly message to the customer (queued via send_queue).
+        await supabase.from('send_queue').insert({
+          conversation_id: conversationId,
+          contact_id: prev.contact_id,
+          content: 'Olá! Um de nossos atendentes acabou de entrar na conversa e vai te ajudar a partir de agora. ✨',
+          from_type: 'human',
+          message_type: 'text',
+          priority: 2,
+          metadata: { reason: 'human_takeover_announcement' },
+        });
+
+        // 2) Internal notification for the team.
+        const c: any = (prev as any).contacts;
+        const contactName = c?.name || c?.call_name || c?.phone_number || 'Cliente';
+        await supabase.from('notifications').insert({
+          type: 'human_takeover',
+          title: `Atendente assumiu: ${contactName}`,
+          body: 'A conversa foi transferida para atendimento humano.',
+          conversation_id: conversationId,
+          contact_id: prev.contact_id,
+          metadata: { triggered_by: 'manual' },
+        });
+
+        // 3) Trigger the sender so the message goes out without waiting for the cron.
+        const projectId = (import.meta as any).env?.VITE_SUPABASE_PROJECT_ID;
+        if (projectId) {
+          fetch(`https://${projectId}.supabase.co/functions/v1/whatsapp-sender`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          }).catch((e) => console.warn('[API] whatsapp-sender trigger failed:', e));
+        }
+      } catch (sideErr) {
+        console.error('[API] Side-effect on takeover failed:', sideErr);
+      }
+    }
   },
 
   /**
