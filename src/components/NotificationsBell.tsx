@@ -71,7 +71,22 @@ export function NotificationsBell({ collapsed = false }: NotificationsBellProps)
         className="w-96 p-0 bg-slate-900 border-slate-800"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-          <h3 className="text-sm font-semibold text-slate-100">Notificações</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-slate-100">Notificações</h3>
+            <span
+              className={`inline-flex items-center gap-1 text-[10px] ${
+                realtimeConnected ? 'text-emerald-400' : 'text-slate-500'
+              }`}
+              title={realtimeConnected ? 'Conectado em tempo real' : 'Sincronizando...'}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  realtimeConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                }`}
+              />
+              {realtimeConnected ? 'ao vivo' : 'offline'}
+            </span>
+          </div>
           {unreadCount > 0 && (
             <Button
               variant="ghost"
