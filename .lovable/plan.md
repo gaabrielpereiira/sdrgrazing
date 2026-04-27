@@ -1,26 +1,42 @@
-## Problema
+# Corrigir erro ao criar Deal na Pipeline
 
-Seu usuário `allan.abrunhosa@grazingtable.com.br` está com role `user` na tabela `user_roles`, por isso a UI mostra "Somente Leitura" e bloqueia ações de administrador (Configurações, edição de prompts, APIs, etc.).
+## Problema identificado
 
-Já existe um admin no sistema (`gabriel@sharkassessoria.com.br`), e a função `handle_new_user` só dá admin ao primeiro usuário criado — por isso você caiu como `user`.
+Logs do banco mostram o erro real:
 
-## Solução
-
-Aplicar uma migration que atualiza seu role para `admin`:
-
-```sql
-UPDATE public.user_roles
-SET role = 'admin'
-WHERE user_id = '45b14871-48ae-4169-92b7-14c4d288e790';
+```
+null value in column "stage_id" of relation "deals" violates not-null constraint
 ```
 
-Isso usa a tabela `user_roles` existente (separada de `profiles`, conforme boas práticas de segurança já implementadas no projeto) e a função `has_role()` que protege as policies.
+A coluna `deals.stage_id` é **NOT NULL** e **não tem valor default**. Porém o fluxo atual em `CreateDealModal` chama `api.createDeal()` sem passar `stage_id`, e a função `createDeal` em `src/services/api.ts` (linhas 1005-1009) remove o campo quando ele é undefined esperando que o DB use um default — que não existe. Resultado: insert falha com erro genérico "Erro ao criar deal".
 
-## Após aplicar
+## Correção
 
-- Faça **logout e login novamente** (ou recarregue a página) para o hook `useCompanySettings` re-buscar o role.
-- Você verá o badge "Admin" no canto superior direito de Configurações e poderá editar Agente, APIs e refazer o Onboarding.
+Buscar automaticamente o **primeiro estágio ativo** do pipeline e usá-lo como `stage_id` padrão sempre que o caller não informar um.
+
+### Mudança em `src/services/api.ts` (função `createDeal`)
+
+Quando `stage_id` não for fornecido:
+1. Consultar `pipeline_stages` filtrando `is_active = true`, ordenado por `position` ascendente, `limit 1`.
+2. Usar o `id` retornado como `stage_id` do novo deal.
+3. Se nenhum estágio existir, lançar erro claro: "Nenhum estágio de pipeline configurado. Configure a pipeline primeiro."
+
+Isso corrige o caso atual (estágios já existem: "Novos Leads" position 0 será usado) e mantém compatibilidade com chamadas que já passam `stage_id`.
+
+### Mudança em `src/components/CreateDealModal.tsx` (opcional, melhor UX)
+
+No `catch` do `onSubmit`, exibir a mensagem real do erro no toast em vez de "Erro ao criar deal" genérico:
+
+```ts
+toast.error(error?.message || 'Erro ao criar deal');
+```
+
+Assim, falhas futuras ficam visíveis para o usuário sem precisar olhar logs.
 
 ## Observação
 
-Se quiser que o segundo admin seja você e o `gabriel@...` deixe de ser admin, me avise — posso ajustar na mesma migration.
+O trigger `create_deal_for_new_contact` (que cria deal automaticamente para novos contatos via DB function) já busca corretamente o primeiro `pipeline_stages.id`. Estamos apenas alinhando o fluxo manual a esse mesmo comportamento.
+
+## Arquivos afetados
+- `src/services/api.ts` — ajuste em `createDeal`
+- `src/components/CreateDealModal.tsx` — toast com mensagem real (opcional)

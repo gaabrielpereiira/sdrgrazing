@@ -237,9 +237,9 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
       setContactMode('existing');
       onOpenChange(false);
       onDealCreated();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating deal:', error);
-      toast.error('Erro ao criar deal');
+      toast.error(error?.message || 'Erro ao criar deal');
     } finally {
       setIsSubmitting(false);
     }
