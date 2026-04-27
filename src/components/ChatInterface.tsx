@@ -477,6 +477,51 @@ const ChatInterface: React.FC = () => {
                   <Pause className="w-5 h-5" />
                 </Button>
                 <div className="h-6 w-px bg-slate-800 mx-1"></div>
+                {chatTab === 'active' ? (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-slate-400 hover:text-rose-400"
+                        title="Finalizar conversa"
+                      >
+                        <XCircle className="w-5 h-5" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="bg-slate-900 border-slate-800">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="text-white">Finalizar esta conversa?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-slate-400">
+                          A conversa será movida para a aba "Finalizadas". Você ainda poderá consultar todo o histórico e reabrir quando quiser.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-rose-600 hover:bg-rose-500 text-white"
+                          onClick={() => {
+                            if (activeChat) endConversation(activeChat.id);
+                          }}
+                        >
+                          Finalizar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-slate-400 hover:text-emerald-400"
+                    title="Reabrir conversa"
+                    onClick={() => {
+                      if (activeChat) reopenConversation(activeChat.id);
+                    }}
+                  >
+                    <RotateCcw className="w-5 h-5" />
+                  </Button>
+                )}
                 <Button 
                   variant="ghost" 
                   size="icon" 
