@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useState } from 'react';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -21,18 +22,25 @@ interface NotificationsBellProps {
 }
 
 export function NotificationsBell({ collapsed = false }: NotificationsBellProps) {
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, realtimeConnected, markAsRead, markAllAsRead, refetch } = useNotifications();
   const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next) refetch();
+  };
 
   const handleOpen = (id: string, conversationId: string | null) => {
     markAsRead(id);
     if (conversationId) {
       navigate(`/chat?conversation=${conversationId}`);
+      setOpen(false);
     }
   };
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
           className="relative flex items-center gap-3 rounded-lg px-2 py-2 text-foreground/80 hover:bg-muted/50 hover:text-foreground transition-colors w-full"
@@ -63,7 +71,22 @@ export function NotificationsBell({ collapsed = false }: NotificationsBellProps)
         className="w-96 p-0 bg-slate-900 border-slate-800"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-          <h3 className="text-sm font-semibold text-slate-100">Notificações</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-slate-100">Notificações</h3>
+            <span
+              className={`inline-flex items-center gap-1 text-[10px] ${
+                realtimeConnected ? 'text-emerald-400' : 'text-slate-500'
+              }`}
+              title={realtimeConnected ? 'Conectado em tempo real' : 'Sincronizando...'}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  realtimeConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                }`}
+              />
+              {realtimeConnected ? 'ao vivo' : 'offline'}
+            </span>
+          </div>
           {unreadCount > 0 && (
             <Button
               variant="ghost"
