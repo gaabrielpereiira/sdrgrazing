@@ -1416,6 +1416,98 @@ export const api = {
   },
 
   /**
+   * Send a media message (image, audio, document).
+   * Uploads the file to whatsapp-media bucket and queues for sending.
+   */
+  sendMediaMessage: async (
+    conversationId: string,
+    file: File,
+    opts: { mediaType: 'image' | 'audio' | 'document'; caption?: string }
+  ): Promise<{ id: string; mediaUrl: string }> => {
+    console.log(`[API] Sending ${opts.mediaType} to conversation ${conversationId}`);
+
+    // 1) Get conversation -> contact_id
+    const { data: conversation, error: convError } = await supabase
+      .from('conversations')
+      .select('contact_id')
+      .eq('id', conversationId)
+      .single();
+
+    if (convError || !conversation) {
+      console.error('[API] Error getting conversation:', convError);
+      throw new Error('Conversation not found');
+    }
+
+    // 2) Upload file to storage bucket
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `outbound/${conversationId}/${Date.now()}-${safeName}`;
+    const { error: uploadErr } = await supabase.storage
+      .from('whatsapp-media')
+      .upload(path, file, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: false,
+      });
+
+    if (uploadErr) {
+      console.error('[API] Upload error:', uploadErr);
+      throw new Error('Falha ao enviar arquivo: ' + uploadErr.message);
+    }
+
+    const { data: urlData } = supabase.storage.from('whatsapp-media').getPublicUrl(path);
+    const publicUrl = urlData.publicUrl;
+
+    // 3) Create message record
+    const content = opts.caption?.trim() || file.name;
+    const { data: msgData, error: msgError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        content,
+        type: opts.mediaType,
+        from_type: 'human',
+        status: 'processing',
+        media_url: publicUrl,
+        media_type: file.type || null,
+        sent_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (msgError || !msgData) {
+      console.error('[API] Error creating media message record:', msgError);
+      throw new Error('Failed to create message record');
+    }
+
+    // 4) Queue for sending
+    const { error: sendError } = await supabase
+      .from('send_queue')
+      .insert({
+        conversation_id: conversationId,
+        contact_id: conversation.contact_id,
+        content,
+        from_type: 'human',
+        message_type: opts.mediaType,
+        media_url: publicUrl,
+        priority: 2,
+        message_id: msgData.id,
+      });
+
+    if (sendError) {
+      console.error('[API] Error queuing media message:', sendError);
+      throw sendError;
+    }
+
+    // 5) Trigger sender
+    try {
+      await supabase.functions.invoke('whatsapp-sender');
+    } catch (err) {
+      console.error('[API] Failed to trigger whatsapp-sender:', err);
+    }
+
+    return { id: msgData.id, mediaUrl: publicUrl };
+  },
+
+  /**
    * Update conversation status (nina/human/paused).
    * When transitioning to 'human', automatically:
    *  - sends a friendly message to the customer informing a human is taking over
