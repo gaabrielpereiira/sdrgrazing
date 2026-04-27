@@ -23,7 +23,7 @@ import { useAllPendingActivities } from '@/hooks/useConversationActivities';
 
 const ChatInterface: React.FC = () => {
   const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
-  const { conversations, loading, sendMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation } = useConversations({ active: chatTab === 'active' });
+  const { conversations, loading, sendMessage, sendMediaMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation } = useConversations({ active: chatTab === 'active' });
   const { sdrName, companyName } = useCompanySettings();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
