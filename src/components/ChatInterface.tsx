@@ -751,6 +751,81 @@ const ChatInterface: React.FC = () => {
               </div>
             ) : (
               <div className="p-4 bg-slate-900/90 border-t border-slate-800 backdrop-blur-sm z-10">
+                {/* Hidden file inputs */}
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={(e) => handleFileSelected(e, 'image')}
+                />
+                <input
+                  ref={audioInputRef}
+                  type="file"
+                  accept="audio/mpeg,audio/mp3,audio/ogg,audio/mp4,audio/aac,audio/x-m4a"
+                  className="hidden"
+                  onChange={(e) => handleFileSelected(e, 'audio')}
+                />
+                <input
+                  ref={documentInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="hidden"
+                  onChange={(e) => handleFileSelected(e, 'document')}
+                />
+
+                {/* Attachment preview card */}
+                {pendingAttachment && (
+                  <div className="max-w-4xl mx-auto mb-3 p-3 rounded-xl border border-cyan-500/30 bg-slate-950/80 flex items-center gap-3">
+                    {pendingAttachment.mediaType === 'image' ? (
+                      <img
+                        src={pendingAttachment.previewUrl}
+                        alt="preview"
+                        className="w-16 h-16 rounded-lg object-cover border border-slate-700"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400">
+                        {pendingAttachment.mediaType === 'audio' ? <Music className="w-6 h-6" /> : <FileText className="w-6 h-6" />}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-200 font-medium truncate">{pendingAttachment.file.name}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {(pendingAttachment.file.size / 1024).toFixed(1)} KB · {pendingAttachment.mediaType}
+                      </p>
+                      {pendingAttachment.mediaType === 'image' && (
+                        <input
+                          type="text"
+                          value={attachmentCaption}
+                          onChange={(e) => setAttachmentCaption(e.target.value)}
+                          placeholder="Adicionar legenda (opcional)…"
+                          className="mt-1.5 w-full bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-xs text-slate-200 outline-none focus:border-cyan-500/60"
+                        />
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={cancelAttachment}
+                      disabled={isUploading}
+                      className="text-slate-400 hover:text-white rounded-full"
+                      title="Cancelar"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleSendAttachment}
+                      disabled={isUploading}
+                      className="rounded-full px-4 h-10 text-sm bg-cyan-500 hover:bg-cyan-400"
+                    >
+                      {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      <span className="ml-2">Enviar</span>
+                    </Button>
+                  </div>
+                )}
+
                 <form onSubmit={handleSendMessage} className="flex items-end gap-3 max-w-4xl mx-auto">
                   <div className="flex items-center gap-1">
                     <Button 
@@ -763,16 +838,48 @@ const ChatInterface: React.FC = () => {
                     >
                       <Smile className="w-5 h-5" />
                     </Button>
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="icon"
-                      disabled
-                      title="Em breve: Enviar anexos"
-                      className="text-slate-500 rounded-full cursor-not-allowed opacity-50"
-                    >
-                      <Paperclip className="w-5 h-5" />
-                    </Button>
+                    <Popover open={attachMenuOpen} onOpenChange={setAttachMenuOpen}>
+                      <PopoverTrigger asChild>
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="icon"
+                          title="Anexar arquivo"
+                          className="text-slate-300 hover:text-cyan-400 rounded-full"
+                        >
+                          <Paperclip className="w-5 h-5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent side="top" align="start" className="w-52 p-1.5 bg-slate-900 border-slate-700">
+                        <button
+                          type="button"
+                          onClick={() => handlePickAttachment('image')}
+                          className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-slate-200 hover:bg-slate-800 transition"
+                        >
+                          <ImageIcon className="w-4 h-4 text-cyan-400" />
+                          Imagem
+                          <span className="ml-auto text-[10px] text-slate-500">5MB</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePickAttachment('audio')}
+                          className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-slate-200 hover:bg-slate-800 transition"
+                        >
+                          <Music className="w-4 h-4 text-violet-400" />
+                          Áudio
+                          <span className="ml-auto text-[10px] text-slate-500">16MB</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePickAttachment('document')}
+                          className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-slate-200 hover:bg-slate-800 transition"
+                        >
+                          <FileText className="w-4 h-4 text-emerald-400" />
+                          Documento
+                          <span className="ml-auto text-[10px] text-slate-500">100MB</span>
+                        </button>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   
                   <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500/50 transition-all shadow-inner">
