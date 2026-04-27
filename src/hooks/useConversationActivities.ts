@@ -102,6 +102,8 @@ export function useConversationActivities(conversationId: string | null) {
     }
     const dt = new Date(input.scheduled_at);
     toast.success(`Atividade agendada para ${dt.toLocaleDateString('pt-BR')} às ${dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`);
+    // Kick off reminder checker (fire-and-forget, ensures the self-scheduling loop is alive)
+    supabase.functions.invoke('activity-reminder-checker', { body: { trigger: 'create' } }).catch(() => {});
     fetchActivities();
   }, [fetchActivities]);
 
