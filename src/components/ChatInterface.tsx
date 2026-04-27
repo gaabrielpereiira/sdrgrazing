@@ -190,6 +190,56 @@ const ChatInterface: React.FC = () => {
     await updateStatus(activeChat.id, status);
   };
 
+  const MAX_SIZE_BY_TYPE: Record<'image' | 'audio' | 'document', number> = {
+    image: 5 * 1024 * 1024,       // 5 MB
+    audio: 16 * 1024 * 1024,      // 16 MB
+    document: 100 * 1024 * 1024,  // 100 MB
+  };
+
+  const handlePickAttachment = (mediaType: 'image' | 'audio' | 'document') => {
+    setAttachMenuOpen(false);
+    const ref =
+      mediaType === 'image' ? imageInputRef :
+      mediaType === 'audio' ? audioInputRef : documentInputRef;
+    ref.current?.click();
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>, mediaType: 'image' | 'audio' | 'document') => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting same file
+    if (!file) return;
+
+    const maxSize = MAX_SIZE_BY_TYPE[mediaType];
+    if (file.size > maxSize) {
+      toast.error(`Arquivo muito grande. Máximo ${(maxSize / 1024 / 1024).toFixed(0)} MB para ${mediaType}.`);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setPendingAttachment({ file, mediaType, previewUrl });
+    setAttachmentCaption('');
+  };
+
+  const cancelAttachment = () => {
+    if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.previewUrl);
+    setPendingAttachment(null);
+    setAttachmentCaption('');
+  };
+
+  const handleSendAttachment = async () => {
+    if (!pendingAttachment || !activeChat || isUploading) return;
+    setIsUploading(true);
+    try {
+      await sendMediaMessage(activeChat.id, pendingAttachment.file, {
+        mediaType: pendingAttachment.mediaType,
+        caption: pendingAttachment.mediaType === 'image' ? attachmentCaption : undefined,
+      });
+      cancelAttachment();
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const filteredConversations = conversations.filter(chat => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
