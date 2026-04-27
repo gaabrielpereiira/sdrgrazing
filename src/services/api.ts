@@ -1001,13 +1001,29 @@ export const api = {
     notes?: string;
   }): Promise<Deal> => {
     const userId = await getCurrentUserId();
-    
-    // Remove undefined stage_id to let DB use default
+
     const dealData: any = { ...deal, user_id: userId };
+
+    // stage_id é NOT NULL sem default. Se não foi informado, usar o primeiro estágio ativo do pipeline.
     if (!dealData.stage_id) {
-      delete dealData.stage_id;
+      const { data: firstStage, error: stageError } = await supabase
+        .from('pipeline_stages')
+        .select('id')
+        .eq('is_active', true)
+        .order('position', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (stageError) {
+        console.error('[API] Error fetching first pipeline stage:', stageError);
+        throw stageError;
+      }
+      if (!firstStage) {
+        throw new Error('Nenhum estágio de pipeline configurado. Configure a pipeline primeiro.');
+      }
+      dealData.stage_id = firstStage.id;
     }
-    
+
     const { data, error } = await supabase
       .from('deals')
       .insert([dealData])
