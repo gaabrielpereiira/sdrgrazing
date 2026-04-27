@@ -759,6 +759,9 @@ async function processQueueItem(
     tools.push(cancelAppointmentTool);
     console.log('[Nina] AI scheduling enabled, adding appointment tools (create, reschedule, cancel)');
   }
+  // Always expose human handoff tool — IA usa para transferir para atendente
+  // sem vazar mensagem interna para o cliente.
+  tools.push(requestHandoffTool);
 
   // Build request body
   const requestBody: any = {
