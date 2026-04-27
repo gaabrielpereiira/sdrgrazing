@@ -1436,6 +1436,38 @@ export const api = {
   },
 
   /**
+   * Finalize a conversation (soft-close, marks as inactive)
+   */
+  endConversation: async (conversationId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('conversations')
+      .update({ is_active: false, status: 'paused' })
+      .eq('id', conversationId);
+
+    if (error) {
+      console.error('[API] Error ending conversation:', error);
+      throw error;
+    }
+    console.log(`[API] Conversation ${conversationId} finalized`);
+  },
+
+  /**
+   * Reopen a previously finalized conversation
+   */
+  reopenConversation: async (conversationId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('conversations')
+      .update({ is_active: true, status: 'human' })
+      .eq('id', conversationId);
+
+    if (error) {
+      console.error('[API] Error reopening conversation:', error);
+      throw error;
+    }
+    console.log(`[API] Conversation ${conversationId} reopened`);
+  },
+
+  /**
    * Mark all unread messages in a conversation as read
    */
   markMessagesAsRead: async (conversationId: string): Promise<void> => {
