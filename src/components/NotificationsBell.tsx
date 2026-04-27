@@ -22,18 +22,25 @@ interface NotificationsBellProps {
 }
 
 export function NotificationsBell({ collapsed = false }: NotificationsBellProps) {
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, realtimeConnected, markAsRead, markAllAsRead, refetch } = useNotifications();
   const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next) refetch();
+  };
 
   const handleOpen = (id: string, conversationId: string | null) => {
     markAsRead(id);
     if (conversationId) {
       navigate(`/chat?conversation=${conversationId}`);
+      setOpen(false);
     }
   };
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
           className="relative flex items-center gap-3 rounded-lg px-2 py-2 text-foreground/80 hover:bg-muted/50 hover:text-foreground transition-colors w-full"
