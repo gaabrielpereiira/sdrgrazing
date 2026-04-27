@@ -10,7 +10,31 @@ const Contacts: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ name: '', phone: '', email: '' });
   const navigate = useNavigate();
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.phone.trim()) {
+      toast.error('Telefone é obrigatório');
+      return;
+    }
+    setCreating(true);
+    try {
+      const newContact = await api.createContact(form);
+      setContacts(prev => [newContact, ...prev]);
+      toast.success('Contato criado com sucesso');
+      setForm({ name: '', phone: '', email: '' });
+      setShowCreate(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Erro ao criar contato');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   useEffect(() => {
     const loadContacts = async () => {
