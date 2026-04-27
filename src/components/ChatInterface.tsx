@@ -200,17 +200,30 @@ const ChatInterface: React.FC = () => {
 
   const renderMessageContent = (msg: UIMessage) => {
     if (msg.type === MessageType.IMAGE) {
+      if (!msg.mediaUrl) {
+        return (
+          <div className="mb-1 flex items-center gap-2 px-3 py-6 rounded-lg bg-slate-900/60 border border-slate-700/50 text-slate-400 text-xs">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Baixando imagem do WhatsApp...
+          </div>
+        );
+      }
       return (
         <div className="mb-1 group relative">
-          <img 
-            src={msg.mediaUrl || msg.content} 
-            alt="Anexo" 
-            className="rounded-lg max-w-full h-auto max-h-72 object-cover border border-slate-700/50 shadow-lg"
-            loading="lazy"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = 'https://placehold.co/300x200/1e293b/cbd5e1?text=Erro+Imagem';
-            }}
-          />
+          <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer">
+            <img 
+              src={msg.mediaUrl} 
+              alt={msg.content || 'Imagem'} 
+              className="rounded-lg max-w-full h-auto max-h-72 object-cover border border-slate-700/50 shadow-lg cursor-zoom-in"
+              loading="lazy"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'https://placehold.co/300x200/1e293b/cbd5e1?text=Erro+Imagem';
+              }}
+            />
+          </a>
+          {msg.content && msg.content !== '[imagem recebida]' && (
+            <p className="text-xs mt-1.5 opacity-90">{msg.content}</p>
+          )}
         </div>
       );
     }
