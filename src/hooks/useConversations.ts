@@ -17,6 +17,10 @@ export function useConversations() {
   const [conversations, setConversations] = useState<UIConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [realtimeConnected, setRealtimeConnected] = useState(true);
+  
+  // Polling fallback when Realtime fails
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   // Track processed message IDs to prevent duplicates across re-renders
   const processedMessageIds = useRef(new Set<string>());
@@ -105,6 +109,26 @@ export function useConversations() {
       toast.error('Erro ao carregar conversas');
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // Polling helpers
+  const startPolling = useCallback(() => {
+    if (pollingIntervalRef.current) return;
+    console.log('[Realtime] 🔄 Starting polling fallback (10s interval)');
+    setRealtimeConnected(false);
+    pollingIntervalRef.current = setInterval(() => {
+      console.log('[Realtime] 📡 Polling: fetching conversations...');
+      fetchConversations();
+    }, 10000);
+  }, [fetchConversations]);
+
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      console.log('[Realtime] ✅ Stopping polling fallback (Realtime reconnected)');
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+      setRealtimeConnected(true);
     }
   }, []);
 
@@ -246,16 +270,13 @@ export function useConversations() {
         console.log('[Realtime] Messages channel status:', status);
         if (status === 'SUBSCRIBED') {
           console.log('[Realtime] ✅ Successfully connected to messages channel');
+          stopPolling();
         } else if (status === 'CHANNEL_ERROR') {
           console.error('[Realtime] ❌ Error connecting to messages channel:', err);
-          // Attempt to reconnect after 5 seconds
-          setTimeout(() => {
-            console.log('[Realtime] 🔄 Attempting to reconnect messages channel...');
-            fetchConversations();
-          }, 5000);
+          startPolling();
         } else if (status === 'TIMED_OUT') {
-          console.warn('[Realtime] ⚠️ Connection timed out, retrying...');
-          setTimeout(() => fetchConversations(), 3000);
+          console.warn('[Realtime] ⚠️ Connection timed out, starting polling fallback...');
+          startPolling();
         }
       });
 
@@ -314,19 +335,24 @@ export function useConversations() {
         console.log('[Realtime] Conversations channel status:', status);
         if (status === 'SUBSCRIBED') {
           console.log('[Realtime] ✅ Successfully connected to conversations channel');
+          stopPolling();
         } else if (status === 'CHANNEL_ERROR') {
           console.error('[Realtime] ❌ Error connecting to conversations channel:', err);
-          setTimeout(() => fetchConversations(), 5000);
+          startPolling();
+        } else if (status === 'TIMED_OUT') {
+          console.warn('[Realtime] ⚠️ Conversations channel timed out, starting polling fallback...');
+          startPolling();
         }
       });
 
     // Cleanup
     return () => {
       console.log('[Realtime] Cleaning up subscriptions');
+      stopPolling();
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
     };
-  }, [fetchConversations, fetchAndAddConversation]);
+  }, [fetchConversations, fetchAndAddConversation, startPolling, stopPolling]);
 
   // Send message
   const sendMessage = useCallback(async (conversationId: string, content: string) => {
@@ -470,6 +496,7 @@ export function useConversations() {
     conversations,
     loading,
     error,
+    realtimeConnected,
     sendMessage,
     updateStatus,
     markAsRead,
