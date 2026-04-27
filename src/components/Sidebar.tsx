@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import viaIcon from '@/assets/icon-via.png';
 import viaLogoWhite from '@/assets/logo-via-white.png';
+import { NotificationsBell } from '@/components/NotificationsBell';
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
