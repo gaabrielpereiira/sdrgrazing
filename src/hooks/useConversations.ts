@@ -500,6 +500,33 @@ export function useConversations(options?: { active?: boolean }) {
     }
   }, [conversations]);
 
+  // Finalize a conversation (close)
+  const endConversation = useCallback(async (conversationId: string) => {
+    // Optimistic: remove from current view
+    setConversations(prev => prev.filter(c => c.id !== conversationId));
+    try {
+      await api.endConversation(conversationId);
+      toast.success('Conversa finalizada');
+    } catch (err) {
+      console.error('[useConversations] Error ending conversation:', err);
+      toast.error('Erro ao finalizar conversa');
+      fetchConversations();
+    }
+  }, [fetchConversations]);
+
+  // Reopen a finalized conversation
+  const reopenConversation = useCallback(async (conversationId: string) => {
+    setConversations(prev => prev.filter(c => c.id !== conversationId));
+    try {
+      await api.reopenConversation(conversationId);
+      toast.success('Conversa reaberta');
+    } catch (err) {
+      console.error('[useConversations] Error reopening conversation:', err);
+      toast.error('Erro ao reabrir conversa');
+      fetchConversations();
+    }
+  }, [fetchConversations]);
+
   return {
     conversations,
     loading,
@@ -509,6 +536,8 @@ export function useConversations(options?: { active?: boolean }) {
     updateStatus,
     markAsRead,
     assignConversation,
+    endConversation,
+    reopenConversation,
     refetch: fetchConversations
   };
 }
