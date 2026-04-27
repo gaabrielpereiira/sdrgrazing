@@ -496,6 +496,7 @@ export function useConversations() {
     conversations,
     loading,
     error,
+    realtimeConnected,
     sendMessage,
     updateStatus,
     markAsRead,
