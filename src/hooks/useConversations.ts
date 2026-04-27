@@ -584,6 +584,7 @@ export function useConversations(options?: { active?: boolean }) {
     error,
     realtimeConnected,
     sendMessage,
+    sendMediaMessage,
     updateStatus,
     markAsRead,
     assignConversation,
