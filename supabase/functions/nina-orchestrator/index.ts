@@ -814,6 +814,7 @@ async function processQueueItem(
   let appointmentCreated = null;
   let appointmentRescheduled = null;
   let appointmentCancelled = null;
+  let handoffRequested: any = null;
   
   for (const toolCall of toolCalls) {
     if (toolCall.function?.name === 'create_appointment') {
