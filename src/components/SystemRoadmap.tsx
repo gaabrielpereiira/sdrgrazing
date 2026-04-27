@@ -82,6 +82,68 @@ const SystemRoadmap: React.FC = () => {
       ),
     },
     {
+      id: 'post-remix-checklist',
+      title: '🔄 Checklist Pós-Remix (IMPORTANTE)',
+      icon: AlertTriangle,
+      content: (
+        <div className="space-y-4">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-6">
+            <p className="text-amber-200 text-sm mb-4">
+              Após remixar este projeto, algumas configurações do backend precisam ser re-aplicadas manualmente. 
+              Siga os passos abaixo:
+            </p>
+            
+            <div className="space-y-4">
+              <div className="flex gap-4 items-start">
+                <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">1</div>
+                <div>
+                  <p className="text-white font-medium">Configurar verify_jwt nas Edge Functions</p>
+                  <p className="text-sm text-slate-400">No backend, defina <code className="text-amber-400">verify_jwt = false</code> nas seguintes funções:</p>
+                  <div className="mt-2 bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <code className="text-xs text-emerald-400 font-mono">
+                      whatsapp-webhook, message-grouper, nina-orchestrator, whatsapp-sender, initialize-system, validate-setup, simulate-webhook, simulate-audio-webhook, test-whatsapp-message, test-elevenlabs-tts, generate-prompt, analyze-conversation, health-check, seed-appointments, trigger-nina-orchestrator, trigger-whatsapp-sender
+                    </code>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-4 items-start">
+                <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">2</div>
+                <div>
+                  <p className="text-white font-medium">Configurar o Webhook no Meta for Developers</p>
+                  <p className="text-sm text-slate-400">
+                    Acesse o Meta for Developers e configure o webhook com a URL do seu projeto remixed 
+                    e o Verify Token. Consulte o tutorial de WhatsApp acima para detalhes.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex gap-4 items-start">
+                <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">3</div>
+                <div>
+                  <p className="text-white font-medium">Configurar ElevenLabs API Key (opcional)</p>
+                  <p className="text-sm text-slate-400">
+                    Se quiser usar respostas em áudio, configure a chave da API ElevenLabs na aba "APIs" das Configurações.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex gap-4 items-start">
+                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">✓</div>
+                <div>
+                  <p className="text-white font-medium">Correções automáticas já aplicadas</p>
+                  <p className="text-sm text-slate-400">
+                    As seguintes correções foram aplicadas automaticamente durante o remix:
+                    publicação Realtime, triggers de banco de dados, políticas RLS single-tenant e polling fallback.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
       id: 'whatsapp-tutorial',
       title: '📱 Tutorial: Configurar WhatsApp Business API',
       icon: Smartphone,
