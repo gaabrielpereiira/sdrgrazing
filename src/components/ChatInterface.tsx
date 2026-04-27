@@ -468,9 +468,26 @@ const ChatInterface: React.FC = () => {
                   <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
                 </div>
                 <div className="ml-3">
-                  <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 flex-wrap">
                     {activeChat.contactName}
                     {renderStatusBadge(activeChat.status)}
+                    {assignedMember ? (
+                      <span
+                        className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-cyan-500/10 text-cyan-300 border-cyan-500/30 flex items-center gap-1"
+                        title={`Atendente responsável: ${assignedMember.name}`}
+                      >
+                        <img src={assignedMember.avatar} alt={assignedMember.name} className="w-3.5 h-3.5 rounded-full" />
+                        {assignedMember.name}
+                      </span>
+                    ) : activeChat.status === 'human' ? (
+                      <span
+                        className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-orange-500/10 text-orange-300 border-orange-500/30 flex items-center gap-1"
+                        title="Nenhum atendente atribuído"
+                      >
+                        <AlertTriangle className="w-3 h-3" />
+                        Sem responsável
+                      </span>
+                    ) : null}
                   </h2>
                   <p className="text-xs text-cyan-500 font-medium">{activeChat.contactPhone}</p>
                 </div>
