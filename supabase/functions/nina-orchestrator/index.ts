@@ -95,6 +95,41 @@ const cancelAppointmentTool = {
   }
 };
 
+// Tool definition for transferring conversation to a human attendant.
+// Replaces the old practice of writing "🔔 ATENDIMENTO NECESSÁRIO" as plain text
+// (which leaked the internal alert to the customer's WhatsApp).
+const requestHandoffTool = {
+  type: "function",
+  function: {
+    name: "request_human_handoff",
+    description: "Transfere a conversa para um atendente humano e cria uma notificação interna na plataforma. Use SEMPRE que o cliente precisar de atendimento humano (reclamação, status de pedido, cancelamento, boleto/NF, lead qualificado, ou qualquer assunto fora do escopo da IA). NUNCA escreva mensagens internas como '🔔 ATENDIMENTO NECESSÁRIO' no chat — use esta ferramenta.",
+    parameters: {
+      type: "object",
+      properties: {
+        reason: {
+          type: "string",
+          enum: ["complaint", "order_status", "cancel_change", "payment_invoice", "qualified_lead", "other"],
+          description: "Motivo da transferência (uso interno)."
+        },
+        urgency: {
+          type: "string",
+          enum: ["normal", "urgent"],
+          description: "Urgência. Use 'urgent' para reclamações ou problemas com entrega/pagamento; 'normal' para o restante."
+        },
+        summary: {
+          type: "string",
+          description: "Resumo curto (1-2 linhas) do que o cliente precisa, para o atendente humano. NUNCA será visto pelo cliente."
+        },
+        customer_message_for_client: {
+          type: "string",
+          description: "Mensagem AMIGÁVEL e curta que SERÁ enviada ao cliente confirmando que um atendente vai assumir. Ex: 'Entendido! Vou acionar um especialista agora. Em instantes alguém estará com você. ✨'"
+        }
+      },
+      required: ["reason", "urgency", "summary", "customer_message_for_client"]
+    }
+  }
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
