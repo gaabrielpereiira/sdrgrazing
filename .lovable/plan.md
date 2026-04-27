@@ -1,64 +1,71 @@
+# Fix: "Failed to subscribe to the message_echoes webhook field"
 
+## Root cause
 
-## Plano: Implementar controle de registro de novos usuários
+When you subscribe to a webhook field (like `message_echoes`) in Meta for Developers, Meta sends a verification request (GET) and a test POST to your callback URL. Both requests come **without any Authorization header** — Meta has no way to send a Supabase JWT.
 
-### O que será feito
-Copiar a lógica do projeto "Remix - Nina Evolution" para permitir habilitar/desabilitar o registro de novos usuários, com toggle acessível a qualquer usuário autenticado.
+The `whatsapp-webhook` Edge Function currently requires a JWT (the default). So Meta's request is rejected with **401 Unauthorized by the Supabase gateway before your code runs**, and Meta reports it as "Failed to subscribe to the message_echoes webhook field".
 
-### 1. Migration: Criar tabela `system_settings`
+This is the known post-remix limitation: `verify_jwt = false` settings are **not preserved when a project is remixed** (memory `backend/verify-jwt-remix-limitation`). Your verification logic itself is correct — I tested it and it returns the challenge as expected.
 
-```sql
-CREATE TABLE public.system_settings (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  registration_enabled boolean NOT NULL DEFAULT true,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+## Fix
 
-ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+Update `supabase/config.toml` to explicitly disable JWT verification for every Edge Function that is called by an external service or by another function without a user session. After redeploy, Meta's verification request will reach the function and the subscription will succeed.
 
--- Políticas permissivas: qualquer autenticado pode ler, inserir e atualizar
-CREATE POLICY "Authenticated can read system_settings"
-ON public.system_settings FOR SELECT TO authenticated USING (true);
+Functions that must be public:
 
-CREATE POLICY "Authenticated can insert system_settings"
-ON public.system_settings FOR INSERT TO authenticated WITH CHECK (true);
+- `whatsapp-webhook` (called by Meta — this is your immediate blocker)
+- `message-grouper`, `nina-orchestrator`, `whatsapp-sender` (called by other functions / cron)
+- `simulate-webhook`, `simulate-audio-webhook`, `trigger-nina-orchestrator`, `trigger-whatsapp-sender` (test/trigger utilities)
+- `health-check` (used by status card before login in some flows)
 
-CREATE POLICY "Authenticated can update system_settings"
-ON public.system_settings FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+Functions that stay protected (require login): `test-whatsapp-message`, `test-elevenlabs-tts`, `generate-prompt`, `analyze-conversation`, `validate-setup`, `initialize-system`, `seed-appointments`.
 
--- Anon pode ler (para a tela de login verificar)
-CREATE POLICY "Public can read system_settings"
-ON public.system_settings FOR SELECT TO anon USING (true);
+## Changes
+
+**`supabase/config.toml`** — append a `verify_jwt = false` block per public function:
+
+```toml
+project_id = "ggwqkyftxhgahqyevsac"
+
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+[functions.message-grouper]
+verify_jwt = false
+
+[functions.nina-orchestrator]
+verify_jwt = false
+
+[functions.whatsapp-sender]
+verify_jwt = false
+
+[functions.simulate-webhook]
+verify_jwt = false
+
+[functions.simulate-audio-webhook]
+verify_jwt = false
+
+[functions.trigger-nina-orchestrator]
+verify_jwt = false
+
+[functions.trigger-whatsapp-sender]
+verify_jwt = false
+
+[functions.health-check]
+verify_jwt = false
 ```
 
-### 2. Auth.tsx — Verificar `registration_enabled` antes de exibir opção de criar conta
+Lovable Cloud will redeploy the functions automatically.
 
-- Adicionar `import { supabase }` 
-- Adicionar estado `registrationEnabled` (default `true`)
-- No `useEffect`, buscar `system_settings.registration_enabled` com `.maybeSingle()`
-- Se `data` é `null` (row não existe) → manter `true` (registro habilitado por padrão)
-- Se `data.registration_enabled === false` → esconder botão "Criar conta" e bloquear submit de signup
-- Condicionar a seção do link "Não tem uma conta?" com `registrationEnabled !== false`
+## After the fix — what to do in Meta
 
-### 3. Team.tsx — Adicionar toggle de registro
+1. Go to **Meta for Developers → your app → WhatsApp → Configuration**.
+2. Webhook callback URL: `https://ggwqkyftxhgahqyevsac.supabase.co/functions/v1/whatsapp-webhook`
+3. Verify token: `viver-ia-4olnkKFd0HKKzRKT` (already saved in your settings).
+4. Click **Verify and save** — should succeed.
+5. In **Webhook fields**, click **Subscribe** next to `messages` and `message_echoes`. Both will now work.
 
-- Adicionar estados: `registrationEnabled`, `registrationSettingsId`, `updatingRegistration`
-- No `loadAllData`, buscar `system_settings` com `.maybeSingle()` (não `.single()` para evitar erro quando não existe row)
-- Adicionar função `handleRegistrationToggle` que faz upsert na tabela
-- Adicionar card com `Switch` + label "Permitir novos registros" acima da lista de membros
-- Importar `Switch` e `Label` dos componentes UI
+## Verification
 
-### 4. Lógica de segurança
-
-| Valor de `registration_enabled` | Comportamento |
-|---|---|
-| `true` | Registro habilitado ✅ |
-| `false` | Registro desabilitado ❌ |
-| `null` (row não existe) | Registro habilitado ✅ |
-
-### Arquivos modificados
-- **Migration SQL** — nova tabela `system_settings` + RLS permissivas
-- **`src/pages/Auth.tsx`** — verificar setting antes de mostrar signup
-- **`src/components/Team.tsx`** — adicionar toggle de registro
-
+After redeploy I'll re-run a no-auth GET against the webhook to confirm Meta's exact request flow (no Authorization header) returns the challenge with HTTP 200.

@@ -1,1 +1,28 @@
 project_id = "ggwqkyftxhgahqyevsac"
+
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+[functions.message-grouper]
+verify_jwt = false
+
+[functions.nina-orchestrator]
+verify_jwt = false
+
+[functions.whatsapp-sender]
+verify_jwt = false
+
+[functions.simulate-webhook]
+verify_jwt = false
+
+[functions.simulate-audio-webhook]
+verify_jwt = false
+
+[functions.trigger-nina-orchestrator]
+verify_jwt = false
+
+[functions.trigger-whatsapp-sender]
+verify_jwt = false
+
+[functions.health-check]
+verify_jwt = false
