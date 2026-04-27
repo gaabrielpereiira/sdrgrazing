@@ -34,7 +34,16 @@ const ChatInterface: React.FC = () => {
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [notesValue, setNotesValue] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
-  
+
+  // Attachments
+  const [pendingAttachment, setPendingAttachment] = useState<{ file: File; mediaType: 'image' | 'audio' | 'document'; previewUrl: string } | null>(null);
+  const [attachmentCaption, setAttachmentCaption] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+
   // Audio player state
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [audioDurations, setAudioDurations] = useState<Record<string, number>>({});
