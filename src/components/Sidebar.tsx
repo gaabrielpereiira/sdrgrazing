@@ -109,6 +109,9 @@ const SidebarContent = () => {
               isActive={currentPath.startsWith(link.href.slice(1))}
             />
           ))}
+          <div className="mt-2 pt-2 border-t border-border/30">
+            <NotificationsBell collapsed={!open} />
+          </div>
         </nav>
       </div>
 
