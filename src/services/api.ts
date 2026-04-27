@@ -322,6 +322,41 @@ export const api = {
   },
 
   /**
+   * Create a new contact
+   */
+  createContact: async (input: { name: string; phone: string; email?: string }): Promise<Contact> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const phoneDigits = (input.phone || '').replace(/\D/g, '');
+    if (!phoneDigits) throw new Error('Telefone é obrigatório');
+
+    const { data, error } = await supabase
+      .from('contacts')
+      .insert({
+        name: input.name?.trim() || null,
+        call_name: input.name?.trim() || null,
+        phone_number: phoneDigits,
+        email: input.email?.trim() || null,
+        user_id: user?.id ?? null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[API] Error creating contact:', error);
+      throw error;
+    }
+
+    return {
+      id: data.id,
+      name: data.name || data.call_name || data.phone_number,
+      phone: data.phone_number,
+      email: data.email || '',
+      status: 'lead' as const,
+      lastContact: new Date(data.last_activity).toLocaleDateString('pt-BR'),
+    };
+  },
+
+  /**
    * Fetch contacts from database
    */
   fetchContacts: async (): Promise<Contact[]> => {
