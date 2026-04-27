@@ -382,6 +382,33 @@ const ChatInterface: React.FC = () => {
       );
     }
 
+    if (msg.type === MessageType.DOCUMENT) {
+      return (
+        <div className="mb-1">
+          <a
+            href={msg.mediaUrl || '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition ${
+              msg.direction === MessageDirection.OUTGOING
+                ? 'bg-white/10 border-white/20 hover:bg-white/15'
+                : 'bg-slate-900/60 border-slate-700/50 hover:bg-slate-900'
+            }`}
+          >
+            <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${
+              msg.direction === MessageDirection.OUTGOING ? 'bg-white/20' : 'bg-cyan-500/20'
+            }`}>
+              <FileText className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate">{msg.content || 'Documento'}</p>
+              <p className="text-[10px] opacity-70">Toque para abrir</p>
+            </div>
+          </a>
+        </div>
+      );
+    }
+
     return <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>;
   };
 
