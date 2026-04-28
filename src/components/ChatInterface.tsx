@@ -20,6 +20,7 @@ import {
 } from './ui/alert-dialog';
 import { ActivitiesPanel } from './chat/ActivitiesPanel';
 import { useAllPendingActivities } from '@/hooks/useConversationActivities';
+import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picker-react';
 
 const ChatInterface: React.FC = () => {
   const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
