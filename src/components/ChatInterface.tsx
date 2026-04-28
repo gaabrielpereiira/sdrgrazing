@@ -694,6 +694,15 @@ const ChatInterface: React.FC = () => {
                   
                   <div className="flex items-center mt-2 gap-1.5">
                     {renderStatusBadge(chat.status)}
+                    {isPending(chat) && (
+                      <span
+                        className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] rounded-md font-medium flex items-center gap-1 animate-pulse"
+                        title="Aguardando resposta"
+                      >
+                        <AlertTriangle className="w-2.5 h-2.5" />
+                        Pendente
+                      </span>
+                    )}
                     {pendingActivities[chat.id] && (
                       <span
                         className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] rounded-md font-medium flex items-center gap-1"
