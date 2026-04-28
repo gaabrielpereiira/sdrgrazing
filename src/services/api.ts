@@ -1364,7 +1364,8 @@ export const api = {
         type: 'text',
         from_type: 'human',
         status: 'processing',
-        sent_at: new Date().toISOString()
+        sent_at: new Date().toISOString(),
+        reply_to_id: opts?.replyToId || null
       })
       .select('id')
       .single();
