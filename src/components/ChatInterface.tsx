@@ -1091,6 +1091,33 @@ const ChatInterface: React.FC = () => {
                   </div>
                 )}
 
+                {/* Reply preview banner */}
+                {replyingTo && (
+                  <div className="max-w-4xl mx-auto mb-2 flex items-stretch gap-0 rounded-lg overflow-hidden border border-slate-800 bg-slate-950/80">
+                    <div className="w-1 bg-cyan-400" />
+                    <div className="flex-1 px-3 py-2 min-w-0">
+                      <p className="text-[11px] font-semibold text-cyan-300 flex items-center gap-1.5">
+                        <Reply className="w-3 h-3" />
+                        Respondendo a {replyingTo.fromType === 'user' ? activeChat.contactName : replyingTo.fromType === 'nina' ? sdrName : 'Você'}
+                      </p>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                        {replyingTo.type === MessageType.IMAGE ? '📷 Imagem' :
+                         replyingTo.type === MessageType.AUDIO ? '🎵 Áudio' :
+                         replyingTo.type === MessageType.DOCUMENT ? `📄 ${replyingTo.content || 'Documento'}` :
+                         replyingTo.content}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReplyingTo(null)}
+                      className="px-3 text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                      title="Cancelar resposta"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
                 <form onSubmit={handleSendMessage} className="flex items-end gap-3 max-w-4xl mx-auto">
                   <div className="flex items-center gap-1">
                     <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
