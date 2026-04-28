@@ -800,6 +800,15 @@ const ChatInterface: React.FC = () => {
                       </button>
                     )}
                     {renderStatusBadge(activeChat.status)}
+                    {isPending(activeChat) && (
+                      <span
+                        className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] rounded-md font-medium flex items-center gap-1 animate-pulse"
+                        title="Aguardando resposta"
+                      >
+                        <AlertTriangle className="w-2.5 h-2.5" />
+                        Pendente
+                      </span>
+                    )}
                     {assignedMember ? (
                       <span
                         className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-cyan-500/10 text-cyan-300 border-cyan-500/30 flex items-center gap-1"
