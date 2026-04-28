@@ -380,15 +380,35 @@ const ChatInterface: React.FC = () => {
     }
   };
 
-  const filteredConversations = conversations.filter(chat => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      chat.contactName.toLowerCase().includes(query) ||
-      chat.contactPhone.includes(query) ||
-      chat.lastMessage.toLowerCase().includes(query)
-    );
-  });
+  // A conversa está "pendente" quando a última mensagem foi enviada pelo cliente
+  // (ou seja, ainda não respondemos). Estado derivado, não persistido.
+  const isPending = (chat: UIConversation): boolean => {
+    const lastMsg = chat.messages[chat.messages.length - 1];
+    if (lastMsg) return lastMsg.fromType === 'user';
+    // Fallback quando mensagens ainda não foram carregadas
+    return chat.unreadCount > 0;
+  };
+
+  const filteredConversations = conversations
+    .filter(chat => {
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        chat.contactName.toLowerCase().includes(query) ||
+        chat.contactPhone.includes(query) ||
+        chat.lastMessage.toLowerCase().includes(query)
+      );
+    })
+    // Ordenação estável: pendentes primeiro, demais mantêm a ordem por last_message_at
+    // que já vem do hook useConversations.
+    .map((chat, index) => ({ chat, index }))
+    .sort((a, b) => {
+      const pa = isPending(a.chat) ? 1 : 0;
+      const pb = isPending(b.chat) ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return a.index - b.index;
+    })
+    .map(({ chat }) => chat);
 
   const renderStatusBadge = (status: ConversationStatus) => {
     const config = {
