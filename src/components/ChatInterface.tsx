@@ -3,7 +3,7 @@ import {
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck, 
   Smile, Play, Loader2, MessageSquare, Info, X, Mail, 
   Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon, Bell, AlertTriangle,
-  FileText, Music
+  FileText, Music, Reply, Pencil, Upload
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition } from '../types';
 import { Button } from './Button';
@@ -46,6 +46,18 @@ const ChatInterface: React.FC = () => {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
+
+  // Reply-to feature
+  const [replyingTo, setReplyingTo] = useState<UIMessage | null>(null);
+
+  // Drag-and-drop state
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  // Inline contact name editing
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   // Audio player state
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
@@ -183,9 +195,11 @@ const ChatInterface: React.FC = () => {
     if (!inputText.trim() || !activeChat) return;
 
     const content = inputText.trim();
+    const replyId = replyingTo?.id && !replyingTo.id.startsWith('temp-') ? replyingTo.id : null;
     setInputText('');
+    setReplyingTo(null);
     
-    await sendMessage(activeChat.id, content);
+    await sendMessage(activeChat.id, content, { replyToId: replyId });
   };
 
   const handleEmojiSelect = (emojiData: EmojiClickData) => {
@@ -246,14 +260,123 @@ const ChatInterface: React.FC = () => {
   const handleSendAttachment = async () => {
     if (!pendingAttachment || !activeChat || isUploading) return;
     setIsUploading(true);
+    const replyId = replyingTo?.id && !replyingTo.id.startsWith('temp-') ? replyingTo.id : null;
     try {
       await sendMediaMessage(activeChat.id, pendingAttachment.file, {
         mediaType: pendingAttachment.mediaType,
         caption: pendingAttachment.mediaType === 'image' ? attachmentCaption : undefined,
+        replyToId: replyId,
       });
+      setReplyingTo(null);
       cancelAttachment();
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  // Detect media type from File MIME
+  const detectMediaType = (file: File): 'image' | 'audio' | 'document' => {
+    if (file.type.startsWith('image/')) return 'image';
+    if (file.type.startsWith('audio/')) return 'audio';
+    return 'document';
+  };
+
+  // Accept any File and open the preview panel (used by drag/drop and paste)
+  const acceptFile = (file: File) => {
+    const mediaType = detectMediaType(file);
+    const maxSize = MAX_SIZE_BY_TYPE[mediaType];
+    if (file.size > maxSize) {
+      toast.error(`Arquivo muito grande. Máximo ${(maxSize / 1024 / 1024).toFixed(0)} MB para ${mediaType}.`);
+      return;
+    }
+    if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.previewUrl);
+    const previewUrl = URL.createObjectURL(file);
+    setPendingAttachment({ file, mediaType, previewUrl });
+    setAttachmentCaption('');
+  };
+
+  // Drag-and-drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (chatTab === 'finished' || !activeChat) return;
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    setIsDraggingFile(true);
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    if (chatTab === 'finished' || !activeChat) return;
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDraggingFile(false);
+    }
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDraggingFile(false);
+    if (chatTab === 'finished' || !activeChat) return;
+    const file = e.dataTransfer?.files?.[0];
+    if (file) acceptFile(file);
+  };
+
+  // Paste (Ctrl+V) handler — captures pasted images/files from clipboard
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (chatTab === 'finished' || !activeChat) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === 'file') {
+        const file = it.getAsFile();
+        if (file) {
+          e.preventDefault();
+          acceptFile(file);
+          return;
+        }
+      }
+    }
+  };
+
+  // Inline name editing
+  const startEditName = () => {
+    if (!activeChat) return;
+    setNameDraft(activeChat.contactName);
+    setIsEditingName(true);
+  };
+  const saveName = async () => {
+    if (!activeChat) return;
+    const newName = nameDraft.trim();
+    if (!newName || newName === activeChat.contactName) {
+      setIsEditingName(false);
+      return;
+    }
+    setSavingName(true);
+    try {
+      await api.updateContact(activeChat.contactId, { name: newName });
+      toast.success('Nome atualizado');
+      setIsEditingName(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Erro ao atualizar nome');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  // Scroll to a specific message (for reply-quote click)
+  const scrollToMessage = (messageId: string) => {
+    const el = document.querySelector(`[data-msg-id="${messageId}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-cyan-400');
+      setTimeout(() => el.classList.remove('ring-2', 'ring-cyan-400'), 1500);
     }
   };
 
@@ -594,22 +717,59 @@ const ChatInterface: React.FC = () => {
       {activeChat ? (
         <div className="flex-1 flex overflow-hidden bg-[#0B0E14]">
           {/* Main Chat Content */}
-          <div className="flex-1 flex flex-col min-w-0 relative">
+          <div
+            className="flex-1 flex flex-col min-w-0 relative"
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
+
+            {/* Drag overlay */}
+            {isDraggingFile && (
+              <div className="absolute inset-0 z-30 bg-cyan-500/10 backdrop-blur-sm border-4 border-dashed border-cyan-400/60 rounded-lg flex flex-col items-center justify-center pointer-events-none">
+                <Upload className="w-12 h-12 text-cyan-300 mb-3 animate-bounce" />
+                <p className="text-lg font-semibold text-cyan-200">Solte para enviar</p>
+                <p className="text-xs text-cyan-300/70 mt-1">Imagens, áudios ou documentos</p>
+              </div>
+            )}
 
             {/* Chat Header */}
             <div className="h-16 px-6 flex items-center justify-between bg-slate-900/80 backdrop-blur-md border-b border-slate-800 z-10 shrink-0">
               <div 
-                className="flex items-center cursor-pointer hover:bg-slate-800/50 p-1.5 -ml-1.5 rounded-lg transition-colors pr-3"
-                onClick={() => setShowProfileInfo(!showProfileInfo)}
+                className="flex items-center p-1.5 -ml-1.5 rounded-lg pr-3 group/header"
               >
-                <div className="relative">
+                <div className="relative cursor-pointer" onClick={() => setShowProfileInfo(!showProfileInfo)}>
                   <img src={activeChat.contactAvatar} alt={activeChat.contactName} className="w-9 h-9 rounded-full ring-2 ring-slate-800" />
                   <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
                 </div>
                 <div className="ml-3">
                   <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 flex-wrap">
-                    {activeChat.contactName}
+                    {isEditingName ? (
+                      <input
+                        autoFocus
+                        value={nameDraft}
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        onBlur={saveName}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); saveName(); }
+                          if (e.key === 'Escape') { setIsEditingName(false); }
+                        }}
+                        disabled={savingName}
+                        className="bg-slate-950 border border-cyan-500/50 rounded-md px-2 py-0.5 text-sm text-slate-100 outline-none focus:ring-1 focus:ring-cyan-500/50 min-w-[160px]"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={startEditName}
+                        title="Clique para editar o nome do contato"
+                        className="inline-flex items-center gap-1.5 hover:text-cyan-300 transition-colors"
+                      >
+                        {activeChat.contactName}
+                        <Pencil className="w-3 h-3 opacity-0 group-hover/header:opacity-60 transition-opacity" />
+                      </button>
+                    )}
                     {renderStatusBadge(activeChat.status)}
                     {assignedMember ? (
                       <span
@@ -742,41 +902,94 @@ const ChatInterface: React.FC = () => {
                     <span className="px-4 py-1.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-xs font-medium rounded-full shadow-sm backdrop-blur-sm">Hoje</span>
                   </div>
 
-                  {activeChat.messages.map((msg) => {
-                    const isOutgoing = msg.direction === MessageDirection.OUTGOING;
-                    return (
-                      <div key={msg.id} className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-                        <div className={`flex flex-col max-w-[75%] ${isOutgoing ? 'items-end' : 'items-start'}`}>
-                          <div 
-                            className={`px-5 py-3 rounded-2xl shadow-md relative text-sm leading-relaxed ${
-                              isOutgoing 
-                                ? msg.fromType === 'nina'
-                                  ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-tr-sm shadow-violet-900/20'
-                                  : 'bg-gradient-to-br from-cyan-600 to-teal-700 text-white rounded-tr-sm shadow-cyan-900/20'
-                                : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
-                            }`}
-                          >
-                            {renderMessageContent(msg)}
-                          </div>
-                          
-                          <div className="flex items-center mt-1.5 gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity px-1">
-                            {isOutgoing && msg.fromType === 'nina' && (
-                              <Bot className="w-3 h-3 text-violet-400" />
-                            )}
-                            {isOutgoing && msg.fromType === 'human' && (
-                              <User className="w-3 h-3 text-cyan-400" />
-                            )}
-                            <span className="text-[10px] text-slate-500 font-medium">{msg.timestamp}</span>
-                            {isOutgoing && (
-                              msg.status === 'read' ? <CheckCheck className="w-3.5 h-3.5 text-cyan-500" /> : 
-                              msg.status === 'delivered' ? <CheckCheck className="w-3.5 h-3.5 text-slate-500" /> :
-                              <Check className="w-3.5 h-3.5 text-slate-500" />
+                  {(() => {
+                    const msgsById = new Map(activeChat.messages.map(m => [m.id, m]));
+                    const previewFor = (m: UIMessage) => {
+                      if (m.type === MessageType.IMAGE) return '📷 Imagem';
+                      if (m.type === MessageType.AUDIO) return '🎵 Áudio';
+                      if (m.type === MessageType.DOCUMENT) return '📄 ' + (m.content || 'Documento');
+                      return m.content || '';
+                    };
+                    const authorFor = (m: UIMessage) => {
+                      if (m.fromType === 'user') return activeChat.contactName;
+                      if (m.fromType === 'nina') return sdrName;
+                      return 'Você';
+                    };
+                    return activeChat.messages.map((msg) => {
+                      const isOutgoing = msg.direction === MessageDirection.OUTGOING;
+                      const replied = msg.replyToId ? msgsById.get(msg.replyToId) : null;
+                      return (
+                        <div
+                          key={msg.id}
+                          data-msg-id={msg.id}
+                          className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-300 transition-all rounded-lg`}
+                        >
+                          <div className={`flex items-center gap-2 max-w-[75%] ${isOutgoing ? 'flex-row-reverse' : 'flex-row'}`}>
+                            <div className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'} flex-1 min-w-0`}>
+                              <div
+                                className={`px-5 py-3 rounded-2xl shadow-md relative text-sm leading-relaxed ${
+                                  isOutgoing
+                                    ? msg.fromType === 'nina'
+                                      ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-tr-sm shadow-violet-900/20'
+                                      : 'bg-gradient-to-br from-cyan-600 to-teal-700 text-white rounded-tr-sm shadow-cyan-900/20'
+                                    : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
+                                }`}
+                              >
+                                {replied && (
+                                  <button
+                                    type="button"
+                                    onClick={() => scrollToMessage(replied.id)}
+                                    className={`mb-2 w-full text-left px-2.5 py-1.5 rounded-md border-l-2 text-xs transition ${
+                                      isOutgoing
+                                        ? 'bg-white/10 border-white/60 hover:bg-white/15'
+                                        : 'bg-slate-900/60 border-cyan-400 hover:bg-slate-900'
+                                    }`}
+                                    title="Ir para mensagem original"
+                                  >
+                                    <p className={`font-semibold text-[11px] mb-0.5 ${isOutgoing ? 'text-white/90' : 'text-cyan-300'}`}>
+                                      {authorFor(replied)}
+                                    </p>
+                                    <p className={`truncate ${isOutgoing ? 'text-white/80' : 'text-slate-400'}`}>
+                                      {previewFor(replied)}
+                                    </p>
+                                  </button>
+                                )}
+                                {renderMessageContent(msg)}
+                              </div>
+
+                              <div className="flex items-center mt-1.5 gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity px-1">
+                                {isOutgoing && msg.fromType === 'nina' && (
+                                  <Bot className="w-3 h-3 text-violet-400" />
+                                )}
+                                {isOutgoing && msg.fromType === 'human' && (
+                                  <User className="w-3 h-3 text-cyan-400" />
+                                )}
+                                <span className="text-[10px] text-slate-500 font-medium">{msg.timestamp}</span>
+                                {isOutgoing && (
+                                  msg.status === 'read' ? <CheckCheck className="w-3.5 h-3.5 text-cyan-500" /> :
+                                  msg.status === 'delivered' ? <CheckCheck className="w-3.5 h-3.5 text-slate-500" /> :
+                                  <Check className="w-3.5 h-3.5 text-slate-500" />
+                                )}
+                              </div>
+                            </div>
+                            {chatTab === 'active' && !msg.id.startsWith('temp-') && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReplyingTo(msg);
+                                  requestAnimationFrame(() => messageInputRef.current?.focus());
+                                }}
+                                title="Responder esta mensagem"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700"
+                              >
+                                <Reply className="w-3.5 h-3.5" />
+                              </button>
                             )}
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </>
               )}
               <div ref={messagesEndRef} />
@@ -878,6 +1091,33 @@ const ChatInterface: React.FC = () => {
                   </div>
                 )}
 
+                {/* Reply preview banner */}
+                {replyingTo && (
+                  <div className="max-w-4xl mx-auto mb-2 flex items-stretch gap-0 rounded-lg overflow-hidden border border-slate-800 bg-slate-950/80">
+                    <div className="w-1 bg-cyan-400" />
+                    <div className="flex-1 px-3 py-2 min-w-0">
+                      <p className="text-[11px] font-semibold text-cyan-300 flex items-center gap-1.5">
+                        <Reply className="w-3 h-3" />
+                        Respondendo a {replyingTo.fromType === 'user' ? activeChat.contactName : replyingTo.fromType === 'nina' ? sdrName : 'Você'}
+                      </p>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                        {replyingTo.type === MessageType.IMAGE ? '📷 Imagem' :
+                         replyingTo.type === MessageType.AUDIO ? '🎵 Áudio' :
+                         replyingTo.type === MessageType.DOCUMENT ? `📄 ${replyingTo.content || 'Documento'}` :
+                         replyingTo.content}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReplyingTo(null)}
+                      className="px-3 text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                      title="Cancelar resposta"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
                 <form onSubmit={handleSendMessage} className="flex items-end gap-3 max-w-4xl mx-auto">
                   <div className="flex items-center gap-1">
                     <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
@@ -958,13 +1198,14 @@ const ChatInterface: React.FC = () => {
                       ref={messageInputRef}
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
+                      onPaste={handlePaste}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
                           handleSendMessage();
                         }
                       }}
-                      placeholder={activeChat.status === 'nina' ? `${sdrName} está respondendo automaticamente...` : 'Digite sua mensagem...'}
+                      placeholder={activeChat.status === 'nina' ? `${sdrName} está respondendo automaticamente...` : 'Digite sua mensagem... (cole imagens com Ctrl+V ou arraste arquivos)'}
                       className="w-full bg-transparent border-none p-3.5 max-h-32 min-h-[48px] text-sm text-slate-200 focus:ring-0 resize-none outline-none placeholder:text-slate-600"
                       rows={1}
                     />

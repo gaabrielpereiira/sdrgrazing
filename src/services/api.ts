@@ -1340,7 +1340,7 @@ export const api = {
    * Send a message (insert into send_queue for human messages)
    * Returns the ID of the created message
    */
-  sendMessage: async (conversationId: string, content: string): Promise<string> => {
+  sendMessage: async (conversationId: string, content: string, opts?: { replyToId?: string | null }): Promise<string> => {
     console.log(`[API] Sending message to conversation ${conversationId}`);
 
     // Get conversation to find contact_id
@@ -1364,7 +1364,8 @@ export const api = {
         type: 'text',
         from_type: 'human',
         status: 'processing',
-        sent_at: new Date().toISOString()
+        sent_at: new Date().toISOString(),
+        reply_to_id: opts?.replyToId || null
       })
       .select('id')
       .single();
@@ -1422,7 +1423,7 @@ export const api = {
   sendMediaMessage: async (
     conversationId: string,
     file: File,
-    opts: { mediaType: 'image' | 'audio' | 'document'; caption?: string }
+    opts: { mediaType: 'image' | 'audio' | 'document'; caption?: string; replyToId?: string | null }
   ): Promise<{ id: string; mediaUrl: string }> => {
     console.log(`[API] Sending ${opts.mediaType} to conversation ${conversationId}`);
 
@@ -1469,6 +1470,7 @@ export const api = {
         media_url: publicUrl,
         media_type: file.type || null,
         sent_at: new Date().toISOString(),
+        reply_to_id: opts.replyToId || null,
       })
       .select('id')
       .single();
@@ -1671,6 +1673,30 @@ export const api = {
 
     if (error) {
       console.error('[API] Error updating contact notes:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update contact basic fields (name, email)
+   */
+  updateContact: async (
+    contactId: string,
+    fields: { name?: string | null; email?: string | null }
+  ): Promise<void> => {
+    const payload: Record<string, any> = {};
+    if (fields.name !== undefined) payload.name = fields.name?.trim() || null;
+    if (fields.email !== undefined) payload.email = fields.email?.trim() || null;
+
+    if (Object.keys(payload).length === 0) return;
+
+    const { error } = await supabase
+      .from('contacts')
+      .update(payload)
+      .eq('id', contactId);
+
+    if (error) {
+      console.error('[API] Error updating contact:', error);
       throw error;
     }
   },
