@@ -188,6 +188,20 @@ const ChatInterface: React.FC = () => {
     await sendMessage(activeChat.id, content);
   };
 
+  const handleEmojiSelect = (emojiData: EmojiClickData) => {
+    const input = messageInputRef.current;
+    const emoji = emojiData.emoji;
+    const start = input?.selectionStart ?? inputText.length;
+    const end = input?.selectionEnd ?? inputText.length;
+    const newText = inputText.slice(0, start) + emoji + inputText.slice(end);
+    setInputText(newText);
+    requestAnimationFrame(() => {
+      input?.focus();
+      const pos = start + emoji.length;
+      input?.setSelectionRange(pos, pos);
+    });
+  };
+
   const handleStatusChange = async (status: ConversationStatus) => {
     if (!activeChat) return;
     await updateStatus(activeChat.id, status);
