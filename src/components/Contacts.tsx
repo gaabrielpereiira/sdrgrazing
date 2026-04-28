@@ -13,7 +13,32 @@ const Contacts: React.FC = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', email: '' });
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
   const navigate = useNavigate();
+
+  const openEdit = (contact: Contact) => {
+    setEditingContact(contact);
+    setEditForm({ name: contact.name || '', email: contact.email || '' });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingContact) return;
+    setSavingEdit(true);
+    try {
+      await api.updateContact(editingContact.id, { name: editForm.name, email: editForm.email });
+      setContacts(prev => prev.map(c => c.id === editingContact.id ? { ...c, name: editForm.name, email: editForm.email } : c));
+      toast.success('Contato atualizado');
+      setEditingContact(null);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Erro ao atualizar contato');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
