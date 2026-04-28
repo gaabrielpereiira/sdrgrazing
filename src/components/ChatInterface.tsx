@@ -723,16 +723,38 @@ const ChatInterface: React.FC = () => {
             {/* Chat Header */}
             <div className="h-16 px-6 flex items-center justify-between bg-slate-900/80 backdrop-blur-md border-b border-slate-800 z-10 shrink-0">
               <div 
-                className="flex items-center cursor-pointer hover:bg-slate-800/50 p-1.5 -ml-1.5 rounded-lg transition-colors pr-3"
-                onClick={() => setShowProfileInfo(!showProfileInfo)}
+                className="flex items-center p-1.5 -ml-1.5 rounded-lg pr-3 group/header"
               >
-                <div className="relative">
+                <div className="relative cursor-pointer" onClick={() => setShowProfileInfo(!showProfileInfo)}>
                   <img src={activeChat.contactAvatar} alt={activeChat.contactName} className="w-9 h-9 rounded-full ring-2 ring-slate-800" />
                   <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
                 </div>
                 <div className="ml-3">
                   <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 flex-wrap">
-                    {activeChat.contactName}
+                    {isEditingName ? (
+                      <input
+                        autoFocus
+                        value={nameDraft}
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        onBlur={saveName}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); saveName(); }
+                          if (e.key === 'Escape') { setIsEditingName(false); }
+                        }}
+                        disabled={savingName}
+                        className="bg-slate-950 border border-cyan-500/50 rounded-md px-2 py-0.5 text-sm text-slate-100 outline-none focus:ring-1 focus:ring-cyan-500/50 min-w-[160px]"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={startEditName}
+                        title="Clique para editar o nome do contato"
+                        className="inline-flex items-center gap-1.5 hover:text-cyan-300 transition-colors"
+                      >
+                        {activeChat.contactName}
+                        <Pencil className="w-3 h-3 opacity-0 group-hover/header:opacity-60 transition-opacity" />
+                      </button>
+                    )}
                     {renderStatusBadge(activeChat.status)}
                     {assignedMember ? (
                       <span
