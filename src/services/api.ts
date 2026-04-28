@@ -1678,6 +1678,30 @@ export const api = {
   },
 
   /**
+   * Update contact basic fields (name, email)
+   */
+  updateContact: async (
+    contactId: string,
+    fields: { name?: string | null; email?: string | null }
+  ): Promise<void> => {
+    const payload: Record<string, any> = {};
+    if (fields.name !== undefined) payload.name = fields.name?.trim() || null;
+    if (fields.email !== undefined) payload.email = fields.email?.trim() || null;
+
+    if (Object.keys(payload).length === 0) return;
+
+    const { error } = await supabase
+      .from('contacts')
+      .update(payload)
+      .eq('id', contactId);
+
+    if (error) {
+      console.error('[API] Error updating contact:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Block/unblock contact
    */
   toggleContactBlock: async (contactId: string, blocked: boolean, reason?: string): Promise<void> => {
