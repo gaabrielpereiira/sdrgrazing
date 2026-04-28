@@ -260,14 +260,123 @@ const ChatInterface: React.FC = () => {
   const handleSendAttachment = async () => {
     if (!pendingAttachment || !activeChat || isUploading) return;
     setIsUploading(true);
+    const replyId = replyingTo?.id && !replyingTo.id.startsWith('temp-') ? replyingTo.id : null;
     try {
       await sendMediaMessage(activeChat.id, pendingAttachment.file, {
         mediaType: pendingAttachment.mediaType,
         caption: pendingAttachment.mediaType === 'image' ? attachmentCaption : undefined,
+        replyToId: replyId,
       });
+      setReplyingTo(null);
       cancelAttachment();
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  // Detect media type from File MIME
+  const detectMediaType = (file: File): 'image' | 'audio' | 'document' => {
+    if (file.type.startsWith('image/')) return 'image';
+    if (file.type.startsWith('audio/')) return 'audio';
+    return 'document';
+  };
+
+  // Accept any File and open the preview panel (used by drag/drop and paste)
+  const acceptFile = (file: File) => {
+    const mediaType = detectMediaType(file);
+    const maxSize = MAX_SIZE_BY_TYPE[mediaType];
+    if (file.size > maxSize) {
+      toast.error(`Arquivo muito grande. Máximo ${(maxSize / 1024 / 1024).toFixed(0)} MB para ${mediaType}.`);
+      return;
+    }
+    if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.previewUrl);
+    const previewUrl = URL.createObjectURL(file);
+    setPendingAttachment({ file, mediaType, previewUrl });
+    setAttachmentCaption('');
+  };
+
+  // Drag-and-drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (chatTab === 'finished' || !activeChat) return;
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    setIsDraggingFile(true);
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    if (chatTab === 'finished' || !activeChat) return;
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDraggingFile(false);
+    }
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDraggingFile(false);
+    if (chatTab === 'finished' || !activeChat) return;
+    const file = e.dataTransfer?.files?.[0];
+    if (file) acceptFile(file);
+  };
+
+  // Paste (Ctrl+V) handler — captures pasted images/files from clipboard
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (chatTab === 'finished' || !activeChat) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === 'file') {
+        const file = it.getAsFile();
+        if (file) {
+          e.preventDefault();
+          acceptFile(file);
+          return;
+        }
+      }
+    }
+  };
+
+  // Inline name editing
+  const startEditName = () => {
+    if (!activeChat) return;
+    setNameDraft(activeChat.contactName);
+    setIsEditingName(true);
+  };
+  const saveName = async () => {
+    if (!activeChat) return;
+    const newName = nameDraft.trim();
+    if (!newName || newName === activeChat.contactName) {
+      setIsEditingName(false);
+      return;
+    }
+    setSavingName(true);
+    try {
+      await api.updateContact(activeChat.contactId, { name: newName });
+      toast.success('Nome atualizado');
+      setIsEditingName(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Erro ao atualizar nome');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  // Scroll to a specific message (for reply-quote click)
+  const scrollToMessage = (messageId: string) => {
+    const el = document.querySelector(`[data-msg-id="${messageId}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-cyan-400');
+      setTimeout(() => el.classList.remove('ring-2', 'ring-cyan-400'), 1500);
     }
   };
 
