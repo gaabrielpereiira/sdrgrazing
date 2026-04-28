@@ -421,7 +421,7 @@ export function useConversations(options?: { active?: boolean }) {
   const sendMediaMessage = useCallback(async (
     conversationId: string,
     file: File,
-    opts: { mediaType: 'image' | 'audio' | 'document'; caption?: string }
+    opts: { mediaType: 'image' | 'audio' | 'document'; caption?: string; replyToId?: string | null }
   ) => {
     const tempId = `temp-${Date.now()}`;
     const objectUrl = URL.createObjectURL(file);
@@ -440,6 +440,7 @@ export function useConversations(options?: { active?: boolean }) {
       fromType: 'human',
       mediaUrl: objectUrl,
       whatsappMessageId: null,
+      replyToId: opts.replyToId || null,
     };
 
     setConversations(prev => prev.map(conv => {
