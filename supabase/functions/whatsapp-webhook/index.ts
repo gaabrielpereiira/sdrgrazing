@@ -186,15 +186,36 @@ serve(async (req) => {
               .eq('id', contact.id);
           }
 
-          // 2. Get or create conversation IMMEDIATELY
+          // 2. Get most recent conversation for this contact (any status) to preserve history
           let { data: conversation } = await supabase
             .from('conversations')
             .select('*')
             .eq('contact_id', contact.id)
-            .eq('is_active', true)
+            .order('last_message_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
 
-          if (!conversation) {
+          if (conversation && !conversation.is_active) {
+            // Reopen previous conversation preserving full message history
+            const { data: reopened, error: reopenError } = await supabase
+              .from('conversations')
+              .update({
+                is_active: true,
+                status: 'nina',
+                last_message_at: new Date().toISOString(),
+              })
+              .eq('id', conversation.id)
+              .select()
+              .single();
+
+            if (reopenError) {
+              console.error('[Webhook] Error reopening conversation:', reopenError);
+              continue;
+            }
+            conversation = reopened;
+            console.log('[Webhook] Reopened conversation:', conversation.id);
+          } else if (!conversation) {
+            // First-ever conversation for this contact
             const { data: newConversation, error: convError } = await supabase
               .from('conversations')
               .insert({
