@@ -717,8 +717,23 @@ const ChatInterface: React.FC = () => {
       {activeChat ? (
         <div className="flex-1 flex overflow-hidden bg-[#0B0E14]">
           {/* Main Chat Content */}
-          <div className="flex-1 flex flex-col min-w-0 relative">
+          <div
+            className="flex-1 flex flex-col min-w-0 relative"
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
+
+            {/* Drag overlay */}
+            {isDraggingFile && (
+              <div className="absolute inset-0 z-30 bg-cyan-500/10 backdrop-blur-sm border-4 border-dashed border-cyan-400/60 rounded-lg flex flex-col items-center justify-center pointer-events-none">
+                <Upload className="w-12 h-12 text-cyan-300 mb-3 animate-bounce" />
+                <p className="text-lg font-semibold text-cyan-200">Solte para enviar</p>
+                <p className="text-xs text-cyan-300/70 mt-1">Imagens, áudios ou documentos</p>
+              </div>
+            )}
 
             {/* Chat Header */}
             <div className="h-16 px-6 flex items-center justify-between bg-slate-900/80 backdrop-blur-md border-b border-slate-800 z-10 shrink-0">
