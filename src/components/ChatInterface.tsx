@@ -1198,13 +1198,14 @@ const ChatInterface: React.FC = () => {
                       ref={messageInputRef}
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
+                      onPaste={handlePaste}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
                           handleSendMessage();
                         }
                       }}
-                      placeholder={activeChat.status === 'nina' ? `${sdrName} está respondendo automaticamente...` : 'Digite sua mensagem...'}
+                      placeholder={activeChat.status === 'nina' ? `${sdrName} está respondendo automaticamente...` : 'Digite sua mensagem... (cole imagens com Ctrl+V ou arraste arquivos)'}
                       className="w-full bg-transparent border-none p-3.5 max-h-32 min-h-[48px] text-sm text-slate-200 focus:ring-0 resize-none outline-none placeholder:text-slate-600"
                       rows={1}
                     />
