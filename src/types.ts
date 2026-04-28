@@ -304,6 +304,7 @@ export interface UIMessage {
   mediaUrl: string | null;
   whatsappMessageId: string | null;
   metadata?: Record<string, any>;
+  replyToId?: string | null;
 }
 
 // ============= Utility Functions =============
