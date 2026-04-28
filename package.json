@@ -46,6 +46,7 @@
     "cmdk": "^1.0.4",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.5.1",
+    "emoji-picker-react": "^4.19.1",
     "framer-motion": "^12.23.25",
     "input-otp": "^1.4.1",
     "lovable-tagger": "^1.1.11",

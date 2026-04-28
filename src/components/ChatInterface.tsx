@@ -20,6 +20,7 @@ import {
 } from './ui/alert-dialog';
 import { ActivitiesPanel } from './chat/ActivitiesPanel';
 import { useAllPendingActivities } from '@/hooks/useConversationActivities';
+import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picker-react';
 
 const ChatInterface: React.FC = () => {
   const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
@@ -40,6 +41,8 @@ const ChatInterface: React.FC = () => {
   const [attachmentCaption, setAttachmentCaption] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -183,6 +186,20 @@ const ChatInterface: React.FC = () => {
     setInputText('');
     
     await sendMessage(activeChat.id, content);
+  };
+
+  const handleEmojiSelect = (emojiData: EmojiClickData) => {
+    const input = messageInputRef.current;
+    const emoji = emojiData.emoji;
+    const start = input?.selectionStart ?? inputText.length;
+    const end = input?.selectionEnd ?? inputText.length;
+    const newText = inputText.slice(0, start) + emoji + inputText.slice(end);
+    setInputText(newText);
+    requestAnimationFrame(() => {
+      input?.focus();
+      const pos = start + emoji.length;
+      input?.setSelectionRange(pos, pos);
+    });
   };
 
   const handleStatusChange = async (status: ConversationStatus) => {
@@ -863,16 +880,35 @@ const ChatInterface: React.FC = () => {
 
                 <form onSubmit={handleSendMessage} className="flex items-end gap-3 max-w-4xl mx-auto">
                   <div className="flex items-center gap-1">
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="icon" 
-                      disabled
-                      title="Em breve: Emoji picker"
-                      className="text-slate-500 rounded-full cursor-not-allowed opacity-50"
-                    >
-                      <Smile className="w-5 h-5" />
-                    </Button>
+                    <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          title="Inserir emoji"
+                          className="text-slate-300 hover:text-cyan-400 rounded-full"
+                        >
+                          <Smile className="w-5 h-5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="top"
+                        align="start"
+                        className="p-0 border-slate-700 bg-transparent shadow-xl w-auto"
+                      >
+                        <EmojiPicker
+                          onEmojiClick={handleEmojiSelect}
+                          theme={Theme.DARK}
+                          emojiStyle={EmojiStyle.NATIVE}
+                          width={340}
+                          height={400}
+                          searchPlaceholder="Buscar emoji..."
+                          previewConfig={{ showPreview: false }}
+                          lazyLoadEmojis
+                        />
+                      </PopoverContent>
+                    </Popover>
                     <Popover open={attachMenuOpen} onOpenChange={setAttachMenuOpen}>
                       <PopoverTrigger asChild>
                         <Button 
@@ -919,6 +955,7 @@ const ChatInterface: React.FC = () => {
                   
                   <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500/50 transition-all shadow-inner">
                     <textarea
+                      ref={messageInputRef}
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
                       onKeyDown={(e) => {
