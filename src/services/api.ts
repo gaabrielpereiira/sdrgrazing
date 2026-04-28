@@ -1470,6 +1470,7 @@ export const api = {
         media_url: publicUrl,
         media_type: file.type || null,
         sent_at: new Date().toISOString(),
+        reply_to_id: opts.replyToId || null,
       })
       .select('id')
       .single();
