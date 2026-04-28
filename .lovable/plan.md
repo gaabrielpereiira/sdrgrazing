@@ -1,64 +1,53 @@
-# Corrigir áudios no chat
+## Problema
 
-## Causa raiz (confirmada nos logs)
+O botão de emoji (ícone de carinha sorridente) na barra de envio de mensagens do chat está **desabilitado**, com tooltip "Em breve: Emoji picker". A funcionalidade nunca foi implementada — não é uma regressão.
 
-No `whatsapp-webhook/index.ts` (linha 286), o disparo do `download-whatsapp-media` cobre apenas `image`, `video` e `document` — **`audio` está fora da lista**. Por isso, todo áudio recebido é gravado em `messages` com `media_url = NULL` e o player do chat não tem o que tocar (botão fica desabilitado).
+Localização: `src/components/ChatInterface.tsx` linhas 866-875.
 
-O `message-grouper` baixa o áudio só para fazer transcrição (Whisper), mas joga o buffer fora — não sobe no bucket nem preenche `media_url`.
+## Solução
 
-Resultado no banco:
+Adicionar um **emoji picker funcional** que insere o emoji selecionado na posição atual do cursor dentro do campo de mensagem.
 
-```
-type=audio | media_url=NULL  ← 2 áudios órfãos
-```
+### Abordagem técnica
 
-## O que vou fazer
+1. **Instalar** a biblioteca `emoji-picker-react` (leve, sem dependências pesadas, suporta busca, categorias e tema escuro — combina com o tema dark do app).
 
-### 1. Webhook: incluir `audio` (e `voice`) no download
-- Em `supabase/functions/whatsapp-webhook/index.ts`, adicionar `'audio'` à lista que dispara `download-whatsapp-media`, usando `message.audio?.id` como `media_id`.
-- A função `download-whatsapp-media` já trata `audio/ogg` corretamente (mapeia `.ogg`), então sobe no bucket público `whatsapp-media` e atualiza `messages.media_url` automaticamente. Sem mudanças nessa função.
+2. **Substituir o botão desabilitado** por um `Popover` (componente já usado no projeto, ex.: menu de anexos) contendo o `<EmojiPicker />`.
 
-### 2. Player tolerante quando `media_url` ainda não chegou
-- Em `src/components/ChatInterface.tsx`, quando `msg.type === AUDIO` e `msg.mediaUrl` for null, mostrar um indicador "Carregando áudio…" em vez de um botão desabilitado silencioso. O Realtime já atualiza a mensagem assim que o `download-whatsapp-media` preencher a URL.
+3. **Inserção inteligente**: usar `selectionStart` do `<input>` de mensagem para inserir o emoji exatamente na posição do cursor (não apenas no final), e reposicionar o cursor após o emoji inserido.
 
-### 3. Resgatar os 2 áudios já órfãos no banco (best-effort)
-- Os áudios recebidos antes desse fix têm `media_id` salvo em `messages.metadata.media_id`. O link da Meta dura ~30 dias, então provavelmente ainda dá pra baixar.
-- Adicionar um botão discreto **"Recarregar mídia"** no player de áudio quando `mediaUrl` for null e existir `metadata.media_id`. Ao clicar, chama `download-whatsapp-media` com aquele `media_id` e o `message_id`. Útil também para qualquer falha futura.
+4. **Tema**: configurar `theme="dark"` e largura/altura compatíveis com o painel do chat.
 
-### 4. Documentação
-- Atualizar `mem://features/audio-flow-complete-implementation` mencionando o download para storage no webhook (não só STT no grouper).
+5. **Acessibilidade**: manter o ícone `Smile` do lucide-react como trigger, remover `disabled`, ajustar classes (cor cyan no hover, igual ao botão de anexo).
 
-## Fora do escopo
-- **ElevenLabs (TTS):** sem fix de código possível — sua API key é Free e a Meta retornou `402 paid_plan_required`. Resolva fazendo upgrade do plano da ElevenLabs ou trocando a key. Posso melhorar a mensagem de erro do botão de teste num próximo passo se quiser.
-- **Lovable AI (créditos):** os logs também mostram `[Nina] AI response error: 402 Not enough credits` no `nina-orchestrator` e no STT do áudio (`message-grouper`). Isso significa que a Nina não responde nem transcreve até você adicionar créditos em Lovable Cloud → AI. Não é parte desse fix.
+### Arquivos afetados
 
-## Detalhes técnicos
+- `src/components/ChatInterface.tsx` — adicionar import, ref para o input de mensagem, handler `handleEmojiSelect`, substituir bloco do botão desabilitado pelo Popover com o picker.
+- `package.json` — adicionar dependência `emoji-picker-react`.
 
-**Diff conceitual no webhook** (linha ~286):
-```ts
-// antes
-if (['image', 'video', 'document'].includes(message.type)) {
-  const mediaId = message.image?.id || message.video?.id || message.document?.id;
+### Detalhes técnicos
 
-// depois
-if (['image', 'video', 'document', 'audio'].includes(message.type)) {
-  const mediaId = message.image?.id || message.video?.id 
-                || message.document?.id || message.audio?.id;
-```
-
-**Player (`ChatInterface.tsx`)** — adicionar branch para áudio sem URL:
 ```tsx
-if (!msg.mediaUrl) {
-  return (
-    <div className="flex items-center gap-2 text-xs opacity-70">
-      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-      <span>Carregando áudio…</span>
-      {msg.metadata?.media_id && (
-        <button onClick={retryDownload}>Recarregar</button>
-      )}
-    </div>
-  );
-}
+// Pseudocódigo do handler
+const inputRef = useRef<HTMLInputElement>(null);
+
+const handleEmojiSelect = (emojiData: { emoji: string }) => {
+  const input = inputRef.current;
+  const start = input?.selectionStart ?? inputText.length;
+  const end = input?.selectionEnd ?? inputText.length;
+  const newText = inputText.slice(0, start) + emojiData.emoji + inputText.slice(end);
+  setInputText(newText);
+  // reposicionar cursor após emoji
+  requestAnimationFrame(() => {
+    input?.focus();
+    input?.setSelectionRange(start + emojiData.emoji.length, start + emojiData.emoji.length);
+  });
+};
 ```
 
-Tudo isso é frontend + edição do webhook + uma migration zero. Sem nova tabela, sem nova função.
+O Popover usa `side="top"` para abrir acima do campo (igual ao menu de anexos) e `align="start"`.
+
+### Fora do escopo
+
+- Atalhos de teclado tipo `:smile:` → 😄 (pode ser uma melhoria futura).
+- Emoji picker em outros locais do app (notas, atividades).
