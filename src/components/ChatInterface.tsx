@@ -380,15 +380,35 @@ const ChatInterface: React.FC = () => {
     }
   };
 
-  const filteredConversations = conversations.filter(chat => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      chat.contactName.toLowerCase().includes(query) ||
-      chat.contactPhone.includes(query) ||
-      chat.lastMessage.toLowerCase().includes(query)
-    );
-  });
+  // A conversa está "pendente" quando a última mensagem foi enviada pelo cliente
+  // (ou seja, ainda não respondemos). Estado derivado, não persistido.
+  const isPending = (chat: UIConversation): boolean => {
+    const lastMsg = chat.messages[chat.messages.length - 1];
+    if (lastMsg) return lastMsg.fromType === 'user';
+    // Fallback quando mensagens ainda não foram carregadas
+    return chat.unreadCount > 0;
+  };
+
+  const filteredConversations = conversations
+    .filter(chat => {
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        chat.contactName.toLowerCase().includes(query) ||
+        chat.contactPhone.includes(query) ||
+        chat.lastMessage.toLowerCase().includes(query)
+      );
+    })
+    // Ordenação estável: pendentes primeiro, demais mantêm a ordem por last_message_at
+    // que já vem do hook useConversations.
+    .map((chat, index) => ({ chat, index }))
+    .sort((a, b) => {
+      const pa = isPending(a.chat) ? 1 : 0;
+      const pb = isPending(b.chat) ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return a.index - b.index;
+    })
+    .map(({ chat }) => chat);
 
   const renderStatusBadge = (status: ConversationStatus) => {
     const config = {
@@ -674,6 +694,15 @@ const ChatInterface: React.FC = () => {
                   
                   <div className="flex items-center mt-2 gap-1.5">
                     {renderStatusBadge(chat.status)}
+                    {isPending(chat) && (
+                      <span
+                        className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] rounded-md font-medium flex items-center gap-1 animate-pulse"
+                        title="Aguardando resposta"
+                      >
+                        <AlertTriangle className="w-2.5 h-2.5" />
+                        Pendente
+                      </span>
+                    )}
                     {pendingActivities[chat.id] && (
                       <span
                         className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] rounded-md font-medium flex items-center gap-1"
@@ -771,6 +800,15 @@ const ChatInterface: React.FC = () => {
                       </button>
                     )}
                     {renderStatusBadge(activeChat.status)}
+                    {isPending(activeChat) && (
+                      <span
+                        className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] rounded-md font-medium flex items-center gap-1 animate-pulse"
+                        title="Aguardando resposta"
+                      >
+                        <AlertTriangle className="w-2.5 h-2.5" />
+                        Pendente
+                      </span>
+                    )}
                     {assignedMember ? (
                       <span
                         className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-cyan-500/10 text-cyan-300 border-cyan-500/30 flex items-center gap-1"
