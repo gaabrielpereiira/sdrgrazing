@@ -195,9 +195,11 @@ const ChatInterface: React.FC = () => {
     if (!inputText.trim() || !activeChat) return;
 
     const content = inputText.trim();
+    const replyId = replyingTo?.id && !replyingTo.id.startsWith('temp-') ? replyingTo.id : null;
     setInputText('');
+    setReplyingTo(null);
     
-    await sendMessage(activeChat.id, content);
+    await sendMessage(activeChat.id, content, { replyToId: replyId });
   };
 
   const handleEmojiSelect = (emojiData: EmojiClickData) => {
