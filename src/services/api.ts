@@ -1423,7 +1423,7 @@ export const api = {
   sendMediaMessage: async (
     conversationId: string,
     file: File,
-    opts: { mediaType: 'image' | 'audio' | 'document'; caption?: string }
+    opts: { mediaType: 'image' | 'audio' | 'document'; caption?: string; replyToId?: string | null }
   ): Promise<{ id: string; mediaUrl: string }> => {
     console.log(`[API] Sending ${opts.mediaType} to conversation ${conversationId}`);
 
