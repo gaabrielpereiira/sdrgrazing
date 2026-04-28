@@ -880,16 +880,35 @@ const ChatInterface: React.FC = () => {
 
                 <form onSubmit={handleSendMessage} className="flex items-end gap-3 max-w-4xl mx-auto">
                   <div className="flex items-center gap-1">
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="icon" 
-                      disabled
-                      title="Em breve: Emoji picker"
-                      className="text-slate-500 rounded-full cursor-not-allowed opacity-50"
-                    >
-                      <Smile className="w-5 h-5" />
-                    </Button>
+                    <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          title="Inserir emoji"
+                          className="text-slate-300 hover:text-cyan-400 rounded-full"
+                        >
+                          <Smile className="w-5 h-5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="top"
+                        align="start"
+                        className="p-0 border-slate-700 bg-transparent shadow-xl w-auto"
+                      >
+                        <EmojiPicker
+                          onEmojiClick={handleEmojiSelect}
+                          theme={Theme.DARK}
+                          emojiStyle={EmojiStyle.NATIVE}
+                          width={340}
+                          height={400}
+                          searchPlaceholder="Buscar emoji..."
+                          previewConfig={{ showPreview: false }}
+                          lazyLoadEmojis
+                        />
+                      </PopoverContent>
+                    </Popover>
                     <Popover open={attachMenuOpen} onOpenChange={setAttachMenuOpen}>
                       <PopoverTrigger asChild>
                         <Button 
