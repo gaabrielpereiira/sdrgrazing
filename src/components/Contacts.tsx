@@ -310,6 +310,78 @@ const Contacts: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Edit Contact Modal */}
+      {editingContact && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => !savingEdit && setEditingContact(null)}
+        >
+          <div
+            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+              <h3 className="text-lg font-semibold text-white">Editar Contato</h3>
+              <button
+                onClick={() => !savingEdit && setEditingContact(null)}
+                className="text-slate-400 hover:text-white transition-colors"
+                aria-label="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Nome</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="Ex: João Silva"
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Telefone</label>
+                <input
+                  type="tel"
+                  value={editingContact.phone}
+                  disabled
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950/50 border border-slate-800 text-sm text-slate-500 cursor-not-allowed"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">O telefone não pode ser alterado.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Email</label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  placeholder="contato@empresa.com"
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="ghost" onClick={() => setEditingContact(null)} disabled={savingEdit}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={savingEdit}>
+                  {savingEdit ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    'Salvar'
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
