@@ -325,6 +325,14 @@ export function useConversations(options?: { active?: boolean }) {
           }
           
           setConversations(prev => {
+            const exists = prev.some(c => c.id === updated.id);
+            // Conversation matches our filter but isn't in the list yet (e.g. reactivated after being finalized).
+            // Fetch it with the full message history so the previous context shows up immediately.
+            if (!exists) {
+              console.log('[Realtime] Conversation reactivated — fetching with history:', updated.id);
+              fetchAndAddConversation(updated.id);
+              return prev;
+            }
             return prev.map(conv => {
               if (conv.id === updated.id) {
                 return {
