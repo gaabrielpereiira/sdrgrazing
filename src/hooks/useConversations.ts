@@ -363,7 +363,7 @@ export function useConversations(options?: { active?: boolean }) {
   }, [fetchConversations, fetchAndAddConversation, startPolling, stopPolling]);
 
   // Send message
-  const sendMessage = useCallback(async (conversationId: string, content: string) => {
+  const sendMessage = useCallback(async (conversationId: string, content: string, opts?: { replyToId?: string | null }) => {
     if (!content.trim()) return;
 
     // Optimistic update with temporary ID
@@ -377,7 +377,8 @@ export function useConversations(options?: { active?: boolean }) {
       status: 'sent',
       fromType: 'human',
       mediaUrl: null,
-      whatsappMessageId: null
+      whatsappMessageId: null,
+      replyToId: opts?.replyToId || null
     };
 
     setConversations(prev => {
@@ -396,7 +397,7 @@ export function useConversations(options?: { active?: boolean }) {
 
     try {
       // The realtime handler will detect and replace the temp message automatically
-      await api.sendMessage(conversationId, content);
+      await api.sendMessage(conversationId, content, { replyToId: opts?.replyToId || null });
     } catch (err) {
       console.error('[useConversations] Error sending message:', err);
       toast.error('Erro ao enviar mensagem');
