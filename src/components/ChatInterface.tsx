@@ -47,6 +47,18 @@ const ChatInterface: React.FC = () => {
   const audioInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
 
+  // Reply-to feature
+  const [replyingTo, setReplyingTo] = useState<UIMessage | null>(null);
+
+  // Drag-and-drop state
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  // Inline contact name editing
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
+
   // Audio player state
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [audioDurations, setAudioDurations] = useState<Record<string, number>>({});
