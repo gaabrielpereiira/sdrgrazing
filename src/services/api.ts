@@ -1340,7 +1340,7 @@ export const api = {
    * Send a message (insert into send_queue for human messages)
    * Returns the ID of the created message
    */
-  sendMessage: async (conversationId: string, content: string): Promise<string> => {
+  sendMessage: async (conversationId: string, content: string, opts?: { replyToId?: string | null }): Promise<string> => {
     console.log(`[API] Sending message to conversation ${conversationId}`);
 
     // Get conversation to find contact_id
