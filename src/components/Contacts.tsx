@@ -216,11 +216,11 @@ const Contacts: React.FC = () => {
                         <Button 
                           size="sm" 
                           variant="ghost" 
-                          className="h-8 w-8 p-0 rounded-lg text-slate-500 cursor-not-allowed opacity-50"
-                          disabled
-                          title="Em breve: Mais opções"
+                          className="h-8 w-8 p-0 rounded-lg text-slate-400 hover:text-cyan-400"
+                          title="Editar contato"
+                          onClick={() => openEdit(contact)}
                         >
-                          <MoreHorizontal className="w-4 h-4" />
+                          <Pencil className="w-4 h-4" />
                         </Button>
                       </div>
                     </td>
