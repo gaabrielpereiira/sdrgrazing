@@ -902,41 +902,94 @@ const ChatInterface: React.FC = () => {
                     <span className="px-4 py-1.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-xs font-medium rounded-full shadow-sm backdrop-blur-sm">Hoje</span>
                   </div>
 
-                  {activeChat.messages.map((msg) => {
-                    const isOutgoing = msg.direction === MessageDirection.OUTGOING;
-                    return (
-                      <div key={msg.id} className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-                        <div className={`flex flex-col max-w-[75%] ${isOutgoing ? 'items-end' : 'items-start'}`}>
-                          <div 
-                            className={`px-5 py-3 rounded-2xl shadow-md relative text-sm leading-relaxed ${
-                              isOutgoing 
-                                ? msg.fromType === 'nina'
-                                  ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-tr-sm shadow-violet-900/20'
-                                  : 'bg-gradient-to-br from-cyan-600 to-teal-700 text-white rounded-tr-sm shadow-cyan-900/20'
-                                : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
-                            }`}
-                          >
-                            {renderMessageContent(msg)}
-                          </div>
-                          
-                          <div className="flex items-center mt-1.5 gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity px-1">
-                            {isOutgoing && msg.fromType === 'nina' && (
-                              <Bot className="w-3 h-3 text-violet-400" />
-                            )}
-                            {isOutgoing && msg.fromType === 'human' && (
-                              <User className="w-3 h-3 text-cyan-400" />
-                            )}
-                            <span className="text-[10px] text-slate-500 font-medium">{msg.timestamp}</span>
-                            {isOutgoing && (
-                              msg.status === 'read' ? <CheckCheck className="w-3.5 h-3.5 text-cyan-500" /> : 
-                              msg.status === 'delivered' ? <CheckCheck className="w-3.5 h-3.5 text-slate-500" /> :
-                              <Check className="w-3.5 h-3.5 text-slate-500" />
+                  {(() => {
+                    const msgsById = new Map(activeChat.messages.map(m => [m.id, m]));
+                    const previewFor = (m: UIMessage) => {
+                      if (m.type === MessageType.IMAGE) return '📷 Imagem';
+                      if (m.type === MessageType.AUDIO) return '🎵 Áudio';
+                      if (m.type === MessageType.DOCUMENT) return '📄 ' + (m.content || 'Documento');
+                      return m.content || '';
+                    };
+                    const authorFor = (m: UIMessage) => {
+                      if (m.fromType === 'user') return activeChat.contactName;
+                      if (m.fromType === 'nina') return sdrName;
+                      return 'Você';
+                    };
+                    return activeChat.messages.map((msg) => {
+                      const isOutgoing = msg.direction === MessageDirection.OUTGOING;
+                      const replied = msg.replyToId ? msgsById.get(msg.replyToId) : null;
+                      return (
+                        <div
+                          key={msg.id}
+                          data-msg-id={msg.id}
+                          className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-300 transition-all rounded-lg`}
+                        >
+                          <div className={`flex items-center gap-2 max-w-[75%] ${isOutgoing ? 'flex-row-reverse' : 'flex-row'}`}>
+                            <div className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'} flex-1 min-w-0`}>
+                              <div
+                                className={`px-5 py-3 rounded-2xl shadow-md relative text-sm leading-relaxed ${
+                                  isOutgoing
+                                    ? msg.fromType === 'nina'
+                                      ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-tr-sm shadow-violet-900/20'
+                                      : 'bg-gradient-to-br from-cyan-600 to-teal-700 text-white rounded-tr-sm shadow-cyan-900/20'
+                                    : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
+                                }`}
+                              >
+                                {replied && (
+                                  <button
+                                    type="button"
+                                    onClick={() => scrollToMessage(replied.id)}
+                                    className={`mb-2 w-full text-left px-2.5 py-1.5 rounded-md border-l-2 text-xs transition ${
+                                      isOutgoing
+                                        ? 'bg-white/10 border-white/60 hover:bg-white/15'
+                                        : 'bg-slate-900/60 border-cyan-400 hover:bg-slate-900'
+                                    }`}
+                                    title="Ir para mensagem original"
+                                  >
+                                    <p className={`font-semibold text-[11px] mb-0.5 ${isOutgoing ? 'text-white/90' : 'text-cyan-300'}`}>
+                                      {authorFor(replied)}
+                                    </p>
+                                    <p className={`truncate ${isOutgoing ? 'text-white/80' : 'text-slate-400'}`}>
+                                      {previewFor(replied)}
+                                    </p>
+                                  </button>
+                                )}
+                                {renderMessageContent(msg)}
+                              </div>
+
+                              <div className="flex items-center mt-1.5 gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity px-1">
+                                {isOutgoing && msg.fromType === 'nina' && (
+                                  <Bot className="w-3 h-3 text-violet-400" />
+                                )}
+                                {isOutgoing && msg.fromType === 'human' && (
+                                  <User className="w-3 h-3 text-cyan-400" />
+                                )}
+                                <span className="text-[10px] text-slate-500 font-medium">{msg.timestamp}</span>
+                                {isOutgoing && (
+                                  msg.status === 'read' ? <CheckCheck className="w-3.5 h-3.5 text-cyan-500" /> :
+                                  msg.status === 'delivered' ? <CheckCheck className="w-3.5 h-3.5 text-slate-500" /> :
+                                  <Check className="w-3.5 h-3.5 text-slate-500" />
+                                )}
+                              </div>
+                            </div>
+                            {chatTab === 'active' && !msg.id.startsWith('temp-') && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReplyingTo(msg);
+                                  requestAnimationFrame(() => messageInputRef.current?.focus());
+                                }}
+                                title="Responder esta mensagem"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700"
+                              >
+                                <Reply className="w-3.5 h-3.5" />
+                              </button>
                             )}
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </>
               )}
               <div ref={messagesEndRef} />
