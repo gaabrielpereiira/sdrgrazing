@@ -987,7 +987,7 @@ const ChatInterface: React.FC = () => {
                                       ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-tr-sm shadow-violet-900/20'
                                       : 'bg-gradient-to-br from-cyan-600 to-teal-700 text-white rounded-tr-sm shadow-cyan-900/20'
                                     : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
-                                }`}
+                                } ${msg.status === 'failed' ? 'ring-1 ring-red-500/60' : ''}`}
                               >
                                 {replied && (
                                   <button
