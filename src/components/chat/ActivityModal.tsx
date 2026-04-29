@@ -161,6 +161,20 @@ export const ActivityModal: React.FC<Props> = ({ open, onOpenChange, conversatio
             />
           </div>
 
+          <div className="space-y-2">
+            <Label className="text-slate-300">Responsável (opcional)</Label>
+            <select
+              value={assignedTo}
+              onChange={e => setAssignedTo(e.target.value)}
+              className="w-full h-10 rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+              <option value="">— Ninguém —</option>
+              {members.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancelar
