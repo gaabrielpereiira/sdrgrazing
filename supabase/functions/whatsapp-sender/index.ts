@@ -470,3 +470,55 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
     .update({ last_message_at: new Date().toISOString() })
     .eq('id', queueItem.conversation_id);
 }
+
+function extractVarNumbers(text: string): number[] {
+  const matches = [...(text || '').matchAll(/\{\{(\d+)\}\}/g)];
+  return [...new Set(matches.map((m) => parseInt(m[1])))].sort((a, b) => a - b);
+}
+
+function buildTemplatePayload(tpl: any): any {
+  const language = tpl.language || 'pt_BR';
+  const components: any[] = [];
+  const vars: Record<string, string> = tpl.variables || {};
+
+  const headerComp = (tpl.components || []).find(
+    (c: any) => (c.type || '').toUpperCase() === 'HEADER'
+  );
+  const bodyComp = (tpl.components || []).find(
+    (c: any) => (c.type || '').toUpperCase() === 'BODY'
+  );
+
+  if (headerComp && (headerComp.format || 'TEXT').toUpperCase() === 'TEXT' && headerComp.text) {
+    const headerVars = extractVarNumbers(headerComp.text);
+    if (headerVars.length > 0) {
+      components.push({
+        type: 'header',
+        parameters: headerVars.map((n) => ({
+          type: 'text',
+          text: vars[String(n)] ?? '',
+        })),
+      });
+    }
+  }
+
+  if (bodyComp?.text) {
+    const bodyVars = extractVarNumbers(bodyComp.text);
+    if (bodyVars.length > 0) {
+      components.push({
+        type: 'body',
+        parameters: bodyVars.map((n) => ({
+          type: 'text',
+          text: vars[String(n)] ?? '',
+        })),
+      });
+    }
+  }
+
+  const payload: any = {
+    name: tpl.name,
+    language: { code: language },
+  };
+  if (components.length > 0) payload.components = components;
+  return payload;
+}
+
