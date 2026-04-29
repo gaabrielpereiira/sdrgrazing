@@ -213,7 +213,8 @@ export function useConversations(options?: { active?: boolean }) {
                     ...conv,
                     messages: updatedMessages,
                     lastMessage: newMessage.content || '',
-                    lastMessageTime: formatRelativeTime(newMessage.sent_at)
+                    lastMessageTime: formatRelativeTime(newMessage.sent_at),
+                    lastMessageAt: newMessage.sent_at
                   };
                 }
 
