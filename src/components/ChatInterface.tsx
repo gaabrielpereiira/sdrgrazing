@@ -1534,6 +1534,17 @@ const ChatInterface: React.FC = () => {
         </div>
       )}
     </div>
+
+    {activeChat && (
+      <TemplatePickerModal
+        open={templatePickerOpen}
+        onClose={() => setTemplatePickerOpen(false)}
+        onSend={async (payload) => {
+          await sendTemplateMessage(activeChat.id, payload);
+        }}
+      />
+    )}
+    </>
   );
 };
 
