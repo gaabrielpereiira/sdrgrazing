@@ -14,6 +14,8 @@ const Scheduling: React.FC = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [taskAppointments, setTaskAppointments] = useState<Appointment[]>([]);
+  const [taskMeta, setTaskMeta] = useState<Record<string, { conversation_id: string; description?: string | null; assigned_to?: string | null; assigneeName?: string | null }>>({});
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -22,6 +24,7 @@ const Scheduling: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
@@ -47,6 +50,64 @@ const Scheduling: React.FC = () => {
   });
   const [editContactId, setEditContactId] = useState<string | null>(null);
 
+  // Merge real appointments + activity-derived "tasks" so they display together
+  const mergedAppointments: Appointment[] = [...appointments, ...taskAppointments];
+
+  const loadTasks = async () => {
+    const { data, error } = await (supabase as any)
+      .from('conversation_activities')
+      .select('id, conversation_id, contact_id, title, description, scheduled_at, is_completed, assigned_to')
+      .eq('is_completed', false)
+      .order('scheduled_at', { ascending: true });
+    if (error) {
+      console.error('[Scheduling] tasks fetch error', error);
+      return;
+    }
+    // Resolve member names for assigned_to
+    const memberIds = Array.from(new Set((data || []).map((r: any) => r.assigned_to).filter(Boolean)));
+    let memberMap: Record<string, string> = {};
+    if (memberIds.length > 0) {
+      const { data: ms } = await (supabase as any)
+        .from('team_members')
+        .select('id, name')
+        .in('id', memberIds);
+      (ms || []).forEach((m: any) => { memberMap[m.id] = m.name; });
+    }
+    const { data: cs } = await (supabase as any)
+      .from('contacts')
+      .select('id, name, phone_number');
+    const contactMap: Record<string, { name: string | null; phone_number: string }> = {};
+    (cs || []).forEach((c: any) => { contactMap[c.id] = { name: c.name, phone_number: c.phone_number }; });
+
+    const meta: Record<string, any> = {};
+    const tasks: Appointment[] = (data || []).map((row: any) => {
+      const dt = new Date(row.scheduled_at);
+      const dateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      const timeStr = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+      const c = contactMap[row.contact_id];
+      const leadName = c?.name || c?.phone_number || 'Lead';
+      meta[`task-${row.id}`] = {
+        conversation_id: row.conversation_id,
+        description: row.description,
+        assigned_to: row.assigned_to,
+        assigneeName: row.assigned_to ? memberMap[row.assigned_to] : null,
+      };
+      return {
+        id: `task-${row.id}`,
+        title: `${row.title} · ${leadName}`,
+        date: dateStr,
+        time: timeStr,
+        duration: 30,
+        type: 'task' as any,
+        description: row.description || undefined,
+        contact_id: row.contact_id,
+        metadata: { source: 'manual', conversation_id: row.conversation_id } as any,
+      } as Appointment;
+    });
+    setTaskAppointments(tasks);
+    setTaskMeta(meta);
+  };
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -56,6 +117,7 @@ const Scheduling: React.FC = () => {
         ]);
         setAppointments(appointmentsData);
         setContacts(contactsData);
+        await loadTasks();
       } catch (error) {
         console.error("Erro ao carregar dados", error);
       } finally {
@@ -70,20 +132,28 @@ const Scheduling: React.FC = () => {
       .channel('appointments-changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'appointments'
-        },
+        { event: '*', schema: 'public', table: 'appointments' },
         () => {
           console.log('Appointment changed, refetching...');
           loadData();
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversation_activities' },
+        () => {
+          console.log('Activity changed, refetching tasks...');
+          loadTasks();
+        }
+      )
       .subscribe();
+
+    // Re-render every minute so overdue color flips
+    const interval = setInterval(() => loadTasks(), 60_000);
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, []);
 
