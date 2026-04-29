@@ -334,8 +334,10 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
   // For human-sent messages, resolve attendant name and prefix the outgoing
   // text/caption so the client sees who is attending — even with no assignee.
   // The DB-stored content remains untouched (no duplicate name in internal UI).
+  // Templates are NOT prefixed (Meta requires the exact approved content).
+  const isTemplate = !!queueItem.metadata?.template;
   let outgoingText: string = queueItem.content || '';
-  if (queueItem.from_type === 'human') {
+  if (queueItem.from_type === 'human' && !isTemplate) {
     const rawName = await resolveHumanSenderName(
       supabase,
       queueItem.conversation_id,
@@ -359,36 +361,42 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
     to: recipient
   };
 
-  switch (queueItem.message_type) {
-    case 'text':
-      payload.type = 'text';
-      payload.text = { body: outgoingText };
-      break;
-    
-    case 'image':
-      payload.type = 'image';
-      payload.image = { 
-        link: queueItem.media_url,
-        caption: outgoingText || undefined
-      };
-      break;
-    
-    case 'audio':
-      payload.type = 'audio';
-      payload.audio = { link: queueItem.media_url };
-      break;
-    
-    case 'document':
-      payload.type = 'document';
-      payload.document = { 
-        link: queueItem.media_url,
-        filename: queueItem.content || 'document'
-      };
-      break;
-    
-    default:
-      payload.type = 'text';
-      payload.text = { body: outgoingText };
+  if (isTemplate) {
+    const tpl = queueItem.metadata.template;
+    payload.type = 'template';
+    payload.template = buildTemplatePayload(tpl);
+  } else {
+    switch (queueItem.message_type) {
+      case 'text':
+        payload.type = 'text';
+        payload.text = { body: outgoingText };
+        break;
+
+      case 'image':
+        payload.type = 'image';
+        payload.image = {
+          link: queueItem.media_url,
+          caption: outgoingText || undefined
+        };
+        break;
+
+      case 'audio':
+        payload.type = 'audio';
+        payload.audio = { link: queueItem.media_url };
+        break;
+
+      case 'document':
+        payload.type = 'document';
+        payload.document = {
+          link: queueItem.media_url,
+          filename: queueItem.content || 'document'
+        };
+        break;
+
+      default:
+        payload.type = 'text';
+        payload.text = { body: outgoingText };
+    }
   }
 
   console.log('[Sender] WhatsApp API payload:', JSON.stringify(payload, null, 2));
