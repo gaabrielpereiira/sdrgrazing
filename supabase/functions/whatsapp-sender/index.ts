@@ -168,7 +168,7 @@ serve(async (req) => {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           console.error(`[Sender] Error sending item ${item.id}:`, error);
           
-          // Mark as failed with retry
+          // Mark queue row as failed (or pending for retry)
           const newRetryCount = (item.retry_count || 0) + 1;
           const shouldRetry = newRetryCount < 3;
           
@@ -183,6 +183,50 @@ serve(async (req) => {
                 : null
             })
             .eq('id', item.id);
+
+          // After last retry, also mark the message itself as failed so the UI can alert.
+          if (!shouldRetry) {
+            try {
+              if (item.message_id) {
+                // Human message: existing record — flag failed and store the reason.
+                const { data: existing } = await supabase
+                  .from('messages')
+                  .select('metadata')
+                  .eq('id', item.message_id)
+                  .maybeSingle();
+                const mergedMeta = {
+                  ...(existing?.metadata || {}),
+                  ...(item.metadata || {}),
+                  error_message: errorMessage,
+                  failed_at: new Date().toISOString(),
+                };
+                await supabase
+                  .from('messages')
+                  .update({ status: 'failed', metadata: mergedMeta })
+                  .eq('id', item.message_id);
+              } else {
+                // Nina/system message with no record yet — create one in failed state.
+                await supabase
+                  .from('messages')
+                  .insert({
+                    conversation_id: item.conversation_id,
+                    content: item.content,
+                    type: item.message_type,
+                    from_type: item.from_type,
+                    status: 'failed',
+                    media_url: item.media_url || null,
+                    sent_at: new Date().toISOString(),
+                    metadata: {
+                      ...(item.metadata || {}),
+                      error_message: errorMessage,
+                      failed_at: new Date().toISOString(),
+                    },
+                  });
+              }
+            } catch (persistErr) {
+              console.error('[Sender] Failed to persist failed message state:', persistErr);
+            }
+          }
         }
       }
     }

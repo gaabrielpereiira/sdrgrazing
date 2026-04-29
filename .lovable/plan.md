@@ -1,46 +1,42 @@
 ## Objetivo
 
-Sempre que um atendimento for finalizado (botão "Finalizar conversa" no `ChatInterface`), enviar automaticamente uma mensagem curta de encerramento para o cliente via WhatsApp, antes de marcar a conversa como inativa.
-
-## Mensagem padrão
-
-Texto simples e sucinto, em português:
-
-> "Atendimento encerrado. Caso precise de algo, é só chamar novamente por aqui. 👋"
-
-(Será uma constante exportada para facilitar futura customização — sem criar UI nova agora.)
+Quando uma mensagem enviada falhar definitivamente (após esgotar as tentativas no `whatsapp-sender`), exibir um alerta vermelho ao lado da mensagem no chat com o motivo do erro, em vez do checkmark cinza.
 
 ## Mudanças
 
-### 1. `src/services/api.ts` — `endConversation`
+### 1. `supabase/functions/whatsapp-sender/index.ts` — propagar falha para `messages`
 
-Antes de marcar `is_active: false`, enfileirar a mensagem de encerramento:
+Hoje, quando o envio falha definitivamente (3ª tentativa), apenas `send_queue` é marcada como `failed`. A linha em `messages` continua com `status='processing'` (mensagem humana) ou nem é criada (Nina). O frontend não consegue indicar a falha.
 
-- Inserir uma row em `messages` com `from_type: 'human'`, `type: 'text'`, `content` = texto de encerramento, `status: 'sent'`, `sent_at: now()`. Isso garante que a mensagem aparece no histórico do chat (e via realtime para outros atendentes).
-- Inserir uma row em `send_queue` referenciando essa `message_id`, com `from_type: 'human'`, `message_type: 'text'`, `content` = texto, `status: 'pending'`, `metadata: { sender_user_id, closing_message: true }`. O `whatsapp-sender` já existente cuidará do envio real (e do prefixo `*Nome*:` do atendente, conforme lógica recente).
-- Disparar `trigger-whatsapp-sender` (mesmo padrão usado em `sendMessage`) para processar a fila imediatamente.
-- Só depois aplicar o `update` em `conversations` para `is_active: false, status: 'paused'`.
+No bloco `catch` do loop (linhas ~167-186), após o `update` em `send_queue`, quando `!shouldRetry`:
 
-Tratamento de erro: se a inserção da mensagem de encerramento falhar, logar o erro mas **continuar** com o fechamento da conversa (não bloquear o atendente). Usar `console.error` + um `toast.warning` opcional.
+- **Se `item.message_id` existe** (mensagem humana — registro já criado pelo `sendMessage` da API): fazer `UPDATE messages SET status='failed', metadata = metadata || { error_message, failed_at }` para esse ID.
+- **Se `item.message_id` é null** (mensagem Nina — registro só seria criado em caso de sucesso): fazer `INSERT` com `status='failed'`, mesmo `content`/`type`/`from_type`/`media_url` do item da fila e `metadata.error_message` + `metadata.failed_at`. Isso garante que a mensagem aparece no histórico marcada como não entregue.
 
-### 2. Sem alterações de UI necessárias
+O `errorMessage` já é capturado no catch — vamos persistir a string crua (vinda do `responseData.error?.message` do WhatsApp) em `metadata.error_message`.
 
-- O `ChatInterface` já chama `endConversation(activeChat.id)` no botão de finalizar — nada muda lá.
-- A mensagem aparecerá automaticamente no histórico via o INSERT em `messages` (realtime já cobre isso).
-- O cliente recebe via WhatsApp através do pipeline existente `send_queue` → `whatsapp-sender`.
+### 2. `src/types.ts` — refletir status `failed` no UI
 
-### 3. Constante de texto
+- Estender `UIMessage.status` de `'sent' | 'delivered' | 'read'` para incluir `'failed'`.
+- Adicionar campo opcional `errorMessage?: string | null` em `UIMessage`.
+- Em `transformDBToUIMessage`: quando `msg.status === 'failed'`, retornar `status: 'failed'` e popular `errorMessage` a partir de `msg.metadata?.error_message`.
+- Atualizar `mapDBMessageStatus` para preservar `'failed'`.
 
-Criar/usar uma constante em `src/constants.ts`:
+### 3. `src/components/ChatInterface.tsx` — indicador visual
 
-```ts
-export const CLOSING_MESSAGE_TEXT =
-  'Atendimento encerrado. Caso precise de algo, é só chamar novamente por aqui. 👋';
-```
+No bloco que renderiza os ícones de status (linhas ~1014-1027), adicionar uma ramificação para `msg.status === 'failed'`:
+
+- Substituir o `Check`/`CheckCheck` por um `AlertCircle` vermelho (`text-red-500`) com `Tooltip` (já há `tooltip` no projeto) ou simples `title=` mostrando "Não entregue" + o `msg.errorMessage` quando disponível.
+- Acrescentar um pequeno texto inline abaixo do timestamp: `"Não entregue"` em vermelho-claro (`text-red-400 text-[10px]`) seguido do motivo entre parênteses se `errorMessage` existir e for curto (limitar a ~80 chars com truncate via `title`).
+- Adicionar `AlertCircle` à lista de imports do `lucide-react` no topo do arquivo.
+
+### 4. Bolha da mensagem (toque visual)
+
+Na `div` da bolha (área `isOutgoing` que já tem classes condicionais por `fromType`), adicionar uma borda vermelha sutil quando `msg.status === 'failed'`: `ring-1 ring-red-500/40`. Mantém o estilo consistente com o tema escuro existente (sem cores hardcoded fora dos tokens — usaremos as classes `red-500/red-400` que já são usadas em outros lugares como `LostReasonModal`).
 
 ## Observações técnicas
 
-- Não é necessária migration — usa tabelas existentes (`messages`, `send_queue`).
-- Não mexer em `whatsapp-sender`: ele já lida com `from_type='human'` e prefixo de nome do atendente.
-- Não mexer em `reopenConversation` (não envia nada ao reabrir).
-- A mensagem fica visível no chat finalizado (aba "Finalizadas") como última mensagem do histórico.
+- Não exige migration: o enum `message_status` já inclui `'failed'`, e `metadata` já é `jsonb` em `messages`.
+- Realtime: o `UPDATE` em `messages` já é coberto pelo handler `UPDATE` em `useConversations.ts`, então a UI atualiza sozinha quando a falha for registrada.
+- Não mexer em retries em si — apenas refletir o estado final.
+- Mensagens temporárias (`temp-*`) seguem mostrando o check normal; só quando o backend marca `failed` é que o alerta aparece.
