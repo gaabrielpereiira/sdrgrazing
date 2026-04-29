@@ -418,6 +418,7 @@ export const api = {
       team_id: m.team_id,
       function_id: m.function_id,
       weight: m.weight ?? undefined,
+      user_id: (m as any).user_id ?? null,
       team: m.team as any,
       function: m.function as any
     }));
