@@ -361,7 +361,7 @@ const Scheduling: React.FC = () => {
             {Array.from({ length: days }).map((_, index) => {
                 const day = index + 1;
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const dayAppointments = appointments.filter(a => a.date === dateStr);
+                const dayAppointments = mergedAppointments.filter(a => a.date === dateStr);
                 const isToday = formatDateStr(new Date()) === dateStr;
 
                 return (
@@ -377,7 +377,7 @@ const Scheduling: React.FC = () => {
                             {dayAppointments.map(app => (
                                 <div 
                                     key={app.id} 
-                                    className={`text-[10px] px-2 py-1 rounded border truncate font-medium cursor-pointer relative ${getEventTypeColor(app.type)}`}
+                                    className={`text-[10px] px-2 py-1 rounded border truncate font-medium cursor-pointer relative ${getEventTypeColor(app.type, app)}`}
                                     onClick={(e) => handleAppointmentClick(app, e)}
                                 >
                                     {app.metadata?.source === 'nina_ai' && (
@@ -441,7 +441,7 @@ const Scheduling: React.FC = () => {
                             {weekDays.map((day, i) => {
                                 const dateStr = formatDateStr(day);
                                 const isToday = formatDateStr(new Date()) === dateStr;
-                                const apps = appointments.filter(a => {
+                                const apps = mergedAppointments.filter(a => {
                                     const appHour = parseInt(a.time.split(':')[0]);
                                     return a.date === dateStr && appHour === hour;
                                 });
@@ -460,7 +460,7 @@ const Scheduling: React.FC = () => {
                                         {apps.map(app => (
                                             <div 
                                                 key={app.id} 
-                                                className={`mb-1 p-2 rounded text-xs border cursor-pointer hover:brightness-110 relative z-10 shadow-sm ${getEventTypeColor(app.type)}`}
+                                                className={`mb-1 p-2 rounded text-xs border cursor-pointer hover:brightness-110 relative z-10 shadow-sm ${getEventTypeColor(app.type, app)}`}
                                                 onClick={(e) => handleAppointmentClick(app, e)} 
                                                 style={{ minHeight: `${Math.max(40, (app.duration / 60) * 80)}px` }}
                                             >
@@ -497,7 +497,7 @@ const Scheduling: React.FC = () => {
              <div className="flex-1 p-4">
                  {hours.map(hour => {
                     const timeStr = `${String(hour).padStart(2, '0')}:00`;
-                    const apps = appointments.filter(a => {
+                    const apps = mergedAppointments.filter(a => {
                         const appHour = parseInt(a.time.split(':')[0]);
                         return a.date === dateStr && appHour === hour;
                     });
@@ -517,7 +517,7 @@ const Scheduling: React.FC = () => {
                                 {apps.map(app => (
                                     <div 
                                         key={app.id} 
-                                        className={`mb-2 p-3 rounded-lg border flex justify-between items-center shadow-md relative z-10 cursor-pointer hover:brightness-110 ${getEventTypeColor(app.type)}`}
+                                        className={`mb-2 p-3 rounded-lg border flex justify-between items-center shadow-md relative z-10 cursor-pointer hover:brightness-110 ${getEventTypeColor(app.type, app)}`}
                                         onClick={(e) => handleAppointmentClick(app, e)}
                                         style={{ minHeight: `${Math.max(60, (app.duration / 60) * 100)}px` }}
                                     >
