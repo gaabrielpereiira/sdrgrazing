@@ -380,13 +380,16 @@ const ChatInterface: React.FC = () => {
     }
   };
 
-  // A conversa está "pendente" quando a última mensagem foi enviada pelo cliente
-  // (ou seja, ainda não respondemos). Estado derivado, não persistido.
+  // A conversa está "pendente" quando:
+  //  - a última mensagem foi enviada pelo cliente (ainda não respondemos), OU
+  //  - a IA encaminhou para humano (status = 'human') e nenhum humano respondeu ainda.
+  // A tag desaparece automaticamente quando um humano envia mensagem (fromType === 'human').
   const isPending = (chat: UIConversation): boolean => {
     const lastMsg = chat.messages[chat.messages.length - 1];
-    if (lastMsg) return lastMsg.fromType === 'user';
-    // Fallback quando mensagens ainda não foram carregadas
-    return chat.unreadCount > 0;
+    if (lastMsg?.fromType === 'user') return true;
+    if (chat.status === 'human' && lastMsg?.fromType !== 'human') return true;
+    if (!lastMsg && chat.unreadCount > 0) return true;
+    return false;
   };
 
   const filteredConversations = conversations
