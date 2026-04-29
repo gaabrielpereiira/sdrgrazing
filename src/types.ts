@@ -286,6 +286,7 @@ export interface UIConversation {
   assignedUserName: string | null;
   lastMessage: string;
   lastMessageTime: string;
+  lastMessageAt: string;
   unreadCount: number;
   tags: string[];
   messages: UIMessage[];
