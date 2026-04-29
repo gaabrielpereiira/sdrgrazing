@@ -228,3 +228,7 @@ export const MOCK_DEALS: Deal[] = [
     priority: 'high'
   }
 ];
+
+// Mensagem enviada automaticamente ao cliente quando o atendimento é finalizado
+export const CLOSING_MESSAGE_TEXT =
+  "Atendimento encerrado. Caso precise de algo, é só chamar novamente por aqui. 👋";
