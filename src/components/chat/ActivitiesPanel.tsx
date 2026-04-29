@@ -37,7 +37,9 @@ const ActivityItem: React.FC<{
   activity: ConversationActivity;
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
-}> = ({ activity, onComplete, onDelete }) => {
+  assigneeName?: string | null;
+  assigneeAvatar?: string | null;
+}> = ({ activity, onComplete, onDelete, assigneeName, assigneeAvatar }) => {
   const Icon = TYPE_ICON[activity.activity_type] || Sparkles;
   const { rel, fmt, overdue } = formatWhen(activity.scheduled_at);
   const isDone = activity.is_completed;
