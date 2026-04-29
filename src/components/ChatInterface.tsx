@@ -3,7 +3,7 @@ import {
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck, 
   Smile, Play, Loader2, MessageSquare, Info, X, Mail, 
   Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon, Bell, AlertTriangle,
-  FileText, Music, Reply, Pencil, Upload, AlertCircle
+  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition, formatRelativeTime } from '../types';
 import { Button } from './Button';
@@ -20,11 +20,12 @@ import {
 } from './ui/alert-dialog';
 import { ActivitiesPanel } from './chat/ActivitiesPanel';
 import { useAllPendingActivities } from '@/hooks/useConversationActivities';
+import { TemplatePickerModal } from './chat/TemplatePickerModal';
 import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picker-react';
 
 const ChatInterface: React.FC = () => {
   const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
-  const { conversations, loading, sendMessage, sendMediaMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation } = useConversations({ active: chatTab === 'active' });
+  const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation } = useConversations({ active: chatTab === 'active' });
   const { sdrName, companyName } = useCompanySettings();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
@@ -48,6 +49,7 @@ const ChatInterface: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -628,6 +630,7 @@ const ChatInterface: React.FC = () => {
   }
 
   return (
+    <>
     <div className="flex h-full bg-slate-950 rounded-tl-2xl overflow-hidden border-t border-l border-slate-800/50 shadow-2xl">
       
       {/* Left Sidebar: Chat List */}
@@ -989,6 +992,14 @@ const ChatInterface: React.FC = () => {
                                     : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
                                 } ${msg.status === 'failed' ? 'ring-1 ring-red-500/60' : ''}`}
                               >
+                                {msg.metadata?.template?.name && (
+                                  <div className={`mb-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide ${
+                                    isOutgoing ? 'bg-white/15 text-white/90' : 'bg-slate-900/60 text-cyan-300'
+                                  }`}>
+                                    <LayoutTemplate className="w-3 h-3" />
+                                    Template · {msg.metadata.template.name}
+                                  </div>
+                                )}
                                 {replied && (
                                   <button
                                     type="button"
@@ -1254,6 +1265,17 @@ const ChatInterface: React.FC = () => {
                         </button>
                       </PopoverContent>
                     </Popover>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      title={activeChat.status === 'nina' ? 'Assuma o atendimento para enviar templates' : 'Enviar template do WhatsApp'}
+                      disabled={activeChat.status === 'nina'}
+                      onClick={() => setTemplatePickerOpen(true)}
+                      className="text-slate-300 hover:text-cyan-400 rounded-full disabled:opacity-40"
+                    >
+                      <LayoutTemplate className="w-5 h-5" />
+                    </Button>
                   </div>
                   
                   <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500/50 transition-all shadow-inner">
@@ -1521,6 +1543,17 @@ const ChatInterface: React.FC = () => {
         </div>
       )}
     </div>
+
+    {activeChat && (
+      <TemplatePickerModal
+        open={templatePickerOpen}
+        onClose={() => setTemplatePickerOpen(false)}
+        onSend={async (payload) => {
+          await sendTemplateMessage(activeChat.id, payload);
+        }}
+      />
+    )}
+    </>
   );
 };
 

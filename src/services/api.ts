@@ -1447,6 +1447,93 @@ export const api = {
   },
 
   /**
+   * Send an approved WhatsApp template (works inside or outside the 24h window).
+   */
+  sendTemplateMessage: async (
+    conversationId: string,
+    payload: {
+      template: { id: string; name: string; language: string; category: string; components: any[] };
+      variables: Record<string, string>;
+      interpolatedBody: string;
+    }
+  ): Promise<string> => {
+    console.log(`[API] Sending template "${payload.template.name}" to conversation ${conversationId}`);
+
+    let senderUserId: string | null = null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      senderUserId = user?.id ?? null;
+    } catch {
+      senderUserId = null;
+    }
+
+    const { data: conversation, error: convError } = await supabase
+      .from('conversations')
+      .select('contact_id')
+      .eq('id', conversationId)
+      .single();
+
+    if (convError || !conversation) {
+      throw new Error('Conversation not found');
+    }
+
+    const templateMeta = {
+      name: payload.template.name,
+      language: payload.template.language,
+      category: payload.template.category,
+      components: payload.template.components,
+      variables: payload.variables,
+    };
+
+    const { data: msgData, error: msgError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        content: payload.interpolatedBody,
+        type: 'text',
+        from_type: 'human',
+        status: 'processing',
+        sent_at: new Date().toISOString(),
+        metadata: {
+          ...(senderUserId ? { sender_user_id: senderUserId } : {}),
+          template: templateMeta,
+        },
+      })
+      .select('id')
+      .single();
+
+    if (msgError || !msgData) {
+      throw new Error('Failed to create template message record');
+    }
+
+    const { error: sendError } = await supabase
+      .from('send_queue')
+      .insert({
+        conversation_id: conversationId,
+        contact_id: conversation.contact_id,
+        content: payload.interpolatedBody,
+        from_type: 'human',
+        message_type: 'text',
+        priority: 2,
+        message_id: msgData.id,
+        metadata: {
+          ...(senderUserId ? { sender_user_id: senderUserId } : {}),
+          template: templateMeta,
+        },
+      });
+
+    if (sendError) throw sendError;
+
+    try {
+      await supabase.functions.invoke('whatsapp-sender');
+    } catch (err) {
+      console.error('[API] Failed to trigger whatsapp-sender for template:', err);
+    }
+
+    return msgData.id;
+  },
+
+  /**
    * Send a media message (image, audio, document).
    * Uploads the file to whatsapp-media bucket and queues for sending.
    */

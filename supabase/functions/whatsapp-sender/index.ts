@@ -334,8 +334,10 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
   // For human-sent messages, resolve attendant name and prefix the outgoing
   // text/caption so the client sees who is attending — even with no assignee.
   // The DB-stored content remains untouched (no duplicate name in internal UI).
+  // Templates are NOT prefixed (Meta requires the exact approved content).
+  const isTemplate = !!queueItem.metadata?.template;
   let outgoingText: string = queueItem.content || '';
-  if (queueItem.from_type === 'human') {
+  if (queueItem.from_type === 'human' && !isTemplate) {
     const rawName = await resolveHumanSenderName(
       supabase,
       queueItem.conversation_id,
@@ -359,36 +361,42 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
     to: recipient
   };
 
-  switch (queueItem.message_type) {
-    case 'text':
-      payload.type = 'text';
-      payload.text = { body: outgoingText };
-      break;
-    
-    case 'image':
-      payload.type = 'image';
-      payload.image = { 
-        link: queueItem.media_url,
-        caption: outgoingText || undefined
-      };
-      break;
-    
-    case 'audio':
-      payload.type = 'audio';
-      payload.audio = { link: queueItem.media_url };
-      break;
-    
-    case 'document':
-      payload.type = 'document';
-      payload.document = { 
-        link: queueItem.media_url,
-        filename: queueItem.content || 'document'
-      };
-      break;
-    
-    default:
-      payload.type = 'text';
-      payload.text = { body: outgoingText };
+  if (isTemplate) {
+    const tpl = queueItem.metadata.template;
+    payload.type = 'template';
+    payload.template = buildTemplatePayload(tpl);
+  } else {
+    switch (queueItem.message_type) {
+      case 'text':
+        payload.type = 'text';
+        payload.text = { body: outgoingText };
+        break;
+
+      case 'image':
+        payload.type = 'image';
+        payload.image = {
+          link: queueItem.media_url,
+          caption: outgoingText || undefined
+        };
+        break;
+
+      case 'audio':
+        payload.type = 'audio';
+        payload.audio = { link: queueItem.media_url };
+        break;
+
+      case 'document':
+        payload.type = 'document';
+        payload.document = {
+          link: queueItem.media_url,
+          filename: queueItem.content || 'document'
+        };
+        break;
+
+      default:
+        payload.type = 'text';
+        payload.text = { body: outgoingText };
+    }
   }
 
   console.log('[Sender] WhatsApp API payload:', JSON.stringify(payload, null, 2));
@@ -462,3 +470,55 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
     .update({ last_message_at: new Date().toISOString() })
     .eq('id', queueItem.conversation_id);
 }
+
+function extractVarNumbers(text: string): number[] {
+  const matches = [...(text || '').matchAll(/\{\{(\d+)\}\}/g)];
+  return [...new Set(matches.map((m) => parseInt(m[1])))].sort((a, b) => a - b);
+}
+
+function buildTemplatePayload(tpl: any): any {
+  const language = tpl.language || 'pt_BR';
+  const components: any[] = [];
+  const vars: Record<string, string> = tpl.variables || {};
+
+  const headerComp = (tpl.components || []).find(
+    (c: any) => (c.type || '').toUpperCase() === 'HEADER'
+  );
+  const bodyComp = (tpl.components || []).find(
+    (c: any) => (c.type || '').toUpperCase() === 'BODY'
+  );
+
+  if (headerComp && (headerComp.format || 'TEXT').toUpperCase() === 'TEXT' && headerComp.text) {
+    const headerVars = extractVarNumbers(headerComp.text);
+    if (headerVars.length > 0) {
+      components.push({
+        type: 'header',
+        parameters: headerVars.map((n) => ({
+          type: 'text',
+          text: vars[String(n)] ?? '',
+        })),
+      });
+    }
+  }
+
+  if (bodyComp?.text) {
+    const bodyVars = extractVarNumbers(bodyComp.text);
+    if (bodyVars.length > 0) {
+      components.push({
+        type: 'body',
+        parameters: bodyVars.map((n) => ({
+          type: 'text',
+          text: vars[String(n)] ?? '',
+        })),
+      });
+    }
+  }
+
+  const payload: any = {
+    name: tpl.name,
+    language: { code: language },
+  };
+  if (components.length > 0) payload.components = components;
+  return payload;
+}
+

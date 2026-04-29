@@ -593,6 +593,58 @@ export function useConversations(options?: { active?: boolean }) {
     }
   }, [fetchConversations]);
 
+  // Send a WhatsApp template message
+  const sendTemplateMessage = useCallback(async (
+    conversationId: string,
+    payload: {
+      template: { id: string; name: string; language: string; category: string; components: any[] };
+      variables: Record<string, string>;
+      interpolatedBody: string;
+    }
+  ) => {
+    const tempId = `temp-${Date.now()}`;
+    const tempMessage: UIMessage = {
+      id: tempId,
+      content: payload.interpolatedBody,
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      direction: MessageDirection.OUTGOING,
+      type: MessageType.TEXT,
+      status: 'sent',
+      fromType: 'human',
+      mediaUrl: null,
+      whatsappMessageId: null,
+      replyToId: null,
+    };
+
+    setConversations(prev => prev.map(conv => {
+      if (conv.id === conversationId) {
+        return {
+          ...conv,
+          messages: [...conv.messages, tempMessage],
+          lastMessage: payload.interpolatedBody,
+          lastMessageTime: formatRelativeTime(new Date().toISOString()),
+          lastMessageAt: new Date().toISOString(),
+        };
+      }
+      return conv;
+    }));
+
+    try {
+      await api.sendTemplateMessage(conversationId, payload);
+      toast.success('Template enviado');
+    } catch (err: any) {
+      console.error('[useConversations] Error sending template:', err);
+      toast.error(err?.message || 'Erro ao enviar template');
+      setConversations(prev => prev.map(conv => {
+        if (conv.id === conversationId) {
+          return { ...conv, messages: conv.messages.filter(m => m.id !== tempId) };
+        }
+        return conv;
+      }));
+      throw err;
+    }
+  }, []);
+
   return {
     conversations,
     loading,
@@ -600,6 +652,7 @@ export function useConversations(options?: { active?: boolean }) {
     realtimeConnected,
     sendMessage,
     sendMediaMessage,
+    sendTemplateMessage,
     updateStatus,
     markAsRead,
     assignConversation,
