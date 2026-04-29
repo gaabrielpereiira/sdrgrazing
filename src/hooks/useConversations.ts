@@ -397,7 +397,7 @@ export function useConversations(options?: { active?: boolean }) {
             ...conv,
             messages: [...conv.messages, tempMessage],
             lastMessage: content,
-            lastMessageTime: 'Agora'
+            lastMessageTime: formatRelativeTime(new Date().toISOString())
           };
         }
         return conv;
