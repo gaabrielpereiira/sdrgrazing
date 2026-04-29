@@ -213,6 +213,10 @@ const Scheduling: React.FC = () => {
 
   const handleAppointmentClick = (app: Appointment, e: React.MouseEvent) => {
       e.stopPropagation();
+      if (app.id.startsWith('task-')) {
+        setSelectedTaskId(app.id);
+        return;
+      }
       setSelectedAppointment(app);
   };
 
