@@ -630,6 +630,7 @@ const ChatInterface: React.FC = () => {
   }
 
   return (
+    <>
     <div className="flex h-full bg-slate-950 rounded-tl-2xl overflow-hidden border-t border-l border-slate-800/50 shadow-2xl">
       
       {/* Left Sidebar: Chat List */}
