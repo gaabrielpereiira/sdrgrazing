@@ -1,104 +1,93 @@
 ## Objetivo
 
-1. Marcar a conversa como **Pendente** sempre que a IA acionar atendimento humano (`status = 'human'`) e ainda não houver resposta humana — não apenas quando a última mensagem for do cliente.
-2. Corrigir datas incorretas no rótulo de tempo da lista de conversas (ex.: conversa de 2 dias atrás aparecendo como "hoje" / "Xh").
+Quando um humano (atendente) envia uma mensagem pelo chat, o cliente deve **ver o nome de quem está atendendo** no início da mensagem do WhatsApp, mesmo quando a conversa não tem responsável atribuído (`assigned_user_id = null`).
+
+Exemplo do que o cliente vai receber no WhatsApp:
+
+```
+*João* :
+Oi Maria! Tudo bem?
+```
+
+Na UI interna do chat continua aparecendo só o conteúdo (sem o prefixo duplicado).
 
 ---
 
-## 1. Pendente quando IA chamar humano
+## Como vai funcionar
 
-**Arquivo:** `src/components/ChatInterface.tsx` (função `isPending`, linha ~385)
+### Resolução do nome do atendente (ordem de prioridade)
 
-Hoje a regra é: pendente se a última mensagem for do cliente (`fromType === 'user'`).
+Para cada mensagem `from_type = 'human'` enviada:
 
-Nova regra (OR):
-- Última mensagem é do cliente, **OU**
-- `chat.status === 'human'` e nenhuma mensagem posterior à transferência veio de um humano (`fromType === 'human'`).
+1. **Responsável da conversa** — se `conversations.assigned_user_id` está setado, buscar `team_members.name` (preferindo `team_members.user_id = assigned_user_id`, com fallback por `email` do auth user).
+2. **Usuário logado que clicou em enviar** — se passo 1 falhar, usar o nome do usuário autenticado: `profiles.full_name` pelo `auth.uid()` atual.
+3. **Fallback genérico** — se nada disso existir (auth desativado, sem profile), usar o `sdr_name` configurado em `nina_settings` (já é o "nome da casa" exibido para o cliente).
+4. Se nem `sdr_name` existir, não prefixa nada (comportamento atual).
 
-Implementação simples e robusta: pendente se a última mensagem **não for de um humano** quando o status for `human`. Ou seja:
+Assim o requisito é atendido: **sempre tem um nome**, e prioriza o atendente real quando dá pra identificar.
+
+### Onde o prefixo é aplicado
+
+Apenas no envio para o WhatsApp (`supabase/functions/whatsapp-sender/index.ts`), no momento de montar o `payload.text.body` para mensagens com `from_type = 'human'`. Formato:
+
+```
+*<Nome>*:
+<conteúdo original>
+```
+
+A linha em branco entre nome e conteúdo melhora legibilidade no WhatsApp.
+
+### O que NÃO muda
+
+- A coluna `messages.content` continua sendo salva **sem o prefixo** (UI interna do chat continua limpa, sem nome duplicado em cima da própria mensagem do atendente).
+- Mensagens da Nina (`from_type = 'nina'`) **não** recebem prefixo — a Nina já se apresenta pelo prompt.
+- Mídia com `caption` (imagem/vídeo) também recebe o prefixo no caption quando enviada por humano.
+- Áudio e documento sem texto: não há onde colocar o nome (WhatsApp não permite caption em áudio puro), então enviamos como antes.
+
+---
+
+## Detalhes técnicos
+
+### 1. `supabase/functions/whatsapp-sender/index.ts`
+
+No worker que processa o `send_queue`:
+
+- Após `claim_send_queue_batch`, para cada item com `from_type = 'human'`:
+  - Buscar `conversations.assigned_user_id` do item.
+  - Resolver nome do atendente nessa ordem:
+    1. `team_members` filtrando por `user_id = assigned_user_id` → `name`.
+    2. `profiles` por `user_id = assigned_user_id` → `full_name`.
+    3. Se a fila tiver `metadata.sender_user_id` (setado no `api.sendMessage`), repetir os passos 1–2 com esse id.
+    4. `nina_settings.sdr_name` (cache da settings já feito antes do loop).
+  - Sanitizar (truncar nome a ~40 chars, remover `\n`).
+  - Construir `prefixedContent = \`*${name}*:\n${queueItem.content}\`` quando há nome.
+  - Usar `prefixedContent` em `payload.text.body` (type=text) e em `caption` (type=image/video). Para `document`, manter `filename` original e prefixar somente o `caption` se aplicável.
+- **Não** atualizar o `messages.content` com o prefixo — só o payload enviado ao WhatsApp.
+
+### 2. `src/services/api.ts` — `sendMessage` e `sendMediaMessage`
+
+Para garantir que o passo 3 da resolução funcione mesmo sem `assigned_user_id`:
+
+- Pegar `auth.user.id` (se houver) e enviar no `metadata` da fila:
 
 ```ts
-const isPending = (chat) => {
-  const last = chat.messages[chat.messages.length - 1];
-  // Cliente mandou e não respondemos
-  if (last?.fromType === 'user') return true;
-  // IA pediu atendimento humano e ainda ninguém respondeu como humano
-  if (chat.status === 'human' && last?.fromType !== 'human') return true;
-  // Fallback sem mensagens carregadas
-  if (!last && chat.unreadCount > 0) return true;
-  return false;
-};
+.from('send_queue').insert({
+  ...,
+  metadata: { sender_user_id: currentUserId ?? null }
+})
 ```
 
-A tag "Pendente" some automaticamente assim que um humano enviar uma mensagem (a última mensagem passa a ser `fromType === 'human'`). Toda a lógica de ordenação (pendentes no topo) e de exibição da badge "Pendente" no card e no header já depende dessa função, então funciona sem outras mudanças.
+E também no `messages.metadata` (`sender_user_id`) para auditoria futura. Tolerar usuário ausente (auth desativado).
+
+### 3. Sem migração de banco
+
+Todos os campos necessários já existem (`send_queue.metadata`, `messages.metadata`, `team_members.user_id`, `profiles.full_name`, `nina_settings.sdr_name`).
 
 ---
 
-## 2. Correção do sistema de datas
+## Arquivos alterados
 
-**Arquivo:** `src/types.ts` — função `formatRelativeTime` (linha ~379) e refresh.
+- `supabase/functions/whatsapp-sender/index.ts` — resolver nome do atendente e prefixar `body`/`caption` em mensagens humanas.
+- `src/services/api.ts` — incluir `sender_user_id` no metadata de `send_queue` e `messages` ao enviar (`sendMessage` e `sendMediaMessage`).
 
-### Bug atual
-```
-if (diffHours < 24) return `${diffHours}h`;
-if (diffDays === 1) return 'Ontem';
-```
-- Usa `Math.floor(diffMs/3600000)`, então uma mensagem de **anteontem 23h** vista hoje às 10h dá `diffHours = 35`, `diffDays = 1` → mostra **"Ontem"** (errado, é anteontem).
-- Pior: mensagem de **ontem 22h** vista hoje às 09h dá `diffHours = 11` → mostra **"11h"**, escondendo que mudou de dia.
-- Além disso, `lastMessageTime` é setado como string `"Agora"` no realtime e nunca recalculado — conversas antigas continuam aparecendo como "Agora" / "5min" mesmo dias depois, até o próximo `fetchConversations`.
-
-### Correção da função
-Comparar **dias de calendário**, não janela de 24h:
-
-```ts
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-
-  const startOfDay = (d: Date) =>
-    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const dayDiff = Math.round(
-    (startOfDay(now) - startOfDay(date)) / 86400000
-  );
-
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-
-  if (dayDiff === 0) {
-    if (diffMins < 1) return 'Agora';
-    if (diffMins < 60) return `${diffMins}min`;
-    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  }
-  if (dayDiff === 1) return 'Ontem';
-  if (dayDiff < 7) return `${dayDiff}d`;
-  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-}
-```
-
-Regras resultantes:
-- Mesmo dia de calendário: `Agora` / `Xmin` / `HH:MM`.
-- Dia de calendário anterior: `Ontem`.
-- 2–6 dias: `Nd`.
-- ≥7 dias: `dd/mm`.
-
-### Refresh do rótulo
-No realtime (`src/hooks/useConversations.ts`) parar de gravar a string `"Agora"` ao receber mensagem nova — gravar o timestamp ISO real e deixar a UI formatar. Para isso:
-
-- No handler de `INSERT` em `messages` e nas otimistic updates de `sendMessage`/`sendMediaMessage`, em vez de `lastMessageTime: 'Agora'` chamar `formatRelativeTime(newMessage.sent_at)` (ou para otimista, `formatRelativeTime(new Date().toISOString())`).
-- Em `ChatInterface.tsx`, recomputar o rótulo na renderização da lista usando o `last_message_at` original. Para garantir refresh enquanto o app fica aberto, adicionar um `useEffect` com `setInterval(() => setTick(t=>t+1), 60_000)` no componente da lista para forçar re-render a cada minuto.
-
-Isso resolve tanto o caso "diz que é hoje mas é de 2 dias" quanto o caso "fica preso em Agora".
-
----
-
-## Detalhes técnicos / arquivos
-
-- `src/components/ChatInterface.tsx`
-  - Atualizar `isPending` (regra com `status === 'human'`).
-  - Adicionar tick de 60s para re-render dos rótulos relativos.
-- `src/types.ts`
-  - Reescrever `formatRelativeTime` baseado em **dias de calendário**.
-- `src/hooks/useConversations.ts`
-  - Trocar `lastMessageTime: 'Agora'` por `formatRelativeTime(...)` nos 4 pontos (insert realtime, sendMessage otimista, sendMediaMessage otimista, optional: media optimistic).
-
-Sem migrações de banco. Sem mudança de API. Compatível com lógica existente de ordenação (pendentes no topo) e de histórico ao reabrir conversas.
+Sem mudanças de schema, sem mudanças na UI interna do chat.
