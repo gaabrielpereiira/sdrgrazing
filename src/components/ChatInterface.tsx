@@ -3,7 +3,7 @@ import {
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck, 
   Smile, Play, Loader2, MessageSquare, Info, X, Mail, 
   Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon, Bell, AlertTriangle,
-  FileText, Music, Reply, Pencil, Upload, AlertCircle
+  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition, formatRelativeTime } from '../types';
 import { Button } from './Button';
@@ -20,11 +20,12 @@ import {
 } from './ui/alert-dialog';
 import { ActivitiesPanel } from './chat/ActivitiesPanel';
 import { useAllPendingActivities } from '@/hooks/useConversationActivities';
+import { TemplatePickerModal } from './chat/TemplatePickerModal';
 import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picker-react';
 
 const ChatInterface: React.FC = () => {
   const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
-  const { conversations, loading, sendMessage, sendMediaMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation } = useConversations({ active: chatTab === 'active' });
+  const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation } = useConversations({ active: chatTab === 'active' });
   const { sdrName, companyName } = useCompanySettings();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
