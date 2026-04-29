@@ -35,6 +35,12 @@ const ChatInterface: React.FC = () => {
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [notesValue, setNotesValue] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  // Tick a cada 60s para reformatar tempos relativos (Agora -> 1min -> Ontem...)
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Attachments
   const [pendingAttachment, setPendingAttachment] = useState<{ file: File; mediaType: 'image' | 'audio' | 'document'; previewUrl: string } | null>(null);
