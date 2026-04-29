@@ -114,6 +114,18 @@ const ActivityItem: React.FC<{
 export const ActivitiesPanel: React.FC<Props> = ({ conversationId, contactId, contactName }) => {
   const { activities, createActivity, completeActivity, deleteActivity } = useConversationActivities(conversationId);
   const [modalOpen, setModalOpen] = useState(false);
+  const [memberMap, setMemberMap] = useState<Record<string, { name: string; avatar?: string | null }>>({});
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await (supabase as any)
+        .from('team_members')
+        .select('id, name, avatar');
+      const map: Record<string, { name: string; avatar?: string | null }> = {};
+      (data || []).forEach((m: any) => { map[m.id] = { name: m.name, avatar: m.avatar }; });
+      setMemberMap(map);
+    })();
+  }, []);
 
   const pending = activities.filter(a => !a.is_completed);
   const done = activities.filter(a => a.is_completed).slice(0, 3);
