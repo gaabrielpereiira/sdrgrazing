@@ -692,7 +692,7 @@ const ChatInterface: React.FC = () => {
                     <h3 className={`text-sm font-semibold truncate ${selectedChatId === chat.id ? 'text-white' : 'text-slate-300'}`}>
                       {chat.contactName}
                     </h3>
-                    <span className="text-[10px] text-slate-500 font-medium">{chat.lastMessageTime}</span>
+                    <span className="text-[10px] text-slate-500 font-medium">{chat.lastMessageAt ? formatRelativeTime(chat.lastMessageAt) : chat.lastMessageTime}</span>
                   </div>
                   <p className="text-xs text-slate-500 truncate">
                     {chat.messages[chat.messages.length - 1]?.type === MessageType.IMAGE ? '📷 Imagem' : 
