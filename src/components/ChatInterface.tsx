@@ -703,15 +703,22 @@ const ChatInterface: React.FC = () => {
                         Pendente
                       </span>
                     )}
-                    {pendingActivities[chat.id] && (
-                      <span
-                        className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] rounded-md font-medium flex items-center gap-1"
-                        title={`Lembrete: ${new Date(pendingActivities[chat.id].nextAt).toLocaleString('pt-BR')}`}
-                      >
-                        <Bell className="w-2.5 h-2.5" />
-                        {pendingActivities[chat.id].count}
-                      </span>
-                    )}
+                    {pendingActivities[chat.id] && (() => {
+                      const due = new Date(pendingActivities[chat.id].nextAt).getTime() <= Date.now();
+                      return (
+                        <span
+                          className={`px-1.5 py-0.5 border text-[10px] rounded-md font-medium flex items-center gap-1 ${
+                            due
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                              : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                          }`}
+                          title={`${due ? 'Tarefa no horário! ' : 'Lembrete: '}${new Date(pendingActivities[chat.id].nextAt).toLocaleString('pt-BR')}`}
+                        >
+                          <Bell className="w-2.5 h-2.5" />
+                          {pendingActivities[chat.id].count}
+                        </span>
+                      );
+                    })()}
                     {chat.assignedUserId && (() => {
                       const m = teamMembers.find(tm => tm.id === chat.assignedUserId);
                       if (!m) return null;
