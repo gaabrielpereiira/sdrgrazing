@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, MessageSquare, Users, Settings as SettingsIcon, LogOut, ShieldCheck, Calendar, Kanban } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Users, Settings as SettingsIcon, LogOut, ShieldCheck, Calendar, Kanban, FileText } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { useAuth } from '@/hooks/useAuth';
@@ -17,6 +17,7 @@ const menuItems = [
   { id: 'chat', label: 'Chat Ao Vivo', icon: MessageSquare },
   { id: 'contacts', label: 'Contatos', icon: Users },
   { id: 'scheduling', label: 'Agendamentos', icon: Calendar },
+  { id: 'templates', label: 'Templates WhatsApp', icon: FileText },
   { id: 'team', label: 'Equipe', icon: ShieldCheck },
   { id: 'settings', label: 'Configurações', icon: SettingsIcon },
 ];
