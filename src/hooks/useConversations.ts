@@ -229,6 +229,7 @@ export function useConversations(options?: { active?: boolean }) {
                   messages: [...conv.messages, uiMessage],
                   lastMessage: newMessage.content || '',
                   lastMessageTime: formatRelativeTime(newMessage.sent_at),
+                  lastMessageAt: newMessage.sent_at,
                   // Increment unread if it's from user
                   unreadCount: newMessage.from_type === 'user' 
                     ? conv.unreadCount + 1 
