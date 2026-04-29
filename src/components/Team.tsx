@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { UserPlus, Search, Loader2, X, Check, Edit2, Users, Settings, Trash2, ShieldCheck } from 'lucide-react';
+import { UserPlus, Search, Loader2, X, Check, Edit2, Users, Settings, Trash2, ShieldCheck, RefreshCw, Link2 } from 'lucide-react';
 import { Button } from './Button';
 import { api } from '../services/api';
 import { TeamMember, type Team as TeamType, type TeamFunction } from '../types';
@@ -30,6 +30,7 @@ const Team: React.FC = () => {
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [registrationSettingsId, setRegistrationSettingsId] = useState<string | null>(null);
   const [updatingRegistration, setUpdatingRegistration] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [editFormData, setEditFormData] = useState({
     name: '',
     email: '',
@@ -109,6 +110,25 @@ const Team: React.FC = () => {
       toast.error('Erro ao atualizar configuração');
     } finally {
       setUpdatingRegistration(false);
+    }
+  };
+
+  const handleSyncUsers = async () => {
+    setSyncing(true);
+    try {
+      const result = await api.syncTeamMembers();
+      const total = result.linked + result.created;
+      if (total === 0) {
+        toast.success('Tudo já sincronizado.');
+      } else {
+        toast.success(`Sincronizado: ${result.linked} vinculado(s), ${result.created} criado(s).`);
+      }
+      await loadAllData();
+    } catch (error) {
+      console.error('Erro ao sincronizar usuários:', error);
+      toast.error('Erro ao sincronizar usuários');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -237,6 +257,10 @@ const Team: React.FC = () => {
           <p className="text-sm text-slate-400 mt-1">Gerencie usuários e times da organização</p>
         </div>
         <div className="flex gap-3">
+          <Button onClick={handleSyncUsers} variant="outline" className="border-slate-700" disabled={syncing}>
+            {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            Sincronizar
+          </Button>
           <Button onClick={() => setShowConfigModal(true)} variant="outline" className="border-slate-700">
             <Settings className="w-4 h-4 mr-2" />
             Configurar
@@ -350,7 +374,14 @@ const Team: React.FC = () => {
                                         <div className="flex-shrink-0 w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-300 border border-slate-700 uppercase">
                                             {member.name.substring(0, 2)}
                                         </div>
-                                        <span className="text-sm font-medium text-slate-200">{member.name}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-medium text-slate-200">{member.name}</span>
+                                            {member.user_id && (
+                                                <span title="Conta vinculada à plataforma" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-950/40 text-emerald-400 border border-emerald-900/50">
+                                                    <Link2 className="w-3 h-3" />
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </td>
                                 

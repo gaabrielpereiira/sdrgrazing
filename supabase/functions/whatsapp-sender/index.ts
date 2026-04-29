@@ -226,25 +226,34 @@ async function resolveHumanSenderName(
     const senderId = metadata?.sender_user_id;
     if (senderId && !candidateIds.includes(senderId)) candidateIds.push(senderId);
 
-    for (const uid of candidateIds) {
-      // team_members.name
-      const { data: tm } = await supabase
+    for (const id of candidateIds) {
+      // The id may be either a team_members.id (legacy) or an auth.users.id.
+      // Try team_members.id first
+      const { data: tmById } = await supabase
         .from('team_members')
         .select('name')
-        .eq('user_id', uid)
+        .eq('id', id)
         .maybeSingle();
-      if (tm?.name) return tm.name;
+      if (tmById?.name) return tmById.name;
 
-      // profiles.full_name
+      // Then team_members.user_id (auth user id linked)
+      const { data: tmByUser } = await supabase
+        .from('team_members')
+        .select('name')
+        .eq('user_id', id)
+        .maybeSingle();
+      if (tmByUser?.name) return tmByUser.name;
+
+      // Then profiles.full_name (auth user id)
       const { data: prof } = await supabase
         .from('profiles')
         .select('full_name')
-        .eq('user_id', uid)
+        .eq('user_id', id)
         .maybeSingle();
       if (prof?.full_name) return prof.full_name;
     }
 
-    // 3. Fallback: nina_settings.sdr_name (any)
+    // Fallback: nina_settings.sdr_name (any)
     const { data: ninaSettings } = await supabase
       .from('nina_settings')
       .select('sdr_name')

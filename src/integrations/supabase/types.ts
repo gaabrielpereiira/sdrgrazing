@@ -1298,6 +1298,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      sync_team_members_with_auth: {
+        Args: never
+        Returns: {
+          created: number
+          linked: number
+        }[]
+      }
       update_client_memory: {
         Args: { p_contact_id: string; p_new_memory: Json }
         Returns: undefined
