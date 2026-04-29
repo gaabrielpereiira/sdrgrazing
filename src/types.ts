@@ -301,12 +301,13 @@ export interface UIMessage {
   timestamp: string;
   direction: MessageDirection;
   type: MessageType;
-  status: 'sent' | 'delivered' | 'read';
+  status: 'sent' | 'delivered' | 'read' | 'failed';
   fromType: MessageFromType;
   mediaUrl: string | null;
   whatsappMessageId: string | null;
   metadata?: Record<string, any>;
   replyToId?: string | null;
+  errorMessage?: string | null;
 }
 
 // ============= Utility Functions =============
@@ -347,6 +348,7 @@ export function transformDBToUIConversation(
 }
 
 export function transformDBToUIMessage(msg: DBMessage): UIMessage {
+  const meta = (msg.metadata || {}) as Record<string, any>;
   return {
     id: msg.id,
     content: msg.content || '',
@@ -357,8 +359,9 @@ export function transformDBToUIMessage(msg: DBMessage): UIMessage {
     fromType: msg.from_type,
     mediaUrl: msg.media_url,
     whatsappMessageId: msg.whatsapp_message_id,
-    metadata: msg.metadata || {},
-    replyToId: msg.reply_to_id || null
+    metadata: meta,
+    replyToId: msg.reply_to_id || null,
+    errorMessage: msg.status === 'failed' ? (meta.error_message || null) : null,
   };
 }
 
@@ -371,10 +374,11 @@ function mapDBMessageType(type: DBMessageType): MessageType {
   }
 }
 
-function mapDBMessageStatus(status: DBMessageStatus): 'sent' | 'delivered' | 'read' {
+function mapDBMessageStatus(status: DBMessageStatus): 'sent' | 'delivered' | 'read' | 'failed' {
   switch (status) {
     case 'read': return 'read';
     case 'delivered': return 'delivered';
+    case 'failed': return 'failed';
     default: return 'sent';
   }
 }

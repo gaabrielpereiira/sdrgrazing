@@ -3,7 +3,7 @@ import {
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck, 
   Smile, Play, Loader2, MessageSquare, Info, X, Mail, 
   Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon, Bell, AlertTriangle,
-  FileText, Music, Reply, Pencil, Upload
+  FileText, Music, Reply, Pencil, Upload, AlertCircle
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition, formatRelativeTime } from '../types';
 import { Button } from './Button';
@@ -987,7 +987,7 @@ const ChatInterface: React.FC = () => {
                                       ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-tr-sm shadow-violet-900/20'
                                       : 'bg-gradient-to-br from-cyan-600 to-teal-700 text-white rounded-tr-sm shadow-cyan-900/20'
                                     : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
-                                }`}
+                                } ${msg.status === 'failed' ? 'ring-1 ring-red-500/60' : ''}`}
                               >
                                 {replied && (
                                   <button
@@ -1011,7 +1011,7 @@ const ChatInterface: React.FC = () => {
                                 {renderMessageContent(msg)}
                               </div>
 
-                              <div className="flex items-center mt-1.5 gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity px-1">
+                              <div className="flex items-center mt-1.5 gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity px-1 flex-wrap">
                                 {isOutgoing && msg.fromType === 'nina' && (
                                   <Bot className="w-3 h-3 text-violet-400" />
                                 )}
@@ -1020,6 +1020,15 @@ const ChatInterface: React.FC = () => {
                                 )}
                                 <span className="text-[10px] text-slate-500 font-medium">{msg.timestamp}</span>
                                 {isOutgoing && (
+                                  msg.status === 'failed' ? (
+                                    <span
+                                      className="flex items-center gap-1 text-[10px] text-red-400 font-medium"
+                                      title={msg.errorMessage ? `Não entregue: ${msg.errorMessage}` : 'Não entregue ao destinatário'}
+                                    >
+                                      <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                                      <span>Não entregue{msg.errorMessage ? ` — ${msg.errorMessage}` : ''}</span>
+                                    </span>
+                                  ) :
                                   msg.status === 'read' ? <CheckCheck className="w-3.5 h-3.5 text-cyan-500" /> :
                                   msg.status === 'delivered' ? <CheckCheck className="w-3.5 h-3.5 text-slate-500" /> :
                                   <Check className="w-3.5 h-3.5 text-slate-500" />
