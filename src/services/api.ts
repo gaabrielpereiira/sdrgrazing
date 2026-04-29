@@ -1343,6 +1343,15 @@ export const api = {
   sendMessage: async (conversationId: string, content: string, opts?: { replyToId?: string | null }): Promise<string> => {
     console.log(`[API] Sending message to conversation ${conversationId}`);
 
+    // Capture current auth user (auth may be disabled — tolerate null)
+    let senderUserId: string | null = null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      senderUserId = user?.id ?? null;
+    } catch {
+      senderUserId = null;
+    }
+
     // Get conversation to find contact_id
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
@@ -1365,7 +1374,8 @@ export const api = {
         from_type: 'human',
         status: 'processing',
         sent_at: new Date().toISOString(),
-        reply_to_id: opts?.replyToId || null
+        reply_to_id: opts?.replyToId || null,
+        metadata: senderUserId ? { sender_user_id: senderUserId } : {}
       })
       .select('id')
       .single();
@@ -1387,7 +1397,8 @@ export const api = {
         from_type: 'human',
         message_type: 'text',
         priority: 2, // Higher priority for human messages
-        message_id: msgData.id  // Reference to the pre-created message
+        message_id: msgData.id,  // Reference to the pre-created message
+        metadata: senderUserId ? { sender_user_id: senderUserId } : {}
       });
 
     if (sendError) {
@@ -1426,6 +1437,15 @@ export const api = {
     opts: { mediaType: 'image' | 'audio' | 'document'; caption?: string; replyToId?: string | null }
   ): Promise<{ id: string; mediaUrl: string }> => {
     console.log(`[API] Sending ${opts.mediaType} to conversation ${conversationId}`);
+
+    // Capture current auth user (auth may be disabled — tolerate null)
+    let senderUserId: string | null = null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      senderUserId = user?.id ?? null;
+    } catch {
+      senderUserId = null;
+    }
 
     // 1) Get conversation -> contact_id
     const { data: conversation, error: convError } = await supabase
@@ -1471,6 +1491,7 @@ export const api = {
         media_type: file.type || null,
         sent_at: new Date().toISOString(),
         reply_to_id: opts.replyToId || null,
+        metadata: senderUserId ? { sender_user_id: senderUserId } : {},
       })
       .select('id')
       .single();
@@ -1492,6 +1513,7 @@ export const api = {
         media_url: publicUrl,
         priority: 2,
         message_id: msgData.id,
+        metadata: senderUserId ? { sender_user_id: senderUserId } : {},
       });
 
     if (sendError) {
