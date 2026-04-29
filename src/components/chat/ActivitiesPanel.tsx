@@ -189,9 +189,19 @@ export const ActivitiesPanel: React.FC<Props> = ({ conversationId, contactId, co
                   Concluídas recentes ({done.length})
                 </summary>
                 <div className="mt-2 space-y-2">
-                  {done.map(a => (
-                    <ActivityItem key={a.id} activity={a} onComplete={completeActivity} onDelete={deleteActivity} />
-                  ))}
+                  {done.map(a => {
+                    const m = a.assigned_to ? memberMap[a.assigned_to] : undefined;
+                    return (
+                      <ActivityItem
+                        key={a.id}
+                        activity={a}
+                        onComplete={completeActivity}
+                        onDelete={deleteActivity}
+                        assigneeName={m?.name}
+                        assigneeAvatar={m?.avatar}
+                      />
+                    );
+                  })}
                 </div>
               </details>
             )}
