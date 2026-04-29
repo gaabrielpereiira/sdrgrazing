@@ -325,7 +325,17 @@ const Scheduling: React.FC = () => {
     }
   };
 
-  const getEventTypeColor = (type: string) => {
+  const getEventTypeColor = (type: string, app?: Appointment) => {
+    if (type === 'task') {
+      // Compute overdue based on date+time
+      if (app) {
+        const due = new Date(`${app.date}T${app.time}:00`).getTime();
+        if (due <= Date.now()) {
+          return 'bg-rose-500/15 text-rose-300 border-rose-500/40 hover:bg-rose-500/25 animate-pulse';
+        }
+      }
+      return 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20';
+    }
     switch (type) {
         case 'demo': return 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20 hover:bg-cyan-500/20';
         case 'meeting': return 'bg-violet-500/10 text-violet-300 border-violet-500/20 hover:bg-violet-500/20';
