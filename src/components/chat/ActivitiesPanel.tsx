@@ -170,9 +170,19 @@ export const ActivitiesPanel: React.FC<Props> = ({ conversationId, contactId, co
           </button>
         ) : (
           <>
-            {pending.map(a => (
-              <ActivityItem key={a.id} activity={a} onComplete={completeActivity} onDelete={deleteActivity} />
-            ))}
+            {pending.map(a => {
+              const m = a.assigned_to ? memberMap[a.assigned_to] : undefined;
+              return (
+                <ActivityItem
+                  key={a.id}
+                  activity={a}
+                  onComplete={completeActivity}
+                  onDelete={deleteActivity}
+                  assigneeName={m?.name}
+                  assigneeAvatar={m?.avatar}
+                />
+              );
+            })}
             {done.length > 0 && (
               <details className="mt-2">
                 <summary className="text-[11px] text-slate-500 cursor-pointer hover:text-slate-400">
