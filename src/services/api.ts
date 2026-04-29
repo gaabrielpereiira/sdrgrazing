@@ -508,6 +508,24 @@ export const api = {
   },
 
   /**
+   * Sync team_members with auth.users:
+   * - links existing invited members to their auth account by email
+   * - creates a member entry for any auth user not yet listed
+   */
+  syncTeamMembers: async (): Promise<{ linked: number; created: number }> => {
+    const { data, error } = await (supabase as any).rpc('sync_team_members_with_auth');
+    if (error) {
+      console.error('[API] Error syncing team members:', error);
+      throw error;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      linked: Number(row?.linked ?? 0),
+      created: Number(row?.created ?? 0),
+    };
+  },
+
+  /**
    * Fetch teams
    */
   fetchTeams: async () => {
