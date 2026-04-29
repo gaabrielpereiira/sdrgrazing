@@ -15,6 +15,7 @@ export interface ConversationActivity {
   is_completed: boolean;
   completed_at: string | null;
   reminder_sent: boolean;
+  assigned_to: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -26,6 +27,7 @@ export interface CreateActivityInput {
   description?: string;
   activity_type: ActivityType;
   scheduled_at: string; // ISO
+  assigned_to?: string | null;
 }
 
 /**

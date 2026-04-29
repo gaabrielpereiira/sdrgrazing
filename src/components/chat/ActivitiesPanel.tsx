@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Plus, Phone, MessageSquare, Calendar as CalendarIcon, Sparkles, Check, Trash2, Clock } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plus, Phone, MessageSquare, Calendar as CalendarIcon, Sparkles, Check, Trash2, Clock, User } from 'lucide-react';
 import { useConversationActivities, ConversationActivity, ActivityType } from '@/hooks/useConversationActivities';
 import { ActivityModal } from './ActivityModal';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
   conversationId: string;
@@ -36,7 +37,9 @@ const ActivityItem: React.FC<{
   activity: ConversationActivity;
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
-}> = ({ activity, onComplete, onDelete }) => {
+  assigneeName?: string | null;
+  assigneeAvatar?: string | null;
+}> = ({ activity, onComplete, onDelete, assigneeName, assigneeAvatar }) => {
   const Icon = TYPE_ICON[activity.activity_type] || Sparkles;
   const { rel, fmt, overdue } = formatWhen(activity.scheduled_at);
   const isDone = activity.is_completed;
@@ -74,6 +77,16 @@ const ActivityItem: React.FC<{
             <span className="text-slate-600">·</span>
             <span className={overdue && !isDone ? 'text-rose-400' : 'text-slate-500'}>{rel}</span>
           </div>
+          {assigneeName && (
+            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-400">
+              {assigneeAvatar ? (
+                <img src={assigneeAvatar} alt={assigneeName} className="w-3.5 h-3.5 rounded-full" />
+              ) : (
+                <User className="w-3 h-3" />
+              )}
+              <span className="truncate">{assigneeName}</span>
+            </div>
+          )}
         </div>
         {!isDone && (
           <div className="flex flex-col gap-1">
@@ -101,6 +114,18 @@ const ActivityItem: React.FC<{
 export const ActivitiesPanel: React.FC<Props> = ({ conversationId, contactId, contactName }) => {
   const { activities, createActivity, completeActivity, deleteActivity } = useConversationActivities(conversationId);
   const [modalOpen, setModalOpen] = useState(false);
+  const [memberMap, setMemberMap] = useState<Record<string, { name: string; avatar?: string | null }>>({});
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await (supabase as any)
+        .from('team_members')
+        .select('id, name, avatar');
+      const map: Record<string, { name: string; avatar?: string | null }> = {};
+      (data || []).forEach((m: any) => { map[m.id] = { name: m.name, avatar: m.avatar }; });
+      setMemberMap(map);
+    })();
+  }, []);
 
   const pending = activities.filter(a => !a.is_completed);
   const done = activities.filter(a => a.is_completed).slice(0, 3);
@@ -145,18 +170,38 @@ export const ActivitiesPanel: React.FC<Props> = ({ conversationId, contactId, co
           </button>
         ) : (
           <>
-            {pending.map(a => (
-              <ActivityItem key={a.id} activity={a} onComplete={completeActivity} onDelete={deleteActivity} />
-            ))}
+            {pending.map(a => {
+              const m = a.assigned_to ? memberMap[a.assigned_to] : undefined;
+              return (
+                <ActivityItem
+                  key={a.id}
+                  activity={a}
+                  onComplete={completeActivity}
+                  onDelete={deleteActivity}
+                  assigneeName={m?.name}
+                  assigneeAvatar={m?.avatar}
+                />
+              );
+            })}
             {done.length > 0 && (
               <details className="mt-2">
                 <summary className="text-[11px] text-slate-500 cursor-pointer hover:text-slate-400">
                   Concluídas recentes ({done.length})
                 </summary>
                 <div className="mt-2 space-y-2">
-                  {done.map(a => (
-                    <ActivityItem key={a.id} activity={a} onComplete={completeActivity} onDelete={deleteActivity} />
-                  ))}
+                  {done.map(a => {
+                    const m = a.assigned_to ? memberMap[a.assigned_to] : undefined;
+                    return (
+                      <ActivityItem
+                        key={a.id}
+                        activity={a}
+                        onComplete={completeActivity}
+                        onDelete={deleteActivity}
+                        assigneeName={m?.name}
+                        assigneeAvatar={m?.avatar}
+                      />
+                    );
+                  })}
                 </div>
               </details>
             )}

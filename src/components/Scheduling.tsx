@@ -14,6 +14,8 @@ const Scheduling: React.FC = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [taskAppointments, setTaskAppointments] = useState<Appointment[]>([]);
+  const [taskMeta, setTaskMeta] = useState<Record<string, { conversation_id: string; description?: string | null; assigned_to?: string | null; assigneeName?: string | null }>>({});
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -22,6 +24,7 @@ const Scheduling: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
@@ -47,6 +50,64 @@ const Scheduling: React.FC = () => {
   });
   const [editContactId, setEditContactId] = useState<string | null>(null);
 
+  // Merge real appointments + activity-derived "tasks" so they display together
+  const mergedAppointments: Appointment[] = [...appointments, ...taskAppointments];
+
+  const loadTasks = async () => {
+    const { data, error } = await (supabase as any)
+      .from('conversation_activities')
+      .select('id, conversation_id, contact_id, title, description, scheduled_at, is_completed, assigned_to')
+      .eq('is_completed', false)
+      .order('scheduled_at', { ascending: true });
+    if (error) {
+      console.error('[Scheduling] tasks fetch error', error);
+      return;
+    }
+    // Resolve member names for assigned_to
+    const memberIds = Array.from(new Set((data || []).map((r: any) => r.assigned_to).filter(Boolean)));
+    let memberMap: Record<string, string> = {};
+    if (memberIds.length > 0) {
+      const { data: ms } = await (supabase as any)
+        .from('team_members')
+        .select('id, name')
+        .in('id', memberIds);
+      (ms || []).forEach((m: any) => { memberMap[m.id] = m.name; });
+    }
+    const { data: cs } = await (supabase as any)
+      .from('contacts')
+      .select('id, name, phone_number');
+    const contactMap: Record<string, { name: string | null; phone_number: string }> = {};
+    (cs || []).forEach((c: any) => { contactMap[c.id] = { name: c.name, phone_number: c.phone_number }; });
+
+    const meta: Record<string, any> = {};
+    const tasks: Appointment[] = (data || []).map((row: any) => {
+      const dt = new Date(row.scheduled_at);
+      const dateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      const timeStr = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+      const c = contactMap[row.contact_id];
+      const leadName = c?.name || c?.phone_number || 'Lead';
+      meta[`task-${row.id}`] = {
+        conversation_id: row.conversation_id,
+        description: row.description,
+        assigned_to: row.assigned_to,
+        assigneeName: row.assigned_to ? memberMap[row.assigned_to] : null,
+      };
+      return {
+        id: `task-${row.id}`,
+        title: `${row.title} · ${leadName}`,
+        date: dateStr,
+        time: timeStr,
+        duration: 30,
+        type: 'task' as any,
+        description: row.description || undefined,
+        contact_id: row.contact_id,
+        metadata: { source: 'manual', conversation_id: row.conversation_id } as any,
+      } as Appointment;
+    });
+    setTaskAppointments(tasks);
+    setTaskMeta(meta);
+  };
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -56,6 +117,7 @@ const Scheduling: React.FC = () => {
         ]);
         setAppointments(appointmentsData);
         setContacts(contactsData);
+        await loadTasks();
       } catch (error) {
         console.error("Erro ao carregar dados", error);
       } finally {
@@ -70,20 +132,28 @@ const Scheduling: React.FC = () => {
       .channel('appointments-changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'appointments'
-        },
+        { event: '*', schema: 'public', table: 'appointments' },
         () => {
           console.log('Appointment changed, refetching...');
           loadData();
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversation_activities' },
+        () => {
+          console.log('Activity changed, refetching tasks...');
+          loadTasks();
+        }
+      )
       .subscribe();
+
+    // Re-render every minute so overdue color flips
+    const interval = setInterval(() => loadTasks(), 60_000);
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, []);
 
@@ -143,6 +213,10 @@ const Scheduling: React.FC = () => {
 
   const handleAppointmentClick = (app: Appointment, e: React.MouseEvent) => {
       e.stopPropagation();
+      if (app.id.startsWith('task-')) {
+        setSelectedTaskId(app.id);
+        return;
+      }
       setSelectedAppointment(app);
   };
 
@@ -251,7 +325,17 @@ const Scheduling: React.FC = () => {
     }
   };
 
-  const getEventTypeColor = (type: string) => {
+  const getEventTypeColor = (type: string, app?: Appointment) => {
+    if (type === 'task') {
+      // Compute overdue based on date+time
+      if (app) {
+        const due = new Date(`${app.date}T${app.time}:00`).getTime();
+        if (due <= Date.now()) {
+          return 'bg-rose-500/15 text-rose-300 border-rose-500/40 hover:bg-rose-500/25 animate-pulse';
+        }
+      }
+      return 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20';
+    }
     switch (type) {
         case 'demo': return 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20 hover:bg-cyan-500/20';
         case 'meeting': return 'bg-violet-500/10 text-violet-300 border-violet-500/20 hover:bg-violet-500/20';
@@ -277,7 +361,7 @@ const Scheduling: React.FC = () => {
             {Array.from({ length: days }).map((_, index) => {
                 const day = index + 1;
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const dayAppointments = appointments.filter(a => a.date === dateStr);
+                const dayAppointments = mergedAppointments.filter(a => a.date === dateStr);
                 const isToday = formatDateStr(new Date()) === dateStr;
 
                 return (
@@ -293,7 +377,7 @@ const Scheduling: React.FC = () => {
                             {dayAppointments.map(app => (
                                 <div 
                                     key={app.id} 
-                                    className={`text-[10px] px-2 py-1 rounded border truncate font-medium cursor-pointer relative ${getEventTypeColor(app.type)}`}
+                                    className={`text-[10px] px-2 py-1 rounded border truncate font-medium cursor-pointer relative ${getEventTypeColor(app.type, app)}`}
                                     onClick={(e) => handleAppointmentClick(app, e)}
                                 >
                                     {app.metadata?.source === 'nina_ai' && (
@@ -357,7 +441,7 @@ const Scheduling: React.FC = () => {
                             {weekDays.map((day, i) => {
                                 const dateStr = formatDateStr(day);
                                 const isToday = formatDateStr(new Date()) === dateStr;
-                                const apps = appointments.filter(a => {
+                                const apps = mergedAppointments.filter(a => {
                                     const appHour = parseInt(a.time.split(':')[0]);
                                     return a.date === dateStr && appHour === hour;
                                 });
@@ -376,7 +460,7 @@ const Scheduling: React.FC = () => {
                                         {apps.map(app => (
                                             <div 
                                                 key={app.id} 
-                                                className={`mb-1 p-2 rounded text-xs border cursor-pointer hover:brightness-110 relative z-10 shadow-sm ${getEventTypeColor(app.type)}`}
+                                                className={`mb-1 p-2 rounded text-xs border cursor-pointer hover:brightness-110 relative z-10 shadow-sm ${getEventTypeColor(app.type, app)}`}
                                                 onClick={(e) => handleAppointmentClick(app, e)} 
                                                 style={{ minHeight: `${Math.max(40, (app.duration / 60) * 80)}px` }}
                                             >
@@ -413,7 +497,7 @@ const Scheduling: React.FC = () => {
              <div className="flex-1 p-4">
                  {hours.map(hour => {
                     const timeStr = `${String(hour).padStart(2, '0')}:00`;
-                    const apps = appointments.filter(a => {
+                    const apps = mergedAppointments.filter(a => {
                         const appHour = parseInt(a.time.split(':')[0]);
                         return a.date === dateStr && appHour === hour;
                     });
@@ -433,7 +517,7 @@ const Scheduling: React.FC = () => {
                                 {apps.map(app => (
                                     <div 
                                         key={app.id} 
-                                        className={`mb-2 p-3 rounded-lg border flex justify-between items-center shadow-md relative z-10 cursor-pointer hover:brightness-110 ${getEventTypeColor(app.type)}`}
+                                        className={`mb-2 p-3 rounded-lg border flex justify-between items-center shadow-md relative z-10 cursor-pointer hover:brightness-110 ${getEventTypeColor(app.type, app)}`}
                                         onClick={(e) => handleAppointmentClick(app, e)}
                                         style={{ minHeight: `${Math.max(60, (app.duration / 60) * 100)}px` }}
                                     >
@@ -806,6 +890,57 @@ const Scheduling: React.FC = () => {
              </div>
          </div>
       )}
+
+      {/* Task (Conversation Activity) Detail Modal */}
+      {selectedTaskId && (() => {
+        const task = taskAppointments.find(t => t.id === selectedTaskId);
+        const meta = taskMeta[selectedTaskId];
+        if (!task) return null;
+        const due = new Date(`${task.date}T${task.time}:00`).getTime() <= Date.now();
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className={`p-6 border-b border-slate-800 flex justify-between items-start ${due ? 'bg-rose-500/10' : 'bg-amber-500/10'}`}>
+                <div>
+                  <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${due ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40'}`}>
+                    {due ? 'Tarefa atrasada' : 'Tarefa'}
+                  </span>
+                  <h3 className="text-lg font-bold text-white mt-2">{task.title}</h3>
+                </div>
+                <button onClick={() => setSelectedTaskId(null)} className="text-slate-400 hover:text-white transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-3 text-sm text-slate-300">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-500" />
+                  {task.date.split('-').reverse().join('/')} às {task.time}
+                </div>
+                {meta?.assigneeName && (
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 text-slate-500" />
+                    Responsável: <span className="text-white">{meta.assigneeName}</span>
+                  </div>
+                )}
+                {meta?.description && (
+                  <div className="flex items-start gap-2">
+                    <AlignLeft className="w-4 h-4 text-slate-500 mt-0.5" />
+                    <span className="text-slate-400 whitespace-pre-line">{meta.description}</span>
+                  </div>
+                )}
+              </div>
+              <div className="p-6 border-t border-slate-800 flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => setSelectedTaskId(null)}>Fechar</Button>
+                {meta?.conversation_id && (
+                  <Button onClick={() => { navigate(`/chat?conversation=${meta.conversation_id}`); setSelectedTaskId(null); }}>
+                    Abrir conversa
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Edit Appointment Modal */}
       {showEditModal && selectedAppointment && (

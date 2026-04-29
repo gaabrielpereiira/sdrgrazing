@@ -152,6 +152,7 @@ export type Database = {
       conversation_activities: {
         Row: {
           activity_type: string
+          assigned_to: string | null
           completed_at: string | null
           contact_id: string
           conversation_id: string
@@ -167,6 +168,7 @@ export type Database = {
         }
         Insert: {
           activity_type?: string
+          assigned_to?: string | null
           completed_at?: string | null
           contact_id: string
           conversation_id: string
@@ -182,6 +184,7 @@ export type Database = {
         }
         Update: {
           activity_type?: string
+          assigned_to?: string | null
           completed_at?: string | null
           contact_id?: string
           conversation_id?: string

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Phone, MessageSquare, Calendar as CalendarIcon, Sparkles } from 'lucide-react';
 import { ActivityType, CreateActivityInput } from '@/hooks/useConversationActivities';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
   open: boolean;
@@ -36,7 +37,20 @@ export const ActivityModal: React.FC<Props> = ({ open, onOpenChange, conversatio
   const [type, setType] = useState<ActivityType>('call');
   const [date, setDate] = useState<string>(initial.toISOString().slice(0, 10));
   const [time, setTime] = useState<string>(initial.toTimeString().slice(0, 5));
+  const [assignedTo, setAssignedTo] = useState<string>('');
+  const [members, setMembers] = useState<Array<{ id: string; name: string; avatar?: string | null }>>([]);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      const { data } = await (supabase as any)
+        .from('team_members')
+        .select('id, name, avatar, status')
+        .order('name', { ascending: true });
+      setMembers((data || []).filter((m: any) => m.status !== 'inactive'));
+    })();
+  }, [open]);
 
   const reset = () => {
     const d = defaultDate();
@@ -45,6 +59,7 @@ export const ActivityModal: React.FC<Props> = ({ open, onOpenChange, conversatio
     setType('call');
     setDate(d.toISOString().slice(0, 10));
     setTime(d.toTimeString().slice(0, 5));
+    setAssignedTo('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,6 +75,7 @@ export const ActivityModal: React.FC<Props> = ({ open, onOpenChange, conversatio
         description: description.trim() || undefined,
         activity_type: type,
         scheduled_at: scheduled.toISOString(),
+        assigned_to: assignedTo || null,
       });
       reset();
       onOpenChange(false);
@@ -143,6 +159,20 @@ export const ActivityModal: React.FC<Props> = ({ open, onOpenChange, conversatio
               placeholder="Detalhes ou contexto…"
               className="bg-slate-800 border-slate-700 text-slate-100 min-h-[80px]"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-slate-300">Responsável (opcional)</Label>
+            <select
+              value={assignedTo}
+              onChange={e => setAssignedTo(e.target.value)}
+              className="w-full h-10 rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+              <option value="">— Ninguém —</option>
+              {members.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
           </div>
 
           <DialogFooter>
