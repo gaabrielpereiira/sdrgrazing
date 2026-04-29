@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Plus, Phone, MessageSquare, Calendar as CalendarIcon, Sparkles, Check, Trash2, Clock } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plus, Phone, MessageSquare, Calendar as CalendarIcon, Sparkles, Check, Trash2, Clock, User } from 'lucide-react';
 import { useConversationActivities, ConversationActivity, ActivityType } from '@/hooks/useConversationActivities';
 import { ActivityModal } from './ActivityModal';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
   conversationId: string;
