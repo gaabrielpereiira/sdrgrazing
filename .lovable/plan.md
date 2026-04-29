@@ -1,83 +1,71 @@
-## Problema atual
+## Objetivo
 
-Hoje, quando uma conversa é finalizada (`is_active = false`), três coisas acontecem que apagam visualmente o histórico:
+1. O sininho ao lado do nome do lead (na lista de chats) deve ficar **vermelho e pulsante** quando uma tarefa daquela conversa estiver **vencida ou no horário** (alerta visual).
+2. Ao criar uma atividade no chat, permitir escolher um **responsável** (membro do time).
+3. As **atividades/tarefas** devem aparecer também na aba **Agendamentos**, junto com os appointments, mostrando nome do lead, título da tarefa e horário.
 
-1. **Webhook do WhatsApp** (`whatsapp-webhook/index.ts`): ao receber nova mensagem do contato, busca conversa apenas com `is_active = true`. Como não encontra, cria uma **conversa nova vazia** — o histórico antigo fica órfão em outro registro.
-2. **Reabrir manualmente** (`reopenConversation` em `api.ts`): já reativa a conversa correta (`is_active = true`), então este caso já preserva o histórico — mas só funciona se o frontend chamar antes do webhook.
-3. **Frontend** (`fetchConversations`): lista apenas conversas com `is_active = true`, então conversas finalizadas somem da aba "Ativas" mesmo tendo histórico.
+---
 
-Resultado: quando o cliente volta a falar após "finalizar", aparece um chat zerado e o histórico anterior fica perdido.
+## Mudanças
 
-## Solução
+### 1. Sininho vermelho quando a tarefa estiver na hora (`src/components/ChatInterface.tsx`)
 
-Tratar **um contato = uma conversa contínua**. Reabrir a conversa existente em vez de criar uma nova, mantendo todas as mensagens antigas visíveis.
+Hoje, em `~linha 706-714`, o badge do sininho aparece sempre âmbar quando há atividade pendente. Vamos calcular se a próxima atividade está vencida (ou prestes a vencer) e trocar a cor:
 
-### 1. Webhook reabre em vez de criar
+- Se `nextAt <= agora`: badge **vermelho** (`bg-rose-500/20 text-rose-300 border-rose-500/40`) com `animate-pulse`.
+- Caso contrário: mantém âmbar atual.
 
-Em `supabase/functions/whatsapp-webhook/index.ts` (linhas 189-215):
+Também replicar o destaque vermelho no header do chat ativo, se já existir indicador equivalente (manter consistência simples — só ajustar o badge da lista por agora).
 
-- Buscar a conversa **mais recente do contato** (sem filtrar por `is_active`), ordenando por `last_message_at desc`.
-- Se existir e estiver `is_active = false`: fazer `UPDATE` para reativar (`is_active = true`, `status = 'nina'`, `last_message_at = now()`) — o histórico de mensagens permanece vinculado a essa mesma conversa.
-- Se existir e já estiver ativa: usar como hoje.
-- Só criar conversa nova se o contato **nunca** teve uma.
+### 2. Responsável na criação de atividade
 
-### 2. Frontend mostra a conversa reativada automaticamente
-
-- `useConversations.ts`: o realtime de `conversations` já cobre `UPDATE`, então a conversa que voltou a `is_active = true` reaparece na lista ativa sozinha. Validar que o handler de UPDATE faz refetch quando `is_active` muda de false para true (adicionar fetch caso o item não esteja mais na lista local).
-
-### 3. Reabrir manual mostra histórico imediatamente
-
-- `reopenConversation` em `api.ts` já está correto (faz UPDATE preservando mensagens). Garantir no `ChatInterface.tsx` que após reabrir, o chat ativo continue selecionado e role para a última mensagem (o histórico já vem por `fetchConversations` quando o filtro muda para "Ativas").
-
-### 4. Aba "Finalizadas" continua funcional
-
-- Sem mudanças. Conversas só ficam em "Finalizadas" enquanto não houver nova interação. Quando o contato responde, ela migra automaticamente para "Ativas" com o histórico intacto.
-
-## Detalhes técnicos
-
-**Edge function `whatsapp-webhook`** — substituir o bloco de criação da conversa:
-
-```ts
-// Buscar conversa mais recente do contato (qualquer status)
-let { data: conversation } = await supabase
-  .from('conversations')
-  .select('*')
-  .eq('contact_id', contact.id)
-  .order('last_message_at', { ascending: false })
-  .limit(1)
-  .maybeSingle();
-
-if (conversation && !conversation.is_active) {
-  // Reabrir conversa anterior preservando histórico
-  const { data: reopened } = await supabase
-    .from('conversations')
-    .update({ 
-      is_active: true, 
-      status: 'nina',
-      last_message_at: new Date().toISOString(),
-    })
-    .eq('id', conversation.id)
-    .select()
-    .single();
-  conversation = reopened;
-  console.log('[Webhook] Reopened conversation:', conversation.id);
-} else if (!conversation) {
-  // Primeira conversa do contato
-  const { data: newConversation, error: convError } = await supabase
-    .from('conversations')
-    .insert({ contact_id: contact.id, status: 'nina', is_active: true, user_id: null })
-    .select()
-    .single();
-  if (convError) { /* ... */ continue; }
-  conversation = newConversation;
-}
+**Schema (migration)** — adicionar coluna em `conversation_activities`:
+```sql
+ALTER TABLE public.conversation_activities
+  ADD COLUMN IF NOT EXISTS assigned_to uuid;
 ```
+(Sem FK para `auth.users`; armazenamos o `team_members.id` ou `user_id`. Vamos usar `team_members.id` por consistência com `conversations.assigned_user_id` que já é o id do team member.)
 
-**`useConversations.ts`** — no listener realtime de `conversations` UPDATE, se `payload.new.is_active === true` e a conversa não está na lista local atual (filtro = ativas), disparar `fetchConversations()` para trazê-la com mensagens.
+**Hook `useConversationActivities.ts`**:
+- Adicionar `assigned_to?: string | null` em `ConversationActivity` e `CreateActivityInput`.
+- Repassar no insert.
+
+**`ActivityModal.tsx`**:
+- Carregar lista de `team_members` (status = `active`) via supabase.
+- Adicionar `<select>` "Responsável" (opcional) com avatar/nome.
+- Enviar `assigned_to` no `onCreate`.
+
+**`ActivitiesPanel.tsx`**:
+- Mostrar mini-avatar/nome do responsável ao lado do título de cada `ActivityItem` quando presente.
+
+### 3. Tarefas aparecendo na aba Agendamentos (`src/components/Scheduling.tsx`)
+
+- Criar novo hook leve (ou inline no Scheduling) que busca `conversation_activities` (não concluídas) com join por `contact_id` para obter o nome do lead.
+- Normalizar para o formato esperado pelos renderizadores Month/Week/Day, criando "pseudo-appointments" com:
+  - `id`: `task-{activity.id}`
+  - `title`: `📋 {activity.title} · {contactName}`
+  - `date` / `time`: derivados de `scheduled_at`
+  - `duration`: 30 (default visual)
+  - `type`: novo tipo visual `'task'` → cor âmbar; se `scheduled_at < now` e não concluída → vermelho.
+  - `metadata.source = 'activity'` para distinguir.
+- Mesclar `appointments` + `taskAppointments` ao renderizar.
+- Atualizar `getEventTypeColor` para incluir `task` (âmbar) e tratar overdue (vermelho) usando uma função auxiliar.
+- Ao clicar em uma "task" no calendário: abrir um modal simples mostrando título/descrição/horário/lead e botão "Abrir conversa" que navega para `/chat?conversation={conversation_id}`. (Não reutilizar o modal de edição de appointment para evitar acoplamento.)
+- Adicionar realtime subscription também em `conversation_activities` (além do `appointments` já existente).
+
+### 4. Detalhes técnicos
+
+- Migration aplicada via tool de migração (apenas DDL para `assigned_to`).
+- Sem alteração de RLS (a policy permissiva existente já cobre).
+- Sem mudanças em edge functions.
+
+---
 
 ## Arquivos afetados
 
-- `supabase/functions/whatsapp-webhook/index.ts` — lógica de reabertura
-- `src/hooks/useConversations.ts` — refetch quando conversa é reativada via realtime
-
-Sem migrations de banco. Sem mudança de schema. As mensagens antigas já estão vinculadas via `conversation_id` e voltam automaticamente quando a conversa é reativada.
+- `supabase/migrations/*` (nova migration: coluna `assigned_to`)
+- `src/hooks/useConversationActivities.ts`
+- `src/components/chat/ActivityModal.tsx`
+- `src/components/chat/ActivitiesPanel.tsx`
+- `src/components/ChatInterface.tsx` (cor do sino)
+- `src/components/Scheduling.tsx` (mesclar tasks no calendário)
