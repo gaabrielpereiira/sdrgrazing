@@ -462,6 +462,7 @@ export function useConversations(options?: { active?: boolean }) {
           messages: [...conv.messages, tempMessage],
           lastMessage: opts.mediaType === 'image' ? '📷 Imagem' : opts.mediaType === 'audio' ? '🎵 Áudio' : '📄 Documento',
           lastMessageTime: formatRelativeTime(new Date().toISOString()),
+          lastMessageAt: new Date().toISOString(),
         };
       }
       return conv;
