@@ -37,7 +37,20 @@ export const ActivityModal: React.FC<Props> = ({ open, onOpenChange, conversatio
   const [type, setType] = useState<ActivityType>('call');
   const [date, setDate] = useState<string>(initial.toISOString().slice(0, 10));
   const [time, setTime] = useState<string>(initial.toTimeString().slice(0, 5));
+  const [assignedTo, setAssignedTo] = useState<string>('');
+  const [members, setMembers] = useState<Array<{ id: string; name: string; avatar?: string | null }>>([]);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      const { data } = await (supabase as any)
+        .from('team_members')
+        .select('id, name, avatar, status')
+        .order('name', { ascending: true });
+      setMembers((data || []).filter((m: any) => m.status !== 'inactive'));
+    })();
+  }, [open]);
 
   const reset = () => {
     const d = defaultDate();
@@ -46,6 +59,7 @@ export const ActivityModal: React.FC<Props> = ({ open, onOpenChange, conversatio
     setType('call');
     setDate(d.toISOString().slice(0, 10));
     setTime(d.toTimeString().slice(0, 5));
+    setAssignedTo('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -61,6 +75,7 @@ export const ActivityModal: React.FC<Props> = ({ open, onOpenChange, conversatio
         description: description.trim() || undefined,
         activity_type: type,
         scheduled_at: scheduled.toISOString(),
+        assigned_to: assignedTo || null,
       });
       reset();
       onOpenChange(false);
