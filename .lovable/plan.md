@@ -1,42 +1,162 @@
+
 ## Objetivo
 
-Quando uma mensagem enviada falhar definitivamente (após esgotar as tentativas no `whatsapp-sender`), exibir um alerta vermelho ao lado da mensagem no chat com o motivo do erro, em vez do checkmark cinza.
+Trazer para a Donatella a funcionalidade de gerenciar **Message Templates do WhatsApp Cloud API**:
+
+1. **Sincronizar (puxar)** os templates já existentes na conta Meta da Donatella (usando o WABA ID + access token que já estão em `nina_settings`).
+2. **Criar / editar / excluir** templates dentro da própria Donatella e submeter à Meta para aprovação.
+3. **Listar** templates com status (APPROVED / PENDING / REJECTED), categoria, idioma e qualidade.
+4. (Opcional fase 2) **Enviar** mensagens de template via Meta a partir de uma conversa.
+
+A funcionalidade reutiliza o padrão validado no projeto **"AI Template Creator - WhatsApp API"** (`389bf17f...`), mas adaptada à arquitetura **single-tenant** e à origem de credenciais da Donatella (`nina_settings` em vez de tabela `meta_connections`).
+
+---
+
+## Arquitetura
+
+```text
+[Donatella UI: Configurações > WhatsApp Templates]
+        │
+        ├── "Sincronizar com Meta"  ──► edge: sync-whatsapp-templates
+        │                                  └── GET graph.facebook.com/v22.0/{WABA_ID}/message_templates
+        │                                  └── upsert em public.whatsapp_templates
+        │
+        ├── "Novo Template" (wizard) ──► edge: submit-whatsapp-template
+        │                                  └── POST graph.facebook.com/.../message_templates
+        │                                  └── insert em public.whatsapp_templates (status=PENDING)
+        │
+        └── Lista / Editar / Excluir ──► leitura direta (RLS) + delete chama Meta DELETE
+```
+
+Credenciais Meta lidas de `nina_settings` (campos já existentes):
+- `whatsapp_access_token`
+- `whatsapp_phone_number_id`
+- `whatsapp_business_account_id` (WABA ID — usado para templates)
+
+Se `whatsapp_business_account_id` estiver vazio, mostraremos um aviso pedindo para preenchê-lo na aba **APIs** das Configurações.
+
+---
 
 ## Mudanças
 
-### 1. `supabase/functions/whatsapp-sender/index.ts` — propagar falha para `messages`
+### 1. Migration: nova tabela `whatsapp_templates`
 
-Hoje, quando o envio falha definitivamente (3ª tentativa), apenas `send_queue` é marcada como `failed`. A linha em `messages` continua com `status='processing'` (mensagem humana) ou nem é criada (Nina). O frontend não consegue indicar a falha.
+Single-tenant, RLS permissiva como o resto da Donatella.
 
-No bloco `catch` do loop (linhas ~167-186), após o `update` em `send_queue`, quando `!shouldRetry`:
+```sql
+CREATE TABLE public.whatsapp_templates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  meta_template_id text,                 -- ID retornado pela Meta
+  name text NOT NULL,                    -- lowercase, _ , números
+  category text NOT NULL DEFAULT 'MARKETING',  -- MARKETING|UTILITY|AUTHENTICATION
+  language text NOT NULL DEFAULT 'pt_BR',
+  components jsonb NOT NULL DEFAULT '[]'::jsonb,
+  samples jsonb,
+  status text NOT NULL DEFAULT 'draft',  -- draft|PENDING|APPROVED|REJECTED|...
+  quality_rating text,
+  rejected_reason text,
+  user_id uuid,                          -- nullable (single-tenant compartilhado)
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (name, language)
+);
 
-- **Se `item.message_id` existe** (mensagem humana — registro já criado pelo `sendMessage` da API): fazer `UPDATE messages SET status='failed', metadata = metadata || { error_message, failed_at }` para esse ID.
-- **Se `item.message_id` é null** (mensagem Nina — registro só seria criado em caso de sucesso): fazer `INSERT` com `status='failed'`, mesmo `content`/`type`/`from_type`/`media_url` do item da fila e `metadata.error_message` + `metadata.failed_at`. Isso garante que a mensagem aparece no histórico marcada como não entregue.
+ALTER TABLE public.whatsapp_templates ENABLE ROW LEVEL SECURITY;
 
-O `errorMessage` já é capturado no catch — vamos persistir a string crua (vinda do `responseData.error?.message` do WhatsApp) em `metadata.error_message`.
+CREATE POLICY "Authenticated users can access all whatsapp_templates"
+ON public.whatsapp_templates FOR ALL TO authenticated
+USING (auth.role() = 'authenticated')
+WITH CHECK (auth.role() = 'authenticated');
 
-### 2. `src/types.ts` — refletir status `failed` no UI
+CREATE TRIGGER update_whatsapp_templates_updated_at
+BEFORE UPDATE ON public.whatsapp_templates
+FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-- Estender `UIMessage.status` de `'sent' | 'delivered' | 'read'` para incluir `'failed'`.
-- Adicionar campo opcional `errorMessage?: string | null` em `UIMessage`.
-- Em `transformDBToUIMessage`: quando `msg.status === 'failed'`, retornar `status: 'failed'` e popular `errorMessage` a partir de `msg.metadata?.error_message`.
-- Atualizar `mapDBMessageStatus` para preservar `'failed'`.
+ALTER PUBLICATION supabase_realtime ADD TABLE public.whatsapp_templates;
+```
 
-### 3. `src/components/ChatInterface.tsx` — indicador visual
+### 2. Edge Function `sync-whatsapp-templates`
 
-No bloco que renderiza os ícones de status (linhas ~1014-1027), adicionar uma ramificação para `msg.status === 'failed'`:
+- `verify_jwt = false` (padrão Donatella).
+- Lê credenciais de `nina_settings` (registro com `user_id IS NULL` — fallback igual ao resto do projeto).
+- `GET https://graph.facebook.com/v22.0/{waba_id}/message_templates?limit=250&fields=name,language,status,category,components,quality_score,id,rejected_reason`
+- Faz **upsert** em `whatsapp_templates` por `meta_template_id` (e por `(name, language)` para registros locais ainda sem `meta_template_id`).
+- Retorna `{ imported, updated, total }`.
 
-- Substituir o `Check`/`CheckCheck` por um `AlertCircle` vermelho (`text-red-500`) com `Tooltip` (já há `tooltip` no projeto) ou simples `title=` mostrando "Não entregue" + o `msg.errorMessage` quando disponível.
-- Acrescentar um pequeno texto inline abaixo do timestamp: `"Não entregue"` em vermelho-claro (`text-red-400 text-[10px]`) seguido do motivo entre parênteses se `errorMessage` existir e for curto (limitar a ~80 chars com truncate via `title`).
-- Adicionar `AlertCircle` à lista de imports do `lucide-react` no topo do arquivo.
+### 3. Edge Function `submit-whatsapp-template`
 
-### 4. Bolha da mensagem (toque visual)
+Adaptação do `submit-template` do projeto referência:
+- Recebe `{ templateData, templateId?, isEdit? }`.
+- Lê credenciais de `nina_settings`.
+- Constrói payload Meta (HEADER/BODY/FOOTER/BUTTONS) com extração de variáveis `{{n}}`, sanitização de botões e suporte a header de texto (mídia fica como upgrade futuro).
+- `POST` para criar ou `POST` no `meta_template_id` para editar.
+- Trata erro de duplicado (`error_subcode 2388024`) buscando o template existente e atualizando.
+- Salva em `whatsapp_templates` com `status` retornado pela Meta (geralmente `PENDING`).
 
-Na `div` da bolha (área `isOutgoing` que já tem classes condicionais por `fromType`), adicionar uma borda vermelha sutil quando `msg.status === 'failed'`: `ring-1 ring-red-500/40`. Mantém o estilo consistente com o tema escuro existente (sem cores hardcoded fora dos tokens — usaremos as classes `red-500/red-400` que já são usadas em outros lugares como `LostReasonModal`).
+### 4. Edge Function `delete-whatsapp-template`
 
-## Observações técnicas
+- `DELETE https://graph.facebook.com/v22.0/{waba_id}/message_templates?name={name}` (ou por `hsm_id` quando aplicável).
+- Após sucesso, remove o registro local.
 
-- Não exige migration: o enum `message_status` já inclui `'failed'`, e `metadata` já é `jsonb` em `messages`.
-- Realtime: o `UPDATE` em `messages` já é coberto pelo handler `UPDATE` em `useConversations.ts`, então a UI atualiza sozinha quando a falha for registrada.
-- Não mexer em retries em si — apenas refletir o estado final.
-- Mensagens temporárias (`temp-*`) seguem mostrando o check normal; só quando o backend marca `failed` é que o alerta aparece.
+### 5. Frontend
+
+#### 5.1 Nova rota e item de menu
+- Em `src/App.tsx`: adicionar `<Route path="/templates" element={<WhatsAppTemplates />} />`.
+- Em `src/components/Sidebar.tsx`: adicionar item `{ id: 'templates', label: 'Templates WhatsApp', icon: FileText }`.
+
+#### 5.2 `src/components/WhatsAppTemplates.tsx` (nova página)
+- Header com botão **"Sincronizar com Meta"** (chama `sync-whatsapp-templates`) e **"Novo Template"**.
+- Tabela com colunas: Nome, Categoria, Idioma, Status (badge colorido por status), Qualidade, Atualizado em, Ações (Editar / Excluir / Ver preview).
+- Filtros: por status e por categoria.
+- Estado vazio com CTA de sincronizar/criar.
+- Aviso amarelo no topo quando `nina_settings.whatsapp_business_account_id` estiver vazio, com link para Configurações > APIs.
+
+#### 5.3 `src/components/templates/TemplateEditorModal.tsx` (modal/drawer)
+Wizard simplificado (1 tela com seções) baseado no projeto referência:
+- **Básico**: nome (validação `^[a-z0-9_]+$`), idioma (select), categoria.
+- **Header** (opcional): tipo TEXT/IMAGE/VIDEO/DOCUMENT (na fase 1 só TEXT — mídia fica anotada como follow-up).
+- **Body** (obrigatório): textarea com contador (≤1024 chars), detector de variáveis `{{1}}..{{n}}`, campos de "exemplo" para cada variável.
+- **Footer** (opcional): texto curto.
+- **Botões** (opcional): Quick Reply, URL, Phone — máximo 10.
+- **Preview** (lado direito): bolha estilo WhatsApp renderizando o template em tempo real (componente novo `WhatsAppBubblePreview` simplificado, sem copiar o do projeto referência inteiro).
+- Submeter chama `submit-whatsapp-template`.
+
+#### 5.4 `src/services/api.ts`
+Adicionar:
+```ts
+templates: {
+  list:    () => supabase.from('whatsapp_templates').select('*').order('updated_at', { ascending: false }),
+  syncFromMeta: () => supabase.functions.invoke('sync-whatsapp-templates'),
+  submit:  (templateData, templateId?) => supabase.functions.invoke('submit-whatsapp-template', { body: { templateData, templateId, isEdit: !!templateId } }),
+  remove:  (id, name) => supabase.functions.invoke('delete-whatsapp-template', { body: { id, name } }),
+}
+```
+
+### 6. (Fase 2 — opcional, pode ficar fora desta entrega) Envio
+- Edge `send-whatsapp-template` semelhante ao `send-message` do projeto referência.
+- Botão "Enviar template" dentro de uma conversa no chat, abrindo modal para escolher template aprovado e preencher variáveis.
+
+---
+
+## Detalhes técnicos relevantes
+
+- **Versão da Graph API**: `v22.0` (mesmo que o projeto referência).
+- **Categorias**: MARKETING / UTILITY / AUTHENTICATION.
+- **Linguagens iniciais**: `pt_BR`, `en_US`, `es_ES` (mais podem ser adicionadas no select).
+- **Validação de variáveis**: regex `\{\{(\d+)\}\}` — sequenciais começando em 1, nunca no início/fim do body, sample obrigatório.
+- **Realtime**: a tabela é adicionada ao `supabase_realtime` para a lista atualizar sozinha quando o status mudar (sync periódico no futuro pode ser cron).
+- **Sem foreign keys** para `auth.users` (consistente com o resto do projeto single-tenant).
+- **Erros Meta**: mensagem amigável extraída de `error.error_user_msg || error.message`; `error_subcode 2388024` (template duplicado) tratado com auto-update.
+
+## Fora do escopo desta entrega
+- Geração de templates por IA (Copy → Template) — pode ser uma fase 3 reaproveitando `generate-templates-from-copy` com Lovable AI Gateway.
+- Upload de mídia (imagem/vídeo/documento) no header — fase 2.
+- Multi-instância WhatsApp — Donatella é single-tenant com uma conexão Meta.
+- Envio em massa / analytics — fora do escopo agora.
+
+## Resultado para o usuário
+
+Na sidebar aparecerá **"Templates WhatsApp"**. Ao entrar:
+- Um clique em **Sincronizar com Meta** já traz todos os templates existentes da conta WhatsApp Business conectada.
+- Um clique em **Novo Template** abre um editor com preview ao vivo, valida as regras da Meta e envia para aprovação.
+- A lista mostra status em tempo real (APPROVED / PENDING / REJECTED) com motivo da rejeição quando houver.
