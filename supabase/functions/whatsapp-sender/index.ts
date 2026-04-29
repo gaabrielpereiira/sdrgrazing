@@ -208,6 +208,60 @@ serve(async (req) => {
   }
 });
 
+async function resolveHumanSenderName(
+  supabase: any,
+  conversationId: string,
+  metadata: any
+): Promise<string | null> {
+  try {
+    // 1. Try assigned_user_id from conversation
+    const { data: conv } = await supabase
+      .from('conversations')
+      .select('assigned_user_id')
+      .eq('id', conversationId)
+      .maybeSingle();
+
+    const candidateIds: string[] = [];
+    if (conv?.assigned_user_id) candidateIds.push(conv.assigned_user_id);
+    const senderId = metadata?.sender_user_id;
+    if (senderId && !candidateIds.includes(senderId)) candidateIds.push(senderId);
+
+    for (const uid of candidateIds) {
+      // team_members.name
+      const { data: tm } = await supabase
+        .from('team_members')
+        .select('name')
+        .eq('user_id', uid)
+        .maybeSingle();
+      if (tm?.name) return tm.name;
+
+      // profiles.full_name
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('user_id', uid)
+        .maybeSingle();
+      if (prof?.full_name) return prof.full_name;
+    }
+
+    // 3. Fallback: nina_settings.sdr_name (any)
+    const { data: ninaSettings } = await supabase
+      .from('nina_settings')
+      .select('sdr_name')
+      .not('sdr_name', 'is', null)
+      .limit(1)
+      .maybeSingle();
+    if (ninaSettings?.sdr_name) return ninaSettings.sdr_name;
+  } catch (e) {
+    console.warn('[Sender] resolveHumanSenderName failed:', e);
+  }
+  return null;
+}
+
+function sanitizeName(name: string): string {
+  return name.replace(/[\r\n]+/g, ' ').trim().slice(0, 40);
+}
+
 async function sendMessage(supabase: any, settings: any, queueItem: any) {
   console.log(`[Sender] Sending message: ${queueItem.id}`);
 
@@ -224,6 +278,27 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
 
   const recipient = contact.whatsapp_id || contact.phone_number;
 
+  // For human-sent messages, resolve attendant name and prefix the outgoing
+  // text/caption so the client sees who is attending — even with no assignee.
+  // The DB-stored content remains untouched (no duplicate name in internal UI).
+  let outgoingText: string = queueItem.content || '';
+  if (queueItem.from_type === 'human') {
+    const rawName = await resolveHumanSenderName(
+      supabase,
+      queueItem.conversation_id,
+      queueItem.metadata
+    );
+    if (rawName) {
+      const name = sanitizeName(rawName);
+      if (outgoingText && outgoingText.trim().length > 0) {
+        outgoingText = `*${name}*:\n${outgoingText}`;
+      } else {
+        outgoingText = `*${name}*`;
+      }
+      console.log(`[Sender] Prefixed human message with attendant: ${name}`);
+    }
+  }
+
   // Build WhatsApp API payload
   let payload: any = {
     messaging_product: 'whatsapp',
@@ -234,14 +309,14 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
   switch (queueItem.message_type) {
     case 'text':
       payload.type = 'text';
-      payload.text = { body: queueItem.content };
+      payload.text = { body: outgoingText };
       break;
     
     case 'image':
       payload.type = 'image';
       payload.image = { 
         link: queueItem.media_url,
-        caption: queueItem.content || undefined
+        caption: outgoingText || undefined
       };
       break;
     
@@ -260,7 +335,7 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
     
     default:
       payload.type = 'text';
-      payload.text = { body: queueItem.content };
+      payload.text = { body: outgoingText };
   }
 
   console.log('[Sender] WhatsApp API payload:', JSON.stringify(payload, null, 2));
