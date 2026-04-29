@@ -992,6 +992,14 @@ const ChatInterface: React.FC = () => {
                                     : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
                                 } ${msg.status === 'failed' ? 'ring-1 ring-red-500/60' : ''}`}
                               >
+                                {msg.metadata?.template?.name && (
+                                  <div className={`mb-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide ${
+                                    isOutgoing ? 'bg-white/15 text-white/90' : 'bg-slate-900/60 text-cyan-300'
+                                  }`}>
+                                    <LayoutTemplate className="w-3 h-3" />
+                                    Template · {msg.metadata.template.name}
+                                  </div>
+                                )}
                                 {replied && (
                                   <button
                                     type="button"
