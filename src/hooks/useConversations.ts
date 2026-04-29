@@ -213,7 +213,7 @@ export function useConversations(options?: { active?: boolean }) {
                     ...conv,
                     messages: updatedMessages,
                     lastMessage: newMessage.content || '',
-                    lastMessageTime: 'Agora'
+                    lastMessageTime: formatRelativeTime(newMessage.sent_at)
                   };
                 }
 
