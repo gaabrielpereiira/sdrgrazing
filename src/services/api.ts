@@ -1438,6 +1438,15 @@ export const api = {
   ): Promise<{ id: string; mediaUrl: string }> => {
     console.log(`[API] Sending ${opts.mediaType} to conversation ${conversationId}`);
 
+    // Capture current auth user (auth may be disabled — tolerate null)
+    let senderUserId: string | null = null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      senderUserId = user?.id ?? null;
+    } catch {
+      senderUserId = null;
+    }
+
     // 1) Get conversation -> contact_id
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
@@ -1482,6 +1491,7 @@ export const api = {
         media_type: file.type || null,
         sent_at: new Date().toISOString(),
         reply_to_id: opts.replyToId || null,
+        metadata: senderUserId ? { sender_user_id: senderUserId } : {},
       })
       .select('id')
       .single();
@@ -1503,6 +1513,7 @@ export const api = {
         media_url: publicUrl,
         priority: 2,
         message_id: msgData.id,
+        metadata: senderUserId ? { sender_user_id: senderUserId } : {},
       });
 
     if (sendError) {
