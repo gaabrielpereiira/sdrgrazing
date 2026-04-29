@@ -891,6 +891,57 @@ const Scheduling: React.FC = () => {
          </div>
       )}
 
+      {/* Task (Conversation Activity) Detail Modal */}
+      {selectedTaskId && (() => {
+        const task = taskAppointments.find(t => t.id === selectedTaskId);
+        const meta = taskMeta[selectedTaskId];
+        if (!task) return null;
+        const due = new Date(`${task.date}T${task.time}:00`).getTime() <= Date.now();
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className={`p-6 border-b border-slate-800 flex justify-between items-start ${due ? 'bg-rose-500/10' : 'bg-amber-500/10'}`}>
+                <div>
+                  <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${due ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40'}`}>
+                    {due ? 'Tarefa atrasada' : 'Tarefa'}
+                  </span>
+                  <h3 className="text-lg font-bold text-white mt-2">{task.title}</h3>
+                </div>
+                <button onClick={() => setSelectedTaskId(null)} className="text-slate-400 hover:text-white transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-3 text-sm text-slate-300">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-500" />
+                  {task.date.split('-').reverse().join('/')} às {task.time}
+                </div>
+                {meta?.assigneeName && (
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 text-slate-500" />
+                    Responsável: <span className="text-white">{meta.assigneeName}</span>
+                  </div>
+                )}
+                {meta?.description && (
+                  <div className="flex items-start gap-2">
+                    <AlignLeft className="w-4 h-4 text-slate-500 mt-0.5" />
+                    <span className="text-slate-400 whitespace-pre-line">{meta.description}</span>
+                  </div>
+                )}
+              </div>
+              <div className="p-6 border-t border-slate-800 flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => setSelectedTaskId(null)}>Fechar</Button>
+                {meta?.conversation_id && (
+                  <Button onClick={() => { navigate(`/chat?conversation=${meta.conversation_id}`); setSelectedTaskId(null); }}>
+                    Abrir conversa
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Edit Appointment Modal */}
       {showEditModal && selectedAppointment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
