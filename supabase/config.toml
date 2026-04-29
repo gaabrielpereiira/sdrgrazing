@@ -29,3 +29,12 @@ verify_jwt = false
 
 [functions.activity-reminder-checker]
 verify_jwt = false
+
+[functions.sync-whatsapp-templates]
+verify_jwt = false
+
+[functions.submit-whatsapp-template]
+verify_jwt = false
+
+[functions.delete-whatsapp-template]
+verify_jwt = false
