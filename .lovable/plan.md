@@ -1,71 +1,104 @@
 ## Objetivo
 
-1. O sininho ao lado do nome do lead (na lista de chats) deve ficar **vermelho e pulsante** quando uma tarefa daquela conversa estiver **vencida ou no horário** (alerta visual).
-2. Ao criar uma atividade no chat, permitir escolher um **responsável** (membro do time).
-3. As **atividades/tarefas** devem aparecer também na aba **Agendamentos**, junto com os appointments, mostrando nome do lead, título da tarefa e horário.
+1. Marcar a conversa como **Pendente** sempre que a IA acionar atendimento humano (`status = 'human'`) e ainda não houver resposta humana — não apenas quando a última mensagem for do cliente.
+2. Corrigir datas incorretas no rótulo de tempo da lista de conversas (ex.: conversa de 2 dias atrás aparecendo como "hoje" / "Xh").
 
 ---
 
-## Mudanças
+## 1. Pendente quando IA chamar humano
 
-### 1. Sininho vermelho quando a tarefa estiver na hora (`src/components/ChatInterface.tsx`)
+**Arquivo:** `src/components/ChatInterface.tsx` (função `isPending`, linha ~385)
 
-Hoje, em `~linha 706-714`, o badge do sininho aparece sempre âmbar quando há atividade pendente. Vamos calcular se a próxima atividade está vencida (ou prestes a vencer) e trocar a cor:
+Hoje a regra é: pendente se a última mensagem for do cliente (`fromType === 'user'`).
 
-- Se `nextAt <= agora`: badge **vermelho** (`bg-rose-500/20 text-rose-300 border-rose-500/40`) com `animate-pulse`.
-- Caso contrário: mantém âmbar atual.
+Nova regra (OR):
+- Última mensagem é do cliente, **OU**
+- `chat.status === 'human'` e nenhuma mensagem posterior à transferência veio de um humano (`fromType === 'human'`).
 
-Também replicar o destaque vermelho no header do chat ativo, se já existir indicador equivalente (manter consistência simples — só ajustar o badge da lista por agora).
+Implementação simples e robusta: pendente se a última mensagem **não for de um humano** quando o status for `human`. Ou seja:
 
-### 2. Responsável na criação de atividade
-
-**Schema (migration)** — adicionar coluna em `conversation_activities`:
-```sql
-ALTER TABLE public.conversation_activities
-  ADD COLUMN IF NOT EXISTS assigned_to uuid;
+```ts
+const isPending = (chat) => {
+  const last = chat.messages[chat.messages.length - 1];
+  // Cliente mandou e não respondemos
+  if (last?.fromType === 'user') return true;
+  // IA pediu atendimento humano e ainda ninguém respondeu como humano
+  if (chat.status === 'human' && last?.fromType !== 'human') return true;
+  // Fallback sem mensagens carregadas
+  if (!last && chat.unreadCount > 0) return true;
+  return false;
+};
 ```
-(Sem FK para `auth.users`; armazenamos o `team_members.id` ou `user_id`. Vamos usar `team_members.id` por consistência com `conversations.assigned_user_id` que já é o id do team member.)
 
-**Hook `useConversationActivities.ts`**:
-- Adicionar `assigned_to?: string | null` em `ConversationActivity` e `CreateActivityInput`.
-- Repassar no insert.
-
-**`ActivityModal.tsx`**:
-- Carregar lista de `team_members` (status = `active`) via supabase.
-- Adicionar `<select>` "Responsável" (opcional) com avatar/nome.
-- Enviar `assigned_to` no `onCreate`.
-
-**`ActivitiesPanel.tsx`**:
-- Mostrar mini-avatar/nome do responsável ao lado do título de cada `ActivityItem` quando presente.
-
-### 3. Tarefas aparecendo na aba Agendamentos (`src/components/Scheduling.tsx`)
-
-- Criar novo hook leve (ou inline no Scheduling) que busca `conversation_activities` (não concluídas) com join por `contact_id` para obter o nome do lead.
-- Normalizar para o formato esperado pelos renderizadores Month/Week/Day, criando "pseudo-appointments" com:
-  - `id`: `task-{activity.id}`
-  - `title`: `📋 {activity.title} · {contactName}`
-  - `date` / `time`: derivados de `scheduled_at`
-  - `duration`: 30 (default visual)
-  - `type`: novo tipo visual `'task'` → cor âmbar; se `scheduled_at < now` e não concluída → vermelho.
-  - `metadata.source = 'activity'` para distinguir.
-- Mesclar `appointments` + `taskAppointments` ao renderizar.
-- Atualizar `getEventTypeColor` para incluir `task` (âmbar) e tratar overdue (vermelho) usando uma função auxiliar.
-- Ao clicar em uma "task" no calendário: abrir um modal simples mostrando título/descrição/horário/lead e botão "Abrir conversa" que navega para `/chat?conversation={conversation_id}`. (Não reutilizar o modal de edição de appointment para evitar acoplamento.)
-- Adicionar realtime subscription também em `conversation_activities` (além do `appointments` já existente).
-
-### 4. Detalhes técnicos
-
-- Migration aplicada via tool de migração (apenas DDL para `assigned_to`).
-- Sem alteração de RLS (a policy permissiva existente já cobre).
-- Sem mudanças em edge functions.
+A tag "Pendente" some automaticamente assim que um humano enviar uma mensagem (a última mensagem passa a ser `fromType === 'human'`). Toda a lógica de ordenação (pendentes no topo) e de exibição da badge "Pendente" no card e no header já depende dessa função, então funciona sem outras mudanças.
 
 ---
 
-## Arquivos afetados
+## 2. Correção do sistema de datas
 
-- `supabase/migrations/*` (nova migration: coluna `assigned_to`)
-- `src/hooks/useConversationActivities.ts`
-- `src/components/chat/ActivityModal.tsx`
-- `src/components/chat/ActivitiesPanel.tsx`
-- `src/components/ChatInterface.tsx` (cor do sino)
-- `src/components/Scheduling.tsx` (mesclar tasks no calendário)
+**Arquivo:** `src/types.ts` — função `formatRelativeTime` (linha ~379) e refresh.
+
+### Bug atual
+```
+if (diffHours < 24) return `${diffHours}h`;
+if (diffDays === 1) return 'Ontem';
+```
+- Usa `Math.floor(diffMs/3600000)`, então uma mensagem de **anteontem 23h** vista hoje às 10h dá `diffHours = 35`, `diffDays = 1` → mostra **"Ontem"** (errado, é anteontem).
+- Pior: mensagem de **ontem 22h** vista hoje às 09h dá `diffHours = 11` → mostra **"11h"**, escondendo que mudou de dia.
+- Além disso, `lastMessageTime` é setado como string `"Agora"` no realtime e nunca recalculado — conversas antigas continuam aparecendo como "Agora" / "5min" mesmo dias depois, até o próximo `fetchConversations`.
+
+### Correção da função
+Comparar **dias de calendário**, não janela de 24h:
+
+```ts
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dayDiff = Math.round(
+    (startOfDay(now) - startOfDay(date)) / 86400000
+  );
+
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+
+  if (dayDiff === 0) {
+    if (diffMins < 1) return 'Agora';
+    if (diffMins < 60) return `${diffMins}min`;
+    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+  if (dayDiff === 1) return 'Ontem';
+  if (dayDiff < 7) return `${dayDiff}d`;
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+```
+
+Regras resultantes:
+- Mesmo dia de calendário: `Agora` / `Xmin` / `HH:MM`.
+- Dia de calendário anterior: `Ontem`.
+- 2–6 dias: `Nd`.
+- ≥7 dias: `dd/mm`.
+
+### Refresh do rótulo
+No realtime (`src/hooks/useConversations.ts`) parar de gravar a string `"Agora"` ao receber mensagem nova — gravar o timestamp ISO real e deixar a UI formatar. Para isso:
+
+- No handler de `INSERT` em `messages` e nas otimistic updates de `sendMessage`/`sendMediaMessage`, em vez de `lastMessageTime: 'Agora'` chamar `formatRelativeTime(newMessage.sent_at)` (ou para otimista, `formatRelativeTime(new Date().toISOString())`).
+- Em `ChatInterface.tsx`, recomputar o rótulo na renderização da lista usando o `last_message_at` original. Para garantir refresh enquanto o app fica aberto, adicionar um `useEffect` com `setInterval(() => setTick(t=>t+1), 60_000)` no componente da lista para forçar re-render a cada minuto.
+
+Isso resolve tanto o caso "diz que é hoje mas é de 2 dias" quanto o caso "fica preso em Agora".
+
+---
+
+## Detalhes técnicos / arquivos
+
+- `src/components/ChatInterface.tsx`
+  - Atualizar `isPending` (regra com `status === 'human'`).
+  - Adicionar tick de 60s para re-render dos rótulos relativos.
+- `src/types.ts`
+  - Reescrever `formatRelativeTime` baseado em **dias de calendário**.
+- `src/hooks/useConversations.ts`
+  - Trocar `lastMessageTime: 'Agora'` por `formatRelativeTime(...)` nos 4 pontos (insert realtime, sendMessage otimista, sendMediaMessage otimista, optional: media optimistic).
+
+Sem migrações de banco. Sem mudança de API. Compatível com lógica existente de ordenação (pendentes no topo) e de histórico ao reabrir conversas.
