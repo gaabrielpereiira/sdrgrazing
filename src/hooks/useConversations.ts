@@ -227,7 +227,7 @@ export function useConversations(options?: { active?: boolean }) {
                   ...conv,
                   messages: [...conv.messages, uiMessage],
                   lastMessage: newMessage.content || '',
-                  lastMessageTime: 'Agora',
+                  lastMessageTime: formatRelativeTime(newMessage.sent_at),
                   // Increment unread if it's from user
                   unreadCount: newMessage.from_type === 'user' 
                     ? conv.unreadCount + 1 
