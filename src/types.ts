@@ -336,6 +336,7 @@ export function transformDBToUIConversation(
     assignedUserName: null, // Will be populated if needed
     lastMessage: lastMsg?.content || '',
     lastMessageTime: formatRelativeTime(conv.last_message_at),
+    lastMessageAt: conv.last_message_at,
     unreadCount,
     tags: [...(conv.tags || []), ...(conv.contact?.tags || [])],
     messages: sortedMessages.map(transformDBToUIMessage),
