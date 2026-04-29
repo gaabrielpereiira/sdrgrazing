@@ -1011,7 +1011,7 @@ const ChatInterface: React.FC = () => {
                                 {renderMessageContent(msg)}
                               </div>
 
-                              <div className="flex items-center mt-1.5 gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity px-1">
+                              <div className="flex items-center mt-1.5 gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity px-1 flex-wrap">
                                 {isOutgoing && msg.fromType === 'nina' && (
                                   <Bot className="w-3 h-3 text-violet-400" />
                                 )}
@@ -1020,6 +1020,15 @@ const ChatInterface: React.FC = () => {
                                 )}
                                 <span className="text-[10px] text-slate-500 font-medium">{msg.timestamp}</span>
                                 {isOutgoing && (
+                                  msg.status === 'failed' ? (
+                                    <span
+                                      className="flex items-center gap-1 text-[10px] text-red-400 font-medium"
+                                      title={msg.errorMessage ? `Não entregue: ${msg.errorMessage}` : 'Não entregue ao destinatário'}
+                                    >
+                                      <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                                      <span>Não entregue{msg.errorMessage ? ` — ${msg.errorMessage}` : ''}</span>
+                                    </span>
+                                  ) :
                                   msg.status === 'read' ? <CheckCheck className="w-3.5 h-3.5 text-cyan-500" /> :
                                   msg.status === 'delivered' ? <CheckCheck className="w-3.5 h-3.5 text-slate-500" /> :
                                   <Check className="w-3.5 h-3.5 text-slate-500" />
