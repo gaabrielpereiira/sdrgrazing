@@ -77,6 +77,16 @@ const ActivityItem: React.FC<{
             <span className="text-slate-600">·</span>
             <span className={overdue && !isDone ? 'text-rose-400' : 'text-slate-500'}>{rel}</span>
           </div>
+          {assigneeName && (
+            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-400">
+              {assigneeAvatar ? (
+                <img src={assigneeAvatar} alt={assigneeName} className="w-3.5 h-3.5 rounded-full" />
+              ) : (
+                <User className="w-3 h-3" />
+              )}
+              <span className="truncate">{assigneeName}</span>
+            </div>
+          )}
         </div>
         {!isDone && (
           <div className="flex flex-col gap-1">
