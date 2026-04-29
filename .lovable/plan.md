@@ -1,93 +1,103 @@
-## Objetivo
+## Diagnóstico
 
-Quando um humano (atendente) envia uma mensagem pelo chat, o cliente deve **ver o nome de quem está atendendo** no início da mensagem do WhatsApp, mesmo quando a conversa não tem responsável atribuído (`assigned_user_id = null`).
+Investiguei o banco e encontrei a raiz dos três sintomas:
 
-Exemplo do que o cliente vai receber no WhatsApp:
+### Estado atual no banco
 
-```
-*João* :
-Oi Maria! Tudo bem?
-```
+**`team_members`** (3 registros — todos com `user_id = NULL` e `status = 'invited'`):
+- Gabriel — `gabriel@sharkassessoria.com.br` — id `ffec7a15…`
+- Tais Sodre — `tais.sodre@grazingtable.com.br` — id `4d1f5b8f…`
+- Allan Abrunhosa — `allan.abrunhosa@grazingtable.com.br` — id `237e4b6e…`
 
-Na UI interna do chat continua aparecendo só o conteúdo (sem o prefixo duplicado).
+**`auth.users` + `profiles`** (3 usuários reais já cadastrados, com os MESMOS emails):
+- Gabriel Pereira — auth id `cb616480…`
+- Allan Abrunhosa — auth id `45b14871…`
+- Tais Sodre dos Santos — auth id `996bf7ab…`
 
----
+**`conversations.assigned_user_id`** está armazenando o `team_members.id` (ex.: `ffec7a15…`, `4d1f5b8f…`), e NÃO o `auth.users.id`.
 
-## Como vai funcionar
+### Os 3 bugs explicados
 
-### Resolução do nome do atendente (ordem de prioridade)
+**Bug 1 — "Todos aparecem como Pendente"**
+`team_members.status` nunca é atualizado para `'active'` quando o convidado realmente cria conta. A criação do membro insere com `status: 'invited'` e `user_id: null` e nada nunca religa isso ao `auth.users`.
 
-Para cada mensagem `from_type = 'human'` enviada:
+**Bug 2 — "Não aparece todos os usuários corretamente"**
+A página Equipe lista somente o que existe em `team_members`. Se um usuário se cadastrou via `Auth` (existe em `auth.users` + `profiles`) mas ninguém o convidou via UI, ele simplesmente não aparece. Não há sincronização entre `auth.users` e `team_members`.
 
-1. **Responsável da conversa** — se `conversations.assigned_user_id` está setado, buscar `team_members.name` (preferindo `team_members.user_id = assigned_user_id`, com fallback por `email` do auth user).
-2. **Usuário logado que clicou em enviar** — se passo 1 falhar, usar o nome do usuário autenticado: `profiles.full_name` pelo `auth.uid()` atual.
-3. **Fallback genérico** — se nada disso existir (auth desativado, sem profile), usar o `sdr_name` configurado em `nina_settings` (já é o "nome da casa" exibido para o cliente).
-4. Se nem `sdr_name` existir, não prefixa nada (comportamento atual).
-
-Assim o requisito é atendido: **sempre tem um nome**, e prioriza o atendente real quando dá pra identificar.
-
-### Onde o prefixo é aplicado
-
-Apenas no envio para o WhatsApp (`supabase/functions/whatsapp-sender/index.ts`), no momento de montar o `payload.text.body` para mensagens com `from_type = 'human'`. Formato:
-
-```
-*<Nome>*:
-<conteúdo original>
-```
-
-A linha em branco entre nome e conteúdo melhora legibilidade no WhatsApp.
-
-### O que NÃO muda
-
-- A coluna `messages.content` continua sendo salva **sem o prefixo** (UI interna do chat continua limpa, sem nome duplicado em cima da própria mensagem do atendente).
-- Mensagens da Nina (`from_type = 'nina'`) **não** recebem prefixo — a Nina já se apresenta pelo prompt.
-- Mídia com `caption` (imagem/vídeo) também recebe o prefixo no caption quando enviada por humano.
-- Áudio e documento sem texto: não há onde colocar o nome (WhatsApp não permite caption em áudio puro), então enviamos como antes.
+**Bug 3 — "Nome de quem está atendendo está errado"**
+No `whatsapp-sender/index.ts`, `resolveHumanSenderName` busca `team_members.user_id = assigned_user_id`. Mas `conversations.assigned_user_id` na verdade contém o `team_members.id` (não o auth user id). Resultado: a query falha, cai no fallback `nina_settings.sdr_name` (nome genérico da casa) ou pega outro membro errado, e o cliente vê o nome errado.
 
 ---
 
-## Detalhes técnicos
+## Plano de correção
 
-### 1. `supabase/functions/whatsapp-sender/index.ts`
+### 1. Migration: vincular team_members a auth.users por email + ativar status
 
-No worker que processa o `send_queue`:
+```sql
+-- Vincular membros existentes ao auth user correspondente (case-insensitive)
+UPDATE public.team_members tm
+SET user_id = u.id,
+    status  = 'active',
+    updated_at = now()
+FROM auth.users u
+WHERE tm.user_id IS NULL
+  AND lower(tm.email) = lower(u.email);
 
-- Após `claim_send_queue_batch`, para cada item com `from_type = 'human'`:
-  - Buscar `conversations.assigned_user_id` do item.
-  - Resolver nome do atendente nessa ordem:
-    1. `team_members` filtrando por `user_id = assigned_user_id` → `name`.
-    2. `profiles` por `user_id = assigned_user_id` → `full_name`.
-    3. Se a fila tiver `metadata.sender_user_id` (setado no `api.sendMessage`), repetir os passos 1–2 com esse id.
-    4. `nina_settings.sdr_name` (cache da settings já feito antes do loop).
-  - Sanitizar (truncar nome a ~40 chars, remover `\n`).
-  - Construir `prefixedContent = \`*${name}*:\n${queueItem.content}\`` quando há nome.
-  - Usar `prefixedContent` em `payload.text.body` (type=text) e em `caption` (type=image/video). Para `document`, manter `filename` original e prefixar somente o `caption` se aplicável.
-- **Não** atualizar o `messages.content` com o prefixo — só o payload enviado ao WhatsApp.
-
-### 2. `src/services/api.ts` — `sendMessage` e `sendMediaMessage`
-
-Para garantir que o passo 3 da resolução funcione mesmo sem `assigned_user_id`:
-
-- Pegar `auth.user.id` (se houver) e enviar no `metadata` da fila:
-
-```ts
-.from('send_queue').insert({
-  ...,
-  metadata: { sender_user_id: currentUserId ?? null }
-})
+-- Criar team_member para qualquer auth user que ainda não tem entrada
+INSERT INTO public.team_members (name, email, role, status, user_id, weight)
+SELECT
+  COALESCE(p.full_name, split_part(u.email, '@', 1)),
+  u.email,
+  CASE WHEN ur.role = 'admin' THEN 'admin'::member_role ELSE 'agent'::member_role END,
+  'active'::member_status,
+  u.id,
+  1
+FROM auth.users u
+LEFT JOIN public.profiles p   ON p.user_id = u.id
+LEFT JOIN public.user_roles ur ON ur.user_id = u.id
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.team_members tm WHERE lower(tm.email) = lower(u.email)
+);
 ```
 
-E também no `messages.metadata` (`sender_user_id`) para auditoria futura. Tolerar usuário ausente (auth desativado).
+### 2. Trigger automático para futuros signups
 
-### 3. Sem migração de banco
+Estender `handle_new_user()` (já existe) para também:
+- Inserir/atualizar registro em `team_members` com `user_id`, `status='active'` e nome do `raw_user_meta_data.full_name`.
+- Se já existe um `team_members` com mesmo email (convite enviado antes do signup), só atualiza `user_id` + `status='active'` + `name`.
 
-Todos os campos necessários já existem (`send_queue.metadata`, `messages.metadata`, `team_members.user_id`, `profiles.full_name`, `nina_settings.sdr_name`).
+### 3. Corrigir resolução de nome no WhatsApp sender
+
+`supabase/functions/whatsapp-sender/index.ts` — função `resolveHumanSenderName`:
+
+Estratégia de busca, em ordem:
+1. Buscar `conversations.assigned_user_id` da conversa.
+2. Tratar esse valor como **podendo ser `team_members.id` OU `auth.users.id`**:
+   - Tentar `team_members WHERE id = assigned_user_id` → pega `name`.
+   - Se não achar, tentar `team_members WHERE user_id = assigned_user_id` → `name`.
+   - Se ainda não achar, `profiles WHERE user_id = assigned_user_id` → `full_name`.
+3. Repetir o passo 2 com `metadata.sender_user_id`.
+4. Fallback `nina_settings.sdr_name`.
+
+Isso garante que mesmo conversas antigas (com `team_members.id` salvo no `assigned_user_id`) e novas (com `auth.users.id`) resolvam o nome correto.
+
+### 4. UI Equipe — mostrar quem é o usuário logado da plataforma
+
+Em `src/components/Team.tsx`, na linha do membro:
+- Adicionar badge "Conta vinculada" quando `team_members.user_id IS NOT NULL`.
+- O selector de status já existe via `getStatusBadge`. Como agora `status` será atualizado corretamente pela migration + trigger, o "Pendente" só aparecerá para convites reais (sem signup ainda).
+
+### 5. (Opcional) Botão "Sincronizar usuários" na página Equipe
+
+Botão admin que invoca uma função RPC `sync_team_members_with_auth()` que executa o mesmo SQL da migration (passo 1) — útil para recuperar caso alguém crie usuário direto no Auth.
 
 ---
 
 ## Arquivos alterados
 
-- `supabase/functions/whatsapp-sender/index.ts` — resolver nome do atendente e prefixar `body`/`caption` em mensagens humanas.
-- `src/services/api.ts` — incluir `sender_user_id` no metadata de `send_queue` e `messages` ao enviar (`sendMessage` e `sendMediaMessage`).
+- **Nova migration** — vincular existentes + atualizar `handle_new_user()` + criar função `sync_team_members_with_auth()`.
+- `supabase/functions/whatsapp-sender/index.ts` — `resolveHumanSenderName` aceita id como `team_members.id` OU `auth.users.id`.
+- `src/components/Team.tsx` — badge "Conta vinculada" + botão "Sincronizar usuários" (admin).
+- `src/services/api.ts` — adicionar `syncTeamMembers()` que chama a RPC.
 
-Sem mudanças de schema, sem mudanças na UI interna do chat.
+Sem mudanças destrutivas — só adições e atualizações.
