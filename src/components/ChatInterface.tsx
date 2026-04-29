@@ -1256,6 +1256,17 @@ const ChatInterface: React.FC = () => {
                         </button>
                       </PopoverContent>
                     </Popover>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      title={activeChat.status === 'nina' ? 'Assuma o atendimento para enviar templates' : 'Enviar template do WhatsApp'}
+                      disabled={activeChat.status === 'nina'}
+                      onClick={() => setTemplatePickerOpen(true)}
+                      className="text-slate-300 hover:text-cyan-400 rounded-full disabled:opacity-40"
+                    >
+                      <LayoutTemplate className="w-5 h-5" />
+                    </Button>
                   </div>
                   
                   <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500/50 transition-all shadow-inner">
