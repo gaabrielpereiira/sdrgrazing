@@ -301,12 +301,13 @@ export interface UIMessage {
   timestamp: string;
   direction: MessageDirection;
   type: MessageType;
-  status: 'sent' | 'delivered' | 'read';
+  status: 'sent' | 'delivered' | 'read' | 'failed';
   fromType: MessageFromType;
   mediaUrl: string | null;
   whatsappMessageId: string | null;
   metadata?: Record<string, any>;
   replyToId?: string | null;
+  errorMessage?: string | null;
 }
 
 // ============= Utility Functions =============
