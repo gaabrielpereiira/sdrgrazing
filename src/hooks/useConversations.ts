@@ -8,6 +8,7 @@ import {
   DBConversation,
   transformDBToUIMessage,
   transformDBToUIConversation,
+  formatRelativeTime,
   MessageDirection,
   MessageType
 } from '@/types';
@@ -212,7 +213,8 @@ export function useConversations(options?: { active?: boolean }) {
                     ...conv,
                     messages: updatedMessages,
                     lastMessage: newMessage.content || '',
-                    lastMessageTime: 'Agora'
+                    lastMessageTime: formatRelativeTime(newMessage.sent_at),
+                    lastMessageAt: newMessage.sent_at
                   };
                 }
 
@@ -226,7 +228,8 @@ export function useConversations(options?: { active?: boolean }) {
                   ...conv,
                   messages: [...conv.messages, uiMessage],
                   lastMessage: newMessage.content || '',
-                  lastMessageTime: 'Agora',
+                  lastMessageTime: formatRelativeTime(newMessage.sent_at),
+                  lastMessageAt: newMessage.sent_at,
                   // Increment unread if it's from user
                   unreadCount: newMessage.from_type === 'user' 
                     ? conv.unreadCount + 1 
@@ -396,7 +399,8 @@ export function useConversations(options?: { active?: boolean }) {
             ...conv,
             messages: [...conv.messages, tempMessage],
             lastMessage: content,
-            lastMessageTime: 'Agora'
+            lastMessageTime: formatRelativeTime(new Date().toISOString()),
+            lastMessageAt: new Date().toISOString()
           };
         }
         return conv;
@@ -457,7 +461,8 @@ export function useConversations(options?: { active?: boolean }) {
           ...conv,
           messages: [...conv.messages, tempMessage],
           lastMessage: opts.mediaType === 'image' ? '📷 Imagem' : opts.mediaType === 'audio' ? '🎵 Áudio' : '📄 Documento',
-          lastMessageTime: 'Agora',
+          lastMessageTime: formatRelativeTime(new Date().toISOString()),
+          lastMessageAt: new Date().toISOString(),
         };
       }
       return conv;

@@ -286,6 +286,7 @@ export interface UIConversation {
   assignedUserName: string | null;
   lastMessage: string;
   lastMessageTime: string;
+  lastMessageAt: string;
   unreadCount: number;
   tags: string[];
   messages: UIMessage[];
@@ -335,6 +336,7 @@ export function transformDBToUIConversation(
     assignedUserName: null, // Will be populated if needed
     lastMessage: lastMsg?.content || '',
     lastMessageTime: formatRelativeTime(conv.last_message_at),
+    lastMessageAt: conv.last_message_at,
     unreadCount,
     tags: [...(conv.tags || []), ...(conv.contact?.tags || [])],
     messages: sortedMessages.map(transformDBToUIMessage),
@@ -376,20 +378,27 @@ function mapDBMessageStatus(status: DBMessageStatus): 'sent' | 'delivered' | 're
   }
 }
 
-function formatRelativeTime(dateStr: string): string {
+export function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
+
+  // Compare by calendar day (local), not 24h windows.
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dayDiff = Math.round(
+    (startOfDay(now) - startOfDay(date)) / 86400000
+  );
+
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'Agora';
-  if (diffMins < 60) return `${diffMins}min`;
-  if (diffHours < 24) return `${diffHours}h`;
-  if (diffDays === 1) return 'Ontem';
-  if (diffDays < 7) return `${diffDays}d`;
-  
+  if (dayDiff <= 0) {
+    if (diffMins < 1) return 'Agora';
+    if (diffMins < 60) return `${diffMins}min`;
+    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+  if (dayDiff === 1) return 'Ontem';
+  if (dayDiff < 7) return `${dayDiff}d`;
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 

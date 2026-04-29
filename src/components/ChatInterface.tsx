@@ -5,7 +5,7 @@ import {
   Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon, Bell, AlertTriangle,
   FileText, Music, Reply, Pencil, Upload
 } from 'lucide-react';
-import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition } from '../types';
+import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition, formatRelativeTime } from '../types';
 import { Button } from './Button';
 import { useConversations } from '../hooks/useConversations';
 import { toast } from 'sonner';
@@ -35,6 +35,12 @@ const ChatInterface: React.FC = () => {
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [notesValue, setNotesValue] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  // Tick a cada 60s para reformatar tempos relativos (Agora -> 1min -> Ontem...)
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Attachments
   const [pendingAttachment, setPendingAttachment] = useState<{ file: File; mediaType: 'image' | 'audio' | 'document'; previewUrl: string } | null>(null);
@@ -380,13 +386,16 @@ const ChatInterface: React.FC = () => {
     }
   };
 
-  // A conversa está "pendente" quando a última mensagem foi enviada pelo cliente
-  // (ou seja, ainda não respondemos). Estado derivado, não persistido.
+  // A conversa está "pendente" quando:
+  //  - a última mensagem foi enviada pelo cliente (ainda não respondemos), OU
+  //  - a IA encaminhou para humano (status = 'human') e nenhum humano respondeu ainda.
+  // A tag desaparece automaticamente quando um humano envia mensagem (fromType === 'human').
   const isPending = (chat: UIConversation): boolean => {
     const lastMsg = chat.messages[chat.messages.length - 1];
-    if (lastMsg) return lastMsg.fromType === 'user';
-    // Fallback quando mensagens ainda não foram carregadas
-    return chat.unreadCount > 0;
+    if (lastMsg?.fromType === 'user') return true;
+    if (chat.status === 'human' && lastMsg?.fromType !== 'human') return true;
+    if (!lastMsg && chat.unreadCount > 0) return true;
+    return false;
   };
 
   const filteredConversations = conversations
@@ -683,7 +692,7 @@ const ChatInterface: React.FC = () => {
                     <h3 className={`text-sm font-semibold truncate ${selectedChatId === chat.id ? 'text-white' : 'text-slate-300'}`}>
                       {chat.contactName}
                     </h3>
-                    <span className="text-[10px] text-slate-500 font-medium">{chat.lastMessageTime}</span>
+                    <span className="text-[10px] text-slate-500 font-medium">{chat.lastMessageAt ? formatRelativeTime(chat.lastMessageAt) : chat.lastMessageTime}</span>
                   </div>
                   <p className="text-xs text-slate-500 truncate">
                     {chat.messages[chat.messages.length - 1]?.type === MessageType.IMAGE ? '📷 Imagem' : 
