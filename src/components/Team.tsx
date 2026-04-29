@@ -374,7 +374,14 @@ const Team: React.FC = () => {
                                         <div className="flex-shrink-0 w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-300 border border-slate-700 uppercase">
                                             {member.name.substring(0, 2)}
                                         </div>
-                                        <span className="text-sm font-medium text-slate-200">{member.name}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-medium text-slate-200">{member.name}</span>
+                                            {member.user_id && (
+                                                <span title="Conta vinculada à plataforma" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-950/40 text-emerald-400 border border-emerald-900/50">
+                                                    <Link2 className="w-3 h-3" />
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </td>
                                 
