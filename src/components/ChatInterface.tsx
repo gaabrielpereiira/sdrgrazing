@@ -81,6 +81,23 @@ const ChatInterface: React.FC = () => {
   const assignedMember = activeChat?.assignedUserId
     ? teamMembers.find(m => m.id === activeChat.assignedUserId)
     : null;
+
+  // Resolve attendant display names for outgoing-human messages.
+  // IMPORTANT: must be called unconditionally at the top level (Rules of Hooks).
+  const senderIdsForNames = React.useMemo(() => {
+    const ids: string[] = [];
+    if (activeChat) {
+      for (const m of activeChat.messages) {
+        if (m.direction === MessageDirection.OUTGOING && m.fromType === 'human') {
+          const sid = (m.metadata as any)?.sender_user_id;
+          if (sid) ids.push(sid);
+        }
+      }
+      if (activeChat.assignedUserId) ids.push(activeChat.assignedUserId);
+    }
+    return Array.from(new Set(ids));
+  }, [activeChat?.id, activeChat?.messages, activeChat?.assignedUserId]);
+  const attendantNames = useAttendantNames(senderIdsForNames);
   
   // Format audio time helper
   const formatAudioTime = (seconds: number): string => {
@@ -962,17 +979,6 @@ const ChatInterface: React.FC = () => {
 
                   {(() => {
                     const msgsById = new Map(activeChat.messages.map(m => [m.id, m]));
-                    // Collect candidate sender ids from outgoing-human messages
-                    // (metadata.sender_user_id) plus the conversation assignee
-                    // as a fallback for older messages without metadata.
-                    const senderIds = Array.from(new Set(
-                      activeChat.messages
-                        .filter(m => m.direction === MessageDirection.OUTGOING && m.fromType === 'human')
-                        .map(m => (m.metadata as any)?.sender_user_id)
-                        .filter(Boolean) as string[]
-                    ));
-                    if (activeChat.assignedUserId) senderIds.push(activeChat.assignedUserId);
-                    const attendantNames = useAttendantNames(senderIds);
 
                     const senderNameFor = (m: UIMessage): string | null => {
                       if (m.fromType !== 'human' || m.direction !== MessageDirection.OUTGOING) return null;
