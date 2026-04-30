@@ -962,6 +962,28 @@ const ChatInterface: React.FC = () => {
 
                   {(() => {
                     const msgsById = new Map(activeChat.messages.map(m => [m.id, m]));
+                    // Collect candidate sender ids from outgoing-human messages
+                    // (metadata.sender_user_id) plus the conversation assignee
+                    // as a fallback for older messages without metadata.
+                    const senderIds = Array.from(new Set(
+                      activeChat.messages
+                        .filter(m => m.direction === MessageDirection.OUTGOING && m.fromType === 'human')
+                        .map(m => (m.metadata as any)?.sender_user_id)
+                        .filter(Boolean) as string[]
+                    ));
+                    if (activeChat.assignedUserId) senderIds.push(activeChat.assignedUserId);
+                    const attendantNames = useAttendantNames(senderIds);
+
+                    const senderNameFor = (m: UIMessage): string | null => {
+                      if (m.fromType !== 'human' || m.direction !== MessageDirection.OUTGOING) return null;
+                      const sid = (m.metadata as any)?.sender_user_id;
+                      if (sid && attendantNames[sid]) return attendantNames[sid];
+                      if (activeChat.assignedUserId && attendantNames[activeChat.assignedUserId]) {
+                        return attendantNames[activeChat.assignedUserId];
+                      }
+                      return null;
+                    };
+
                     const previewFor = (m: UIMessage) => {
                       if (m.type === MessageType.IMAGE) return '📷 Imagem';
                       if (m.type === MessageType.AUDIO) return '🎵 Áudio';
@@ -971,7 +993,7 @@ const ChatInterface: React.FC = () => {
                     const authorFor = (m: UIMessage) => {
                       if (m.fromType === 'user') return activeChat.contactName;
                       if (m.fromType === 'nina') return sdrName;
-                      return 'Você';
+                      return senderNameFor(m) || 'Você';
                     };
                     return activeChat.messages.map((msg) => {
                       const isOutgoing = msg.direction === MessageDirection.OUTGOING;
