@@ -1,54 +1,43 @@
-## Objetivo
+## Mostrar nome do atendente nas mensagens internas
 
-Adicionar no chat a possibilidade de enviar **Templates aprovados do WhatsApp** a qualquer momento (não apenas após 24h), via um botão sempre visível na barra do composer.
+Hoje o WhatsApp Sender prefixa as mensagens humanas com `*Nome*:\n` antes de mandar para o cliente, mas no chat interno o conteúdo armazenado é o original (sem nome). Por isso vemos só o texto, sem saber qual atendente respondeu.
 
-## Comportamento
+A boa notícia: cada mensagem humana já é salva no banco com `metadata.sender_user_id` (o id do auth user que enviou). Basta resolver esse id para um nome legível e exibir como label acima do balão, igual ao "tais sodre" / "Rafaela Ferreira" que aparece para o cliente.
 
-1. **Botão "Template" sempre visível** na barra de composição, ao lado dos botões de emoji e anexo (ícone `LayoutTemplate` / `FileStack`). Tooltip: *"Enviar template do WhatsApp"*.
+### O que vai mudar
 
-2. **Modal `TemplatePickerModal`** ao clicar:
-   - Lista templates de `whatsapp_templates` com `status = 'APPROVED'`.
-   - Busca por nome + filtro por idioma e categoria (MARKETING / UTILITY / AUTHENTICATION).
-   - Para cada template: preview no estilo WhatsApp já renderizado (header / body / footer / buttons).
-   - Detecta variáveis `{{n}}` no body e header (text) e mostra inputs obrigatórios para cada uma.
-   - Botão **"Enviar template"** com validação (todas as variáveis preenchidas).
-   - Estado vazio amigável quando não houver templates aprovados, com link direto para a página `/templates`.
+1. **Hook novo `useAttendantNames` (`src/hooks/useAttendantNames.ts`)**
+   - Recebe uma lista de `userIds` (de `metadata.sender_user_id`).
+   - Resolve cada um para um nome usando a mesma cascata do edge function:
+     1. `team_members.name` por `id`
+     2. `team_members.name` por `user_id`
+     3. `profiles.full_name` por `user_id`
+   - Faz uma única query batch (`in('user_id', ids)`) para `team_members` e `profiles`, e mantém um cache em memória para não refazer lookups.
+   - Retorna `{ namesById: Record<string, string>, loading }`.
 
-3. **Envio do template**:
-   - Inserir registro em `messages` (`from_type='human'`, `type='text'`, `content` = corpo já interpolado para exibição local, `status='sent'`, `metadata.template = { name, language, components, variables }`) — feedback imediato no chat.
-   - Inserir item em `send_queue` apontando para `message_id` e copiando `metadata.template`.
-   - O `whatsapp-sender` detecta `metadata.template` e envia payload `type: "template"` para a Graph API:
-     ```json
-     {
-       "type": "template",
-       "template": {
-         "name": "...",
-         "language": { "code": "pt_BR" },
-         "components": [{ "type": "body", "parameters": [{ "type": "text", "text": "..." }] }]
-       }
-     }
-     ```
-   - Em caso de erro (template não aprovado, variável inválida), reaproveita o fluxo de falha existente (`status='failed'` + alerta vermelho na bolha com motivo).
+2. **`ChatInterface.tsx` — renderização do balão**
+   - Coletar todos os `metadata.sender_user_id` distintos das mensagens da conversa ativa e passar pro hook.
+   - Para cada mensagem com `direction === OUTGOING` e `fromType === 'human'`:
+     - Se houver nome resolvido, exibir uma linha de cabeçalho dentro do balão (acima do conteúdo e abaixo do badge de template/reply, se houver):
+       ```
+       <span class="block text-[11px] font-semibold text-cyan-200 mb-1">
+         {attendantName}
+       </span>
+       ```
+     - Se não houver `sender_user_id` no metadata, fazer fallback para o `assigned_user_id` da conversa, e em último caso não mostrar nada (mensagens antigas continuam funcionando).
+   - Cor do label: tom claro do gradiente do próprio balão (`text-cyan-100` para humano, mantém o `Bot` icon para Nina — Nina não recebe label de pessoa).
+   - Não mexer em mensagens da Nina nem em mensagens recebidas (`fromType === 'user'`) — essas continuam como estão.
 
-4. **Renderização da bolha**: mensagem enviada como template aparece com um pequeno chip/badge "Template • {nome}" acima do conteúdo interpolado.
+3. **Pequeno reuso**
+   - O componente `replyToId` já usa `authorFor(replied)` para mostrar quem é o autor da mensagem citada. Vou estender `authorFor` para também consultar o mesmo `namesById` quando `fromType === 'human'`, assim a citação também mostra o atendente correto em vez de só "Você".
 
-## Arquivos a alterar/criar
+### Fora de escopo
 
-**Frontend**
-- `src/components/chat/TemplatePickerModal.tsx` *(novo)* — listagem + busca + preview + inputs de variáveis + envio.
-- `src/components/ChatInterface.tsx` — novo botão de template no composer (sempre visível); estado para abrir o modal; renderização do badge "Template" nas bolhas que têm `metadata.template`.
-- `src/services/api.ts` — `sendTemplateMessage(conversationId, contactId, template, variables)` que cria a `messages` row e enfileira em `send_queue` com metadata de template.
-- `src/hooks/useConversations.ts` — expor `sendTemplateMessage` (com update otimista).
+- Não vou tocar no edge function `whatsapp-sender` (o prefixo enviado para o cliente continua igual).
+- Não vou criar novas colunas no banco — o `metadata.sender_user_id` já é suficiente.
+- Mensagens humanas antigas, sem `sender_user_id` no metadata, vão usar o `assigned_user_id` da conversa como fallback; se nem isso existir, ficam sem label (igual hoje).
 
-**Backend**
-- `supabase/functions/whatsapp-sender/index.ts` — em `sendMessage`, se `queueItem.metadata?.template` estiver presente, montar payload `type: "template"` em vez de `text`/mídia. Não prefixar com nome do atendente em templates (regra da Meta exige template puro).
+### Arquivos afetados
 
-## Detalhes técnicos
-
-- Variáveis: extraídas com `/\{\{(\d+)\}\}/g` em components do tipo BODY/HEADER (text). Componentes só são adicionados ao payload da API se tiverem parâmetros.
-- Quando `activeChat.status === 'nina'` (Nina respondendo automaticamente), o botão fica desabilitado para evitar conflito — um humano só dispara template após assumir o atendimento.
-- Templates são lidos diretamente de `whatsapp_templates` ao abrir o modal (sem cache), respeitando RLS já existente.
-
-## Fora de escopo (fase 2)
-- Header com mídia (IMAGE/VIDEO/DOCUMENT) — só body + header text por enquanto.
-- Botões com URL dinâmica (`{{1}}` em URL) e quick-reply parametrizados.
+- `src/hooks/useAttendantNames.ts` (novo)
+- `src/components/ChatInterface.tsx` (render do balão e do reply preview)
