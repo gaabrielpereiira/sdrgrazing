@@ -21,6 +21,7 @@ import {
 import { ActivitiesPanel } from './chat/ActivitiesPanel';
 import { useAllPendingActivities } from '@/hooks/useConversationActivities';
 import { TemplatePickerModal } from './chat/TemplatePickerModal';
+import { useAttendantNames } from '@/hooks/useAttendantNames';
 import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picker-react';
 
 const ChatInterface: React.FC = () => {
