@@ -21,6 +21,7 @@ import {
 import { ActivitiesPanel } from './chat/ActivitiesPanel';
 import { useAllPendingActivities } from '@/hooks/useConversationActivities';
 import { TemplatePickerModal } from './chat/TemplatePickerModal';
+import { useAttendantNames } from '@/hooks/useAttendantNames';
 import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picker-react';
 
 const ChatInterface: React.FC = () => {
@@ -961,6 +962,28 @@ const ChatInterface: React.FC = () => {
 
                   {(() => {
                     const msgsById = new Map(activeChat.messages.map(m => [m.id, m]));
+                    // Collect candidate sender ids from outgoing-human messages
+                    // (metadata.sender_user_id) plus the conversation assignee
+                    // as a fallback for older messages without metadata.
+                    const senderIds = Array.from(new Set(
+                      activeChat.messages
+                        .filter(m => m.direction === MessageDirection.OUTGOING && m.fromType === 'human')
+                        .map(m => (m.metadata as any)?.sender_user_id)
+                        .filter(Boolean) as string[]
+                    ));
+                    if (activeChat.assignedUserId) senderIds.push(activeChat.assignedUserId);
+                    const attendantNames = useAttendantNames(senderIds);
+
+                    const senderNameFor = (m: UIMessage): string | null => {
+                      if (m.fromType !== 'human' || m.direction !== MessageDirection.OUTGOING) return null;
+                      const sid = (m.metadata as any)?.sender_user_id;
+                      if (sid && attendantNames[sid]) return attendantNames[sid];
+                      if (activeChat.assignedUserId && attendantNames[activeChat.assignedUserId]) {
+                        return attendantNames[activeChat.assignedUserId];
+                      }
+                      return null;
+                    };
+
                     const previewFor = (m: UIMessage) => {
                       if (m.type === MessageType.IMAGE) return '📷 Imagem';
                       if (m.type === MessageType.AUDIO) return '🎵 Áudio';
@@ -970,7 +993,7 @@ const ChatInterface: React.FC = () => {
                     const authorFor = (m: UIMessage) => {
                       if (m.fromType === 'user') return activeChat.contactName;
                       if (m.fromType === 'nina') return sdrName;
-                      return 'Você';
+                      return senderNameFor(m) || 'Você';
                     };
                     return activeChat.messages.map((msg) => {
                       const isOutgoing = msg.direction === MessageDirection.OUTGOING;
@@ -992,6 +1015,15 @@ const ChatInterface: React.FC = () => {
                                     : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
                                 } ${msg.status === 'failed' ? 'ring-1 ring-red-500/60' : ''}`}
                               >
+                                {(() => {
+                                  const sName = senderNameFor(msg);
+                                  if (!sName) return null;
+                                  return (
+                                    <p className="text-[11px] font-semibold text-cyan-100 mb-1 leading-tight">
+                                      {sName}
+                                    </p>
+                                  );
+                                })()}
                                 {msg.metadata?.template?.name && (
                                   <div className={`mb-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide ${
                                     isOutgoing ? 'bg-white/15 text-white/90' : 'bg-slate-900/60 text-cyan-300'
