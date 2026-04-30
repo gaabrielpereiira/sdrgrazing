@@ -979,17 +979,6 @@ const ChatInterface: React.FC = () => {
 
                   {(() => {
                     const msgsById = new Map(activeChat.messages.map(m => [m.id, m]));
-                    // Collect candidate sender ids from outgoing-human messages
-                    // (metadata.sender_user_id) plus the conversation assignee
-                    // as a fallback for older messages without metadata.
-                    const senderIds = Array.from(new Set(
-                      activeChat.messages
-                        .filter(m => m.direction === MessageDirection.OUTGOING && m.fromType === 'human')
-                        .map(m => (m.metadata as any)?.sender_user_id)
-                        .filter(Boolean) as string[]
-                    ));
-                    if (activeChat.assignedUserId) senderIds.push(activeChat.assignedUserId);
-                    const attendantNames = useAttendantNames(senderIds);
 
                     const senderNameFor = (m: UIMessage): string | null => {
                       if (m.fromType !== 'human' || m.direction !== MessageDirection.OUTGOING) return null;
