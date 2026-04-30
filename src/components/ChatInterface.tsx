@@ -1015,6 +1015,15 @@ const ChatInterface: React.FC = () => {
                                     : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
                                 } ${msg.status === 'failed' ? 'ring-1 ring-red-500/60' : ''}`}
                               >
+                                {(() => {
+                                  const sName = senderNameFor(msg);
+                                  if (!sName) return null;
+                                  return (
+                                    <p className="text-[11px] font-semibold text-cyan-100 mb-1 leading-tight">
+                                      {sName}
+                                    </p>
+                                  );
+                                })()}
                                 {msg.metadata?.template?.name && (
                                   <div className={`mb-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide ${
                                     isOutgoing ? 'bg-white/15 text-white/90' : 'bg-slate-900/60 text-cyan-300'
