@@ -51,6 +51,7 @@ const ChatInterface: React.FC = () => {
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [templateDebugMsg, setTemplateDebugMsg] = useState<any | null>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -1046,11 +1047,37 @@ const ChatInterface: React.FC = () => {
                                   );
                                 })()}
                                 {msg.metadata?.template?.name && (
-                                  <div className={`mb-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide ${
-                                    isOutgoing ? 'bg-white/15 text-white/90' : 'bg-slate-900/60 text-cyan-300'
-                                  }`}>
-                                    <LayoutTemplate className="w-3 h-3" />
-                                    Template · {msg.metadata.template.name}
+                                  <div className="mb-2 flex flex-col gap-1">
+                                    <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide w-fit ${
+                                      isOutgoing ? 'bg-white/15 text-white/90' : 'bg-slate-900/60 text-cyan-300'
+                                    }`}>
+                                      <LayoutTemplate className="w-3 h-3" />
+                                      Template · {msg.metadata.template.name}
+                                    </div>
+                                    {(() => {
+                                      const meta: any = msg.metadata || {};
+                                      const failed = !!meta.whatsapp_error || msg.status === 'failed';
+                                      let label = 'Aguardando confirmação';
+                                      let cls = 'text-amber-300/90';
+                                      if (failed) {
+                                        const errTitle = meta.whatsapp_error?.errors?.[0]?.title || meta.whatsapp_error?.title || meta.error_message || 'erro Meta';
+                                        label = `Falhou · ${errTitle}`; cls = 'text-red-300';
+                                      } else if (msg.status === 'read') { label = 'Lido pelo destinatário'; cls = 'text-cyan-200'; }
+                                      else if (msg.status === 'delivered') { label = 'Entregue ao WhatsApp'; cls = 'text-emerald-300'; }
+                                      else if (msg.status === 'sent') { label = 'Enviado à Meta · aguardando entrega'; cls = 'text-slate-300'; }
+                                      return (
+                                        <div className="flex items-center gap-2">
+                                          <span className={`text-[10px] ${cls}`}>{label}</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => setTemplateDebugMsg(msg)}
+                                            className="text-[10px] underline text-slate-300/80 hover:text-white"
+                                          >
+                                            Ver detalhes
+                                          </button>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 )}
                                 {replied && (
@@ -1605,6 +1632,55 @@ const ChatInterface: React.FC = () => {
           await sendTemplateMessage(activeChat.id, payload);
         }}
       />
+    )}
+
+    {templateDebugMsg && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+        onClick={() => setTemplateDebugMsg(null)}
+      >
+        <div
+          className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+            <h2 className="text-base font-semibold text-white">Detalhes do envio do template</h2>
+            <button onClick={() => setTemplateDebugMsg(null)} className="text-slate-400 hover:text-white text-sm">Fechar</button>
+          </div>
+          <div className="p-4 overflow-y-auto space-y-4 text-xs">
+            <div>
+              <p className="uppercase tracking-wide text-slate-500 mb-1">Template</p>
+              <p className="text-slate-200">{templateDebugMsg.metadata?.template?.name} · {templateDebugMsg.metadata?.template?.language}</p>
+            </div>
+            <div>
+              <p className="uppercase tracking-wide text-slate-500 mb-1">Status atual</p>
+              <p className="text-slate-200">{templateDebugMsg.status} · WA ID: <span className="font-mono">{templateDebugMsg.whatsappMessageId || templateDebugMsg.whatsapp_message_id || '—'}</span></p>
+            </div>
+            {templateDebugMsg.metadata?.whatsapp_response && (
+              <div>
+                <p className="uppercase tracking-wide text-slate-500 mb-1">Resposta da Meta</p>
+                <pre className="bg-slate-950 border border-slate-800 rounded p-3 text-emerald-200 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(templateDebugMsg.metadata.whatsapp_response, null, 2)}</pre>
+              </div>
+            )}
+            {templateDebugMsg.metadata?.whatsapp_error && (
+              <div>
+                <p className="uppercase tracking-wide text-red-400 mb-1">Erro reportado pela Meta</p>
+                <pre className="bg-slate-950 border border-red-900/40 rounded p-3 text-red-200 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(templateDebugMsg.metadata.whatsapp_error, null, 2)}</pre>
+              </div>
+            )}
+            {!templateDebugMsg.metadata?.whatsapp_error && templateDebugMsg.status === 'delivered' && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-amber-200">
+                A Meta confirmou <strong>entrega</strong>. Se o cliente ainda não viu, verifique:
+                <ul className="list-disc pl-5 mt-2 space-y-1">
+                  <li>Categoria do template (<strong>{templateDebugMsg.metadata?.template?.category}</strong>): mensagens de marketing podem ser suprimidas se o destinatário marcou "parar promoções" no WhatsApp.</li>
+                  <li>Idioma do template (<strong>{templateDebugMsg.metadata?.template?.language}</strong>): templates com idioma divergente do conteúdo ocasionalmente não exibem.</li>
+                  <li>O número de origem do WhatsApp Business pode estar com qualidade baixa ou em modo de teste limitado.</li>
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     )}
     </>
   );

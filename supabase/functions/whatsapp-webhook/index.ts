@@ -117,13 +117,31 @@ serve(async (req) => {
             
             const newStatus = statusMap[status.status];
             if (newStatus) {
+              const updates: Record<string, any> = { status: newStatus };
+              if (newStatus === 'delivered') updates.delivered_at = new Date().toISOString();
+              if (newStatus === 'read') updates.read_at = new Date().toISOString();
+
+              // On failure, persist Meta's error payload into metadata so the UI can show it.
+              if (newStatus === 'failed' && Array.isArray(status.errors) && status.errors.length > 0) {
+                const { data: existing } = await supabase
+                  .from('messages')
+                  .select('metadata')
+                  .eq('whatsapp_message_id', status.id)
+                  .maybeSingle();
+                updates.metadata = {
+                  ...(existing?.metadata || {}),
+                  whatsapp_error: {
+                    source: 'webhook_status',
+                    errors: status.errors,
+                    failed_at: new Date().toISOString(),
+                  },
+                };
+                console.error('[Webhook] Message failed:', status.id, JSON.stringify(status.errors));
+              }
+
               await supabase
                 .from('messages')
-                .update({ 
-                  status: newStatus,
-                  ...(newStatus === 'delivered' && { delivered_at: new Date().toISOString() }),
-                  ...(newStatus === 'read' && { read_at: new Date().toISOString() })
-                })
+                .update(updates)
                 .eq('whatsapp_message_id', status.id);
             }
           }

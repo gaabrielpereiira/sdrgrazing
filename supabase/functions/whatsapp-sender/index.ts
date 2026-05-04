@@ -417,23 +417,67 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
   const responseData = await response.json();
 
   if (!response.ok) {
-    console.error('[Sender] WhatsApp API error:', responseData);
-    throw new Error(responseData.error?.message || 'WhatsApp API error');
+    console.error('[Sender] WhatsApp API error:', JSON.stringify(responseData));
+    const err = responseData.error || {};
+    const details = err.error_data?.details || '';
+    const parts = [
+      err.code ? `[${err.code}]` : '',
+      err.title || err.message || 'WhatsApp API error',
+      details ? `— ${details}` : '',
+    ].filter(Boolean).join(' ');
+    // Persist full error payload on the message metadata immediately so the UI can show it,
+    // even before retry exhaustion.
+    if (queueItem.message_id) {
+      try {
+        const { data: existing } = await supabase
+          .from('messages')
+          .select('metadata')
+          .eq('id', queueItem.message_id)
+          .maybeSingle();
+        await supabase
+          .from('messages')
+          .update({
+            metadata: {
+              ...(existing?.metadata || {}),
+              whatsapp_error: { http_status: response.status, ...err },
+            },
+          })
+          .eq('id', queueItem.message_id);
+      } catch (persistErr) {
+        console.error('[Sender] Could not persist whatsapp_error:', persistErr);
+      }
+    }
+    throw new Error(parts);
   }
 
   const whatsappMessageId = responseData.messages?.[0]?.id;
-  console.log('[Sender] Message sent, WA ID:', whatsappMessageId);
+  const waMessageStatus = responseData.messages?.[0]?.message_status; // e.g. "accepted"
+  console.log('[Sender] Message sent, WA ID:', whatsappMessageId, 'status:', waMessageStatus);
 
   // Update or create message record in database
   if (queueItem.message_id) {
     // UPDATE existing message (for human messages)
     console.log('[Sender] Updating existing message:', queueItem.message_id);
+    const { data: existing } = await supabase
+      .from('messages')
+      .select('metadata')
+      .eq('id', queueItem.message_id)
+      .maybeSingle();
     const { error: msgError } = await supabase
       .from('messages')
       .update({
         whatsapp_message_id: whatsappMessageId,
         status: 'sent',
-        sent_at: new Date().toISOString()
+        sent_at: new Date().toISOString(),
+        metadata: {
+          ...(existing?.metadata || {}),
+          whatsapp_response: {
+            http_status: response.status,
+            wamid: whatsappMessageId,
+            message_status: waMessageStatus || null,
+            contacts: responseData.contacts || null,
+          },
+        },
       })
       .eq('id', queueItem.message_id);
 
@@ -487,10 +531,20 @@ function buildTemplatePayload(tpl: any): any {
   const bodyComp = (tpl.components || []).find(
     (c: any) => (c.type || '').toUpperCase() === 'BODY'
   );
+  const buttonsComp = (tpl.components || []).find(
+    (c: any) => (c.type || '').toUpperCase() === 'BUTTONS'
+  );
+
+  const warnMissing = (loc: string, n: number) => {
+    if (vars[String(n)] === undefined || vars[String(n)] === '') {
+      console.warn(`[Sender] Template "${tpl.name}" missing variable {{${n}}} in ${loc}`);
+    }
+  };
 
   if (headerComp && (headerComp.format || 'TEXT').toUpperCase() === 'TEXT' && headerComp.text) {
     const headerVars = extractVarNumbers(headerComp.text);
     if (headerVars.length > 0) {
+      headerVars.forEach((n) => warnMissing('header', n));
       components.push({
         type: 'header',
         parameters: headerVars.map((n) => ({
@@ -504,6 +558,7 @@ function buildTemplatePayload(tpl: any): any {
   if (bodyComp?.text) {
     const bodyVars = extractVarNumbers(bodyComp.text);
     if (bodyVars.length > 0) {
+      bodyVars.forEach((n) => warnMissing('body', n));
       components.push({
         type: 'body',
         parameters: bodyVars.map((n) => ({
@@ -512,6 +567,29 @@ function buildTemplatePayload(tpl: any): any {
         })),
       });
     }
+  }
+
+  // BUTTONS: add a "button" component only for dynamic URL buttons (those with {{n}} in url).
+  // Static URL/QUICK_REPLY/PHONE buttons require no payload.
+  if (buttonsComp && Array.isArray(buttonsComp.buttons)) {
+    buttonsComp.buttons.forEach((btn: any, index: number) => {
+      const subType = (btn.type || '').toUpperCase();
+      if (subType === 'URL' && typeof btn.url === 'string') {
+        const urlVars = extractVarNumbers(btn.url);
+        if (urlVars.length > 0) {
+          urlVars.forEach((n) => warnMissing(`button[${index}].url`, n));
+          components.push({
+            type: 'button',
+            sub_type: 'url',
+            index: String(index),
+            parameters: urlVars.map((n) => ({
+              type: 'text',
+              text: vars[String(n)] ?? '',
+            })),
+          });
+        }
+      }
+    });
   }
 
   const payload: any = {
