@@ -93,8 +93,19 @@ const Contacts: React.FC = () => {
     }
   };
 
-  const handleStartConversation = (contact: Contact) => {
-    navigate(`/chat?contact=${encodeURIComponent(contact.phone)}`);
+  const [startingChatId, setStartingChatId] = useState<string | null>(null);
+  const handleStartConversation = async (contact: Contact) => {
+    if (startingChatId) return;
+    setStartingChatId(contact.id);
+    try {
+      const conversationId = await api.getOrCreateConversationForContact(contact.id);
+      navigate(`/chat?conversation=${conversationId}`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Erro ao abrir conversa');
+    } finally {
+      setStartingChatId(null);
+    }
   };
 
   return (
