@@ -221,8 +221,13 @@ const Contacts: React.FC = () => {
                           className="h-8 w-8 p-0 rounded-lg shadow-none" 
                           title="Iniciar Conversa"
                           onClick={() => handleStartConversation(contact)}
+                          disabled={startingChatId === contact.id}
                         >
-                          <MessageSquare className="w-4 h-4" />
+                          {startingChatId === contact.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <MessageSquare className="w-4 h-4" />
+                          )}
                         </Button>
                         <Button 
                           size="sm" 
