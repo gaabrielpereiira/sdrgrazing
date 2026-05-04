@@ -3,7 +3,7 @@ import {
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck, 
   Smile, Play, Loader2, MessageSquare, Info, X, Mail, 
   Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon, Bell, AlertTriangle,
-  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate
+  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate, Mic, Trash2
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition, formatRelativeTime } from '../types';
 import { Button } from './Button';
@@ -74,6 +74,132 @@ const ChatInterface: React.FC = () => {
   const [audioDurations, setAudioDurations] = useState<Record<string, number>>({});
   const [audioProgress, setAudioProgress] = useState<Record<string, number>>({});
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
+
+  // Live audio recording (mic button)
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
+  const recordingCancelledRef = useRef(false);
+  const MAX_RECORDING_SECONDS = 120;
+
+  const stopRecordingTracks = () => {
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    recordingStreamRef.current?.getTracks().forEach(t => t.stop());
+    recordingStreamRef.current = null;
+  };
+
+  const startRecording = async () => {
+    if (isRecording) return;
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      toast.error('Seu navegador não suporta gravação de áudio.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+
+      // Pick a mime type WhatsApp can accept after we relabel the file.
+      const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4;codecs=mp4a.40.2',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+      ];
+      const mimeType = candidates.find(t => (MediaRecorder as any).isTypeSupported?.(t)) || '';
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recordedChunksRef.current = [];
+      recordingCancelledRef.current = false;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const wasCancelled = recordingCancelledRef.current;
+        const chunks = recordedChunksRef.current;
+        const usedMime = recorder.mimeType || mimeType || 'audio/webm';
+        stopRecordingTracks();
+        setIsRecording(false);
+        setRecordingSeconds(0);
+        if (wasCancelled || chunks.length === 0) return;
+
+        // Map browser mime -> WhatsApp-friendly container/extension.
+        // Meta accepts ogg/opus, mp3, mp4 (m4a) and aac.
+        const isMp4 = usedMime.includes('mp4');
+        const finalMime = isMp4 ? 'audio/mp4' : 'audio/ogg';
+        const ext = isMp4 ? 'm4a' : 'ogg';
+        const blob = new Blob(chunks, { type: finalMime });
+        const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: finalMime });
+
+        if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.previewUrl);
+        const previewUrl = URL.createObjectURL(file);
+        setPendingAttachment({ file, mediaType: 'audio', previewUrl });
+        setAttachmentCaption('');
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingSeconds(prev => {
+          const next = prev + 1;
+          if (next >= MAX_RECORDING_SECONDS) {
+            // Auto-stop at max
+            try { mediaRecorderRef.current?.state === 'recording' && mediaRecorderRef.current.stop(); } catch {}
+          }
+          return next;
+        });
+      }, 1000);
+    } catch (err: any) {
+      stopRecordingTracks();
+      setIsRecording(false);
+      console.error('[Recording] getUserMedia failed:', err);
+      if (err?.name === 'NotAllowedError') {
+        toast.error('Permissão de microfone negada. Habilite nas configurações do navegador.');
+      } else {
+        toast.error('Não foi possível acessar o microfone.');
+      }
+    }
+  };
+
+  const stopRecording = (cancel = false) => {
+    if (!isRecording) return;
+    recordingCancelledRef.current = cancel;
+    try {
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      } else {
+        stopRecordingTracks();
+        setIsRecording(false);
+        setRecordingSeconds(0);
+      }
+    } catch (e) {
+      console.warn('[Recording] stop failed:', e);
+      stopRecordingTracks();
+      setIsRecording(false);
+      setRecordingSeconds(0);
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopRecordingTracks();
+    };
+  }, []);
+
+  const formatRecordingTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
   
   const activeChat = conversations.find(c => c.id === selectedChatId);
   const pendingActivities = useAllPendingActivities();
@@ -1358,35 +1484,67 @@ const ChatInterface: React.FC = () => {
                     </Button>
                   </div>
                   
-                  <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500/50 transition-all shadow-inner">
-                    <textarea
-                      ref={messageInputRef}
-                      value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
-                      onPaste={handlePaste}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
-                      placeholder={activeChat.status === 'nina' ? `${sdrName} está respondendo automaticamente...` : 'Digite sua mensagem... (cole imagens com Ctrl+V ou arraste arquivos)'}
-                      className="w-full bg-transparent border-none p-3.5 max-h-32 min-h-[48px] text-sm text-slate-200 focus:ring-0 resize-none outline-none placeholder:text-slate-600"
-                      rows={1}
-                    />
-                  </div>
+                  {isRecording ? (
+                    <div className="flex-1 flex items-center gap-3 bg-slate-950 rounded-2xl border border-red-500/40 px-4 py-3 shadow-inner">
+                      <button
+                        type="button"
+                        onClick={() => stopRecording(true)}
+                        title="Cancelar gravação"
+                        className="w-9 h-9 rounded-full flex items-center justify-center text-red-400 hover:bg-red-500/10 transition"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-sm font-mono text-slate-200">{formatRecordingTime(recordingSeconds)}</span>
+                      <span className="text-xs text-slate-500 ml-auto">Gravando... (máx 2min)</span>
+                    </div>
+                  ) : (
+                    <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500/50 transition-all shadow-inner">
+                      <textarea
+                        ref={messageInputRef}
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        onPaste={handlePaste}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
+                        placeholder={activeChat.status === 'nina' ? `${sdrName} está respondendo automaticamente...` : 'Digite sua mensagem... (cole imagens com Ctrl+V ou arraste arquivos)'}
+                        className="w-full bg-transparent border-none p-3.5 max-h-32 min-h-[48px] text-sm text-slate-200 focus:ring-0 resize-none outline-none placeholder:text-slate-600"
+                        rows={1}
+                      />
+                    </div>
+                  )}
 
-                  <Button 
-                    type="submit" 
-                    disabled={!inputText.trim()}
-                    className={`rounded-full w-12 h-12 p-0 transition-all ${
-                      inputText.trim() 
-                        ? 'shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95' 
-                        : 'opacity-50 cursor-not-allowed'
-                    }`}
-                  >
-                    <Send className="w-5 h-5 ml-0.5" />
-                  </Button>
+                  {isRecording ? (
+                    <Button
+                      type="button"
+                      onClick={() => stopRecording(false)}
+                      title="Finalizar e revisar áudio"
+                      className="rounded-full w-12 h-12 p-0 bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30 transition-all hover:scale-105 active:scale-95"
+                    >
+                      <Check className="w-5 h-5" />
+                    </Button>
+                  ) : inputText.trim() ? (
+                    <Button
+                      type="submit"
+                      className="rounded-full w-12 h-12 p-0 transition-all shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95"
+                    >
+                      <Send className="w-5 h-5 ml-0.5" />
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={startRecording}
+                      title="Gravar áudio"
+                      disabled={activeChat.status === 'nina'}
+                      className="rounded-full w-12 h-12 p-0 transition-all shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Mic className="w-5 h-5" />
+                    </Button>
+                  )}
                 </form>
               </div>
             )}
