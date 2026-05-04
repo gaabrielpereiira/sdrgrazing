@@ -74,6 +74,132 @@ const ChatInterface: React.FC = () => {
   const [audioDurations, setAudioDurations] = useState<Record<string, number>>({});
   const [audioProgress, setAudioProgress] = useState<Record<string, number>>({});
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
+
+  // Live audio recording (mic button)
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
+  const recordingCancelledRef = useRef(false);
+  const MAX_RECORDING_SECONDS = 120;
+
+  const stopRecordingTracks = () => {
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    recordingStreamRef.current?.getTracks().forEach(t => t.stop());
+    recordingStreamRef.current = null;
+  };
+
+  const startRecording = async () => {
+    if (isRecording) return;
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      toast.error('Seu navegador não suporta gravação de áudio.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+
+      // Pick a mime type WhatsApp can accept after we relabel the file.
+      const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4;codecs=mp4a.40.2',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+      ];
+      const mimeType = candidates.find(t => (MediaRecorder as any).isTypeSupported?.(t)) || '';
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recordedChunksRef.current = [];
+      recordingCancelledRef.current = false;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const wasCancelled = recordingCancelledRef.current;
+        const chunks = recordedChunksRef.current;
+        const usedMime = recorder.mimeType || mimeType || 'audio/webm';
+        stopRecordingTracks();
+        setIsRecording(false);
+        setRecordingSeconds(0);
+        if (wasCancelled || chunks.length === 0) return;
+
+        // Map browser mime -> WhatsApp-friendly container/extension.
+        // Meta accepts ogg/opus, mp3, mp4 (m4a) and aac.
+        const isMp4 = usedMime.includes('mp4');
+        const finalMime = isMp4 ? 'audio/mp4' : 'audio/ogg';
+        const ext = isMp4 ? 'm4a' : 'ogg';
+        const blob = new Blob(chunks, { type: finalMime });
+        const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: finalMime });
+
+        if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.previewUrl);
+        const previewUrl = URL.createObjectURL(file);
+        setPendingAttachment({ file, mediaType: 'audio', previewUrl });
+        setAttachmentCaption('');
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingSeconds(prev => {
+          const next = prev + 1;
+          if (next >= MAX_RECORDING_SECONDS) {
+            // Auto-stop at max
+            try { mediaRecorderRef.current?.state === 'recording' && mediaRecorderRef.current.stop(); } catch {}
+          }
+          return next;
+        });
+      }, 1000);
+    } catch (err: any) {
+      stopRecordingTracks();
+      setIsRecording(false);
+      console.error('[Recording] getUserMedia failed:', err);
+      if (err?.name === 'NotAllowedError') {
+        toast.error('Permissão de microfone negada. Habilite nas configurações do navegador.');
+      } else {
+        toast.error('Não foi possível acessar o microfone.');
+      }
+    }
+  };
+
+  const stopRecording = (cancel = false) => {
+    if (!isRecording) return;
+    recordingCancelledRef.current = cancel;
+    try {
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      } else {
+        stopRecordingTracks();
+        setIsRecording(false);
+        setRecordingSeconds(0);
+      }
+    } catch (e) {
+      console.warn('[Recording] stop failed:', e);
+      stopRecordingTracks();
+      setIsRecording(false);
+      setRecordingSeconds(0);
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopRecordingTracks();
+    };
+  }, []);
+
+  const formatRecordingTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
   
   const activeChat = conversations.find(c => c.id === selectedChatId);
   const pendingActivities = useAllPendingActivities();
