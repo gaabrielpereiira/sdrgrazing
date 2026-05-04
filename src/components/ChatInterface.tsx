@@ -1484,35 +1484,67 @@ const ChatInterface: React.FC = () => {
                     </Button>
                   </div>
                   
-                  <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500/50 transition-all shadow-inner">
-                    <textarea
-                      ref={messageInputRef}
-                      value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
-                      onPaste={handlePaste}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
-                      placeholder={activeChat.status === 'nina' ? `${sdrName} está respondendo automaticamente...` : 'Digite sua mensagem... (cole imagens com Ctrl+V ou arraste arquivos)'}
-                      className="w-full bg-transparent border-none p-3.5 max-h-32 min-h-[48px] text-sm text-slate-200 focus:ring-0 resize-none outline-none placeholder:text-slate-600"
-                      rows={1}
-                    />
-                  </div>
+                  {isRecording ? (
+                    <div className="flex-1 flex items-center gap-3 bg-slate-950 rounded-2xl border border-red-500/40 px-4 py-3 shadow-inner">
+                      <button
+                        type="button"
+                        onClick={() => stopRecording(true)}
+                        title="Cancelar gravação"
+                        className="w-9 h-9 rounded-full flex items-center justify-center text-red-400 hover:bg-red-500/10 transition"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-sm font-mono text-slate-200">{formatRecordingTime(recordingSeconds)}</span>
+                      <span className="text-xs text-slate-500 ml-auto">Gravando... (máx 2min)</span>
+                    </div>
+                  ) : (
+                    <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500/50 transition-all shadow-inner">
+                      <textarea
+                        ref={messageInputRef}
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        onPaste={handlePaste}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
+                        placeholder={activeChat.status === 'nina' ? `${sdrName} está respondendo automaticamente...` : 'Digite sua mensagem... (cole imagens com Ctrl+V ou arraste arquivos)'}
+                        className="w-full bg-transparent border-none p-3.5 max-h-32 min-h-[48px] text-sm text-slate-200 focus:ring-0 resize-none outline-none placeholder:text-slate-600"
+                        rows={1}
+                      />
+                    </div>
+                  )}
 
-                  <Button 
-                    type="submit" 
-                    disabled={!inputText.trim()}
-                    className={`rounded-full w-12 h-12 p-0 transition-all ${
-                      inputText.trim() 
-                        ? 'shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95' 
-                        : 'opacity-50 cursor-not-allowed'
-                    }`}
-                  >
-                    <Send className="w-5 h-5 ml-0.5" />
-                  </Button>
+                  {isRecording ? (
+                    <Button
+                      type="button"
+                      onClick={() => stopRecording(false)}
+                      title="Finalizar e revisar áudio"
+                      className="rounded-full w-12 h-12 p-0 bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30 transition-all hover:scale-105 active:scale-95"
+                    >
+                      <Check className="w-5 h-5" />
+                    </Button>
+                  ) : inputText.trim() ? (
+                    <Button
+                      type="submit"
+                      className="rounded-full w-12 h-12 p-0 transition-all shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95"
+                    >
+                      <Send className="w-5 h-5 ml-0.5" />
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={startRecording}
+                      title="Gravar áudio"
+                      disabled={activeChat.status === 'nina'}
+                      className="rounded-full w-12 h-12 p-0 transition-all shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Mic className="w-5 h-5" />
+                    </Button>
+                  )}
                 </form>
               </div>
             )}
