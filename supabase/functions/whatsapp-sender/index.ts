@@ -531,10 +531,20 @@ function buildTemplatePayload(tpl: any): any {
   const bodyComp = (tpl.components || []).find(
     (c: any) => (c.type || '').toUpperCase() === 'BODY'
   );
+  const buttonsComp = (tpl.components || []).find(
+    (c: any) => (c.type || '').toUpperCase() === 'BUTTONS'
+  );
+
+  const warnMissing = (loc: string, n: number) => {
+    if (vars[String(n)] === undefined || vars[String(n)] === '') {
+      console.warn(`[Sender] Template "${tpl.name}" missing variable {{${n}}} in ${loc}`);
+    }
+  };
 
   if (headerComp && (headerComp.format || 'TEXT').toUpperCase() === 'TEXT' && headerComp.text) {
     const headerVars = extractVarNumbers(headerComp.text);
     if (headerVars.length > 0) {
+      headerVars.forEach((n) => warnMissing('header', n));
       components.push({
         type: 'header',
         parameters: headerVars.map((n) => ({
@@ -548,6 +558,7 @@ function buildTemplatePayload(tpl: any): any {
   if (bodyComp?.text) {
     const bodyVars = extractVarNumbers(bodyComp.text);
     if (bodyVars.length > 0) {
+      bodyVars.forEach((n) => warnMissing('body', n));
       components.push({
         type: 'body',
         parameters: bodyVars.map((n) => ({
@@ -556,6 +567,29 @@ function buildTemplatePayload(tpl: any): any {
         })),
       });
     }
+  }
+
+  // BUTTONS: add a "button" component only for dynamic URL buttons (those with {{n}} in url).
+  // Static URL/QUICK_REPLY/PHONE buttons require no payload.
+  if (buttonsComp && Array.isArray(buttonsComp.buttons)) {
+    buttonsComp.buttons.forEach((btn: any, index: number) => {
+      const subType = (btn.type || '').toUpperCase();
+      if (subType === 'URL' && typeof btn.url === 'string') {
+        const urlVars = extractVarNumbers(btn.url);
+        if (urlVars.length > 0) {
+          urlVars.forEach((n) => warnMissing(`button[${index}].url`, n));
+          components.push({
+            type: 'button',
+            sub_type: 'url',
+            index: String(index),
+            parameters: urlVars.map((n) => ({
+              type: 'text',
+              text: vars[String(n)] ?? '',
+            })),
+          });
+        }
+      }
+    });
   }
 
   const payload: any = {
