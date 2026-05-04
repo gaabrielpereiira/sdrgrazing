@@ -287,6 +287,32 @@ export const TemplatePickerModal: React.FC<Props> = ({ open, onClose, onSend }) 
                       Templates com mídia no cabeçalho (imagem/vídeo/documento) ainda não são suportados nesta tela.
                     </span>
                   </div>
+
+                  {(() => {
+                    const lang = (selected.language || '').toLowerCase();
+                    const text = `${getHeaderText(selected.components)} ${getBodyText(selected.components)}`.toLowerCase();
+                    const looksPt = /\b(olá|você|obrigad|agradec|pedido|experi[eê]ncia|grazi|por favor)\b/.test(text);
+                    if (looksPt && !lang.startsWith('pt')) {
+                      return (
+                        <div className="flex items-start gap-2 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5">
+                          <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <span>
+                            Este template está cadastrado como <strong>{selected.language}</strong>, mas o conteúdo parece estar em português. Se o WhatsApp do cliente não estiver no mesmo idioma, a mensagem pode ser silenciosamente bloqueada pela Meta. Recadastre como <strong>pt_BR</strong>.
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {(selected.category || '').toUpperCase() === 'MARKETING' && (
+                    <div className="flex items-start gap-2 text-[11px] text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-lg p-2.5">
+                      <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                      <span>
+                        Categoria <strong>MARKETING</strong>: a Meta pode marcar como entregue mas <strong>não exibir</strong> ao destinatário caso ele tenha optado por não receber promoções no WhatsApp. Se for um template transacional (confirmação, pós-venda, suporte), recadastre como <strong>UTILITY</strong>.
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t border-slate-800 p-3 flex items-center justify-end gap-2">
