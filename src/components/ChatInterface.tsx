@@ -119,15 +119,30 @@ const ChatInterface: React.FC = () => {
     });
   }, []);
 
+  // Pending conversation id requested via URL waiting for realtime to deliver it
+  const pendingConversationIdRef = React.useRef<string | null>(null);
+
   // Auto-select first conversation or from URL param
   useEffect(() => {
-    // Check for conversation param in URL
     const urlParams = new URLSearchParams(window.location.search);
     const conversationParam = urlParams.get('conversation');
-    
-    if (conversationParam && conversations.some(c => c.id === conversationParam)) {
-      setSelectedChatId(conversationParam);
-    } else if (conversations.length > 0 && (!selectedChatId || !conversations.some(c => c.id === selectedChatId))) {
+
+    if (conversationParam) {
+      if (conversations.some(c => c.id === conversationParam)) {
+        setSelectedChatId(conversationParam);
+        pendingConversationIdRef.current = null;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('conversation');
+        window.history.replaceState({}, '', url.toString());
+      } else {
+        // Not in list yet (just created) — wait for realtime INSERT
+        pendingConversationIdRef.current = conversationParam;
+      }
+      return;
+    }
+
+    if (pendingConversationIdRef.current) return;
+    if (conversations.length > 0 && (!selectedChatId || !conversations.some(c => c.id === selectedChatId))) {
       setSelectedChatId(conversations[0].id);
     } else if (conversations.length === 0) {
       setSelectedChatId(null);

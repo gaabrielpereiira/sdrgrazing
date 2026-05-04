@@ -357,6 +357,59 @@ export const api = {
   },
 
   /**
+   * Get an existing conversation for the contact, or create one.
+   * Reactivates a finalized conversation if needed.
+   */
+  getOrCreateConversationForContact: async (contactId: string): Promise<string> => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { data: existing, error: selErr } = await supabase
+      .from('conversations')
+      .select('id, is_active')
+      .eq('contact_id', contactId)
+      .order('last_message_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (selErr) {
+      console.error('[API] Error finding conversation:', selErr);
+      throw selErr;
+    }
+
+    if (existing) {
+      if (!existing.is_active) {
+        const { error: updErr } = await supabase
+          .from('conversations')
+          .update({ is_active: true, status: 'human', last_message_at: new Date().toISOString() })
+          .eq('id', existing.id);
+        if (updErr) {
+          console.error('[API] Error reactivating conversation:', updErr);
+          throw updErr;
+        }
+      }
+      return existing.id;
+    }
+
+    const { data: created, error: insErr } = await supabase
+      .from('conversations')
+      .insert({
+        contact_id: contactId,
+        status: 'human',
+        is_active: true,
+        user_id: user?.id ?? null,
+      })
+      .select('id')
+      .single();
+
+    if (insErr) {
+      console.error('[API] Error creating conversation:', insErr);
+      throw insErr;
+    }
+
+    return created.id;
+  },
+
+  /**
    * Fetch contacts from database
    */
   fetchContacts: async (): Promise<Contact[]> => {
