@@ -1046,11 +1046,37 @@ const ChatInterface: React.FC = () => {
                                   );
                                 })()}
                                 {msg.metadata?.template?.name && (
-                                  <div className={`mb-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide ${
-                                    isOutgoing ? 'bg-white/15 text-white/90' : 'bg-slate-900/60 text-cyan-300'
-                                  }`}>
-                                    <LayoutTemplate className="w-3 h-3" />
-                                    Template · {msg.metadata.template.name}
+                                  <div className="mb-2 flex flex-col gap-1">
+                                    <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide w-fit ${
+                                      isOutgoing ? 'bg-white/15 text-white/90' : 'bg-slate-900/60 text-cyan-300'
+                                    }`}>
+                                      <LayoutTemplate className="w-3 h-3" />
+                                      Template · {msg.metadata.template.name}
+                                    </div>
+                                    {(() => {
+                                      const meta: any = msg.metadata || {};
+                                      const failed = !!meta.whatsapp_error || msg.status === 'failed';
+                                      let label = 'Aguardando confirmação';
+                                      let cls = 'text-amber-300/90';
+                                      if (failed) {
+                                        const errTitle = meta.whatsapp_error?.errors?.[0]?.title || meta.whatsapp_error?.title || meta.error_message || 'erro Meta';
+                                        label = `Falhou · ${errTitle}`; cls = 'text-red-300';
+                                      } else if (msg.status === 'read') { label = 'Lido pelo destinatário'; cls = 'text-cyan-200'; }
+                                      else if (msg.status === 'delivered') { label = 'Entregue ao WhatsApp'; cls = 'text-emerald-300'; }
+                                      else if (msg.status === 'sent') { label = 'Enviado à Meta · aguardando entrega'; cls = 'text-slate-300'; }
+                                      return (
+                                        <div className="flex items-center gap-2">
+                                          <span className={`text-[10px] ${cls}`}>{label}</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => setTemplateDebugMsg(msg)}
+                                            className="text-[10px] underline text-slate-300/80 hover:text-white"
+                                          >
+                                            Ver detalhes
+                                          </button>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 )}
                                 {replied && (
