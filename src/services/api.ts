@@ -1621,10 +1621,23 @@ export const api = {
     // 2) Upload file to storage bucket
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const path = `outbound/${conversationId}/${Date.now()}-${safeName}`;
+
+    // Force a correct contentType for audio so Meta doesn't see application/octet-stream.
+    let resolvedContentType = file.type || 'application/octet-stream';
+    if (opts.mediaType === 'audio') {
+      const lower = safeName.toLowerCase();
+      if (lower.endsWith('.ogg') || lower.endsWith('.opus')) resolvedContentType = 'audio/ogg';
+      else if (lower.endsWith('.m4a') || lower.endsWith('.mp4')) resolvedContentType = 'audio/mp4';
+      else if (lower.endsWith('.mp3')) resolvedContentType = 'audio/mpeg';
+      else if (lower.endsWith('.aac')) resolvedContentType = 'audio/aac';
+      else if (lower.endsWith('.amr')) resolvedContentType = 'audio/amr';
+    }
+    console.log('[API] Uploading media', { path, resolvedContentType, fileType: file.type, size: file.size });
+
     const { error: uploadErr } = await supabase.storage
       .from('whatsapp-media')
       .upload(path, file, {
-        contentType: file.type || 'application/octet-stream',
+        contentType: resolvedContentType,
         upsert: false,
       });
 
@@ -1635,6 +1648,7 @@ export const api = {
 
     const { data: urlData } = supabase.storage.from('whatsapp-media').getPublicUrl(path);
     const publicUrl = urlData.publicUrl;
+    console.log('[API] Public URL:', publicUrl);
 
     // 3) Create message record
     const content = opts.caption?.trim() || file.name;
