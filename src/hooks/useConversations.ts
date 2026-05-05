@@ -389,7 +389,8 @@ export function useConversations(options?: { active?: boolean }) {
       fromType: 'human',
       mediaUrl: null,
       whatsappMessageId: null,
-      replyToId: opts?.replyToId || null
+      replyToId: opts?.replyToId || null,
+      sentAt: new Date().toISOString()
     };
 
     setConversations(prev => {
