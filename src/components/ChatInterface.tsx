@@ -76,13 +76,17 @@ const ChatInterface: React.FC = () => {
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
 
   // Live audio recording (mic button)
+  // We prefer opus-recorder (real OGG/Opus) so WhatsApp Cloud API accepts it.
+  // Fallback: MediaRecorder with audio/mp4 (Safari) — also accepted by WhatsApp.
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const opusRecorderRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
   const recordingCancelledRef = useRef(false);
+  const recordingModeRef = useRef<'opus' | 'mp4'>('opus');
   const MAX_RECORDING_SECONDS = 120;
 
   const stopRecordingTracks = () => {
@@ -94,29 +98,99 @@ const ChatInterface: React.FC = () => {
     recordingStreamRef.current = null;
   };
 
+  const handleRecordedBlob = (blob: Blob, mode: 'opus' | 'mp4') => {
+    const ext = mode === 'opus' ? 'ogg' : 'm4a';
+    const mime = mode === 'opus' ? 'audio/ogg' : 'audio/mp4';
+    const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: mime });
+    console.log('[Recording] produced file', { name: file.name, type: file.type, size: file.size });
+    if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.previewUrl);
+    const previewUrl = URL.createObjectURL(file);
+    setPendingAttachment({ file, mediaType: 'audio', previewUrl });
+    setAttachmentCaption('');
+  };
+
+  const startTimer = () => {
+    setRecordingSeconds(0);
+    recordingTimerRef.current = window.setInterval(() => {
+      setRecordingSeconds(prev => {
+        const next = prev + 1;
+        if (next >= MAX_RECORDING_SECONDS) {
+          stopRecording(false);
+        }
+        return next;
+      });
+    }, 1000);
+  };
+
   const startRecording = async () => {
     if (isRecording) return;
-    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      toast.error('Seu navegador não suporta gravação de áudio.');
+      return;
+    }
+    recordingCancelledRef.current = false;
+
+    // Try opus-recorder first (produces real OGG/Opus that Meta accepts)
+    try {
+      const { default: Recorder } = await import('opus-recorder');
+      const recorder = new Recorder({
+        encoderPath: '/opus/encoderWorker.min.js',
+        encoderSampleRate: 16000,
+        numberOfChannels: 1,
+        encoderApplication: 2049, // VOIP
+        streamPages: false,
+      });
+      opusRecorderRef.current = recorder;
+      recordingModeRef.current = 'opus';
+
+      recorder.ondataavailable = (typedArray: Uint8Array) => {
+        recordedChunksRef.current.push(new Blob([typedArray], { type: 'audio/ogg' }));
+      };
+      recorder.onstop = () => {
+        const wasCancelled = recordingCancelledRef.current;
+        const chunks = recordedChunksRef.current;
+        stopRecordingTracks();
+        setIsRecording(false);
+        setRecordingSeconds(0);
+        if (wasCancelled || chunks.length === 0) return;
+        const blob = new Blob(chunks, { type: 'audio/ogg' });
+        handleRecordedBlob(blob, 'opus');
+      };
+
+      recordedChunksRef.current = [];
+      await recorder.start();
+      // opus-recorder manages its own stream, but expose a stop hook
+      setIsRecording(true);
+      startTimer();
+      console.log('[Recording] started opus-recorder');
+      return;
+    } catch (opusErr) {
+      console.warn('[Recording] opus-recorder failed, falling back to MediaRecorder:', opusErr);
+      opusRecorderRef.current = null;
+    }
+
+    // Fallback: MediaRecorder with audio/mp4 (Safari/iOS)
+    if (typeof MediaRecorder === 'undefined') {
       toast.error('Seu navegador não suporta gravação de áudio.');
       return;
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recordingStreamRef.current = stream;
-
-      // Pick a mime type WhatsApp can accept after we relabel the file.
-      const candidates = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/mp4;codecs=mp4a.40.2',
-        'audio/mp4',
-        'audio/ogg;codecs=opus',
-      ];
-      const mimeType = candidates.find(t => (MediaRecorder as any).isTypeSupported?.(t)) || '';
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const mp4Mime = (MediaRecorder as any).isTypeSupported?.('audio/mp4')
+        ? 'audio/mp4'
+        : (MediaRecorder as any).isTypeSupported?.('audio/aac')
+          ? 'audio/aac'
+          : '';
+      if (!mp4Mime) {
+        stopRecordingTracks();
+        toast.error('Seu navegador não suporta gravar em formato compatível com WhatsApp.');
+        return;
+      }
+      const recorder = new MediaRecorder(stream, { mimeType: mp4Mime });
       mediaRecorderRef.current = recorder;
+      recordingModeRef.current = 'mp4';
       recordedChunksRef.current = [];
-      recordingCancelledRef.current = false;
 
       recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
@@ -124,39 +198,18 @@ const ChatInterface: React.FC = () => {
       recorder.onstop = () => {
         const wasCancelled = recordingCancelledRef.current;
         const chunks = recordedChunksRef.current;
-        const usedMime = recorder.mimeType || mimeType || 'audio/webm';
         stopRecordingTracks();
         setIsRecording(false);
         setRecordingSeconds(0);
         if (wasCancelled || chunks.length === 0) return;
-
-        // Map browser mime -> WhatsApp-friendly container/extension.
-        // Meta accepts ogg/opus, mp3, mp4 (m4a) and aac.
-        const isMp4 = usedMime.includes('mp4');
-        const finalMime = isMp4 ? 'audio/mp4' : 'audio/ogg';
-        const ext = isMp4 ? 'm4a' : 'ogg';
-        const blob = new Blob(chunks, { type: finalMime });
-        const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: finalMime });
-
-        if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.previewUrl);
-        const previewUrl = URL.createObjectURL(file);
-        setPendingAttachment({ file, mediaType: 'audio', previewUrl });
-        setAttachmentCaption('');
+        const blob = new Blob(chunks, { type: 'audio/mp4' });
+        handleRecordedBlob(blob, 'mp4');
       };
 
       recorder.start();
       setIsRecording(true);
-      setRecordingSeconds(0);
-      recordingTimerRef.current = window.setInterval(() => {
-        setRecordingSeconds(prev => {
-          const next = prev + 1;
-          if (next >= MAX_RECORDING_SECONDS) {
-            // Auto-stop at max
-            try { mediaRecorderRef.current?.state === 'recording' && mediaRecorderRef.current.stop(); } catch {}
-          }
-          return next;
-        });
-      }, 1000);
+      startTimer();
+      console.log('[Recording] started MediaRecorder mp4');
     } catch (err: any) {
       stopRecordingTracks();
       setIsRecording(false);
@@ -173,7 +226,9 @@ const ChatInterface: React.FC = () => {
     if (!isRecording) return;
     recordingCancelledRef.current = cancel;
     try {
-      if (mediaRecorderRef.current?.state === 'recording') {
+      if (recordingModeRef.current === 'opus' && opusRecorderRef.current) {
+        opusRecorderRef.current.stop();
+      } else if (mediaRecorderRef.current?.state === 'recording') {
         mediaRecorderRef.current.stop();
       } else {
         stopRecordingTracks();
@@ -191,6 +246,7 @@ const ChatInterface: React.FC = () => {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      try { opusRecorderRef.current?.stop?.(); } catch {}
       stopRecordingTracks();
     };
   }, []);
