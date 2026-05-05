@@ -1172,10 +1172,6 @@ const ChatInterface: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <div className="flex justify-center my-6">
-                    <span className="px-4 py-1.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-xs font-medium rounded-full shadow-sm backdrop-blur-sm">Hoje</span>
-                  </div>
-
                   {(() => {
                     const msgsById = new Map(activeChat.messages.map(m => [m.id, m]));
 
@@ -1200,15 +1196,43 @@ const ChatInterface: React.FC = () => {
                       if (m.fromType === 'nina') return sdrName;
                       return senderNameFor(m) || 'Você';
                     };
+
+                    const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+                    const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+                    const formatDaySeparator = (d: Date) => {
+                      const now = new Date();
+                      const diff = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+                      if (diff === 0) return 'Hoje';
+                      if (diff === 1) return 'Ontem';
+                      if (diff > 1 && diff < 7) {
+                        const name = d.toLocaleDateString('pt-BR', { weekday: 'long' });
+                        return name.charAt(0).toUpperCase() + name.slice(1);
+                      }
+                      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    };
+
+                    let lastDayKey: string | null = null;
                     return activeChat.messages.map((msg) => {
                       const isOutgoing = msg.direction === MessageDirection.OUTGOING;
                       const replied = msg.replyToId ? msgsById.get(msg.replyToId) : null;
+                      const msgDate = new Date(msg.sentAt);
+                      const currentKey = dayKey(msgDate);
+                      const showSeparator = currentKey !== lastDayKey;
+                      lastDayKey = currentKey;
                       return (
-                        <div
-                          key={msg.id}
-                          data-msg-id={msg.id}
-                          className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-300 transition-all rounded-lg`}
-                        >
+                        <React.Fragment key={msg.id}>
+                          {showSeparator && (
+                            <div className="flex justify-center my-6">
+                              <span className="px-4 py-1.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-xs font-medium rounded-full shadow-sm backdrop-blur-sm">
+                                {formatDaySeparator(msgDate)}
+                              </span>
+                            </div>
+                          )}
+                          <div
+                            data-msg-id={msg.id}
+                            className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-300 transition-all rounded-lg`}
+                          >
+
                           <div className={`flex items-center gap-2 max-w-[75%] ${isOutgoing ? 'flex-row-reverse' : 'flex-row'}`}>
                             <div className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'} flex-1 min-w-0`}>
                               <div
