@@ -308,6 +308,7 @@ export interface UIMessage {
   metadata?: Record<string, any>;
   replyToId?: string | null;
   errorMessage?: string | null;
+  sentAt: string;
 }
 
 // ============= Utility Functions =============
