@@ -308,6 +308,7 @@ export interface UIMessage {
   metadata?: Record<string, any>;
   replyToId?: string | null;
   errorMessage?: string | null;
+  sentAt: string;
 }
 
 // ============= Utility Functions =============
@@ -362,6 +363,7 @@ export function transformDBToUIMessage(msg: DBMessage): UIMessage {
     metadata: meta,
     replyToId: msg.reply_to_id || null,
     errorMessage: msg.status === 'failed' ? (meta.error_message || null) : null,
+    sentAt: msg.sent_at,
   };
 }
 
