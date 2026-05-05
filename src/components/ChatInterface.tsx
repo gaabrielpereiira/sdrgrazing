@@ -1348,6 +1348,7 @@ const ChatInterface: React.FC = () => {
                             )}
                           </div>
                         </div>
+                        </React.Fragment>
                       );
                     });
                   })()}
