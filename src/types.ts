@@ -363,6 +363,7 @@ export function transformDBToUIMessage(msg: DBMessage): UIMessage {
     metadata: meta,
     replyToId: msg.reply_to_id || null,
     errorMessage: msg.status === 'failed' ? (meta.error_message || null) : null,
+    sentAt: msg.sent_at,
   };
 }
 
