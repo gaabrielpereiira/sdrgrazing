@@ -144,7 +144,8 @@ const ChatInterface: React.FC = () => {
       recordingModeRef.current = 'opus';
 
       recorder.ondataavailable = (typedArray: Uint8Array) => {
-        recordedChunksRef.current.push(new Blob([typedArray], { type: 'audio/ogg' }));
+        const buf = typedArray.buffer.slice(typedArray.byteOffset, typedArray.byteOffset + typedArray.byteLength) as ArrayBuffer;
+        recordedChunksRef.current.push(new Blob([buf], { type: 'audio/ogg' }));
       };
       recorder.onstop = () => {
         const wasCancelled = recordingCancelledRef.current;
