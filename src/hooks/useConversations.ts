@@ -454,6 +454,7 @@ export function useConversations(options?: { active?: boolean }) {
       mediaUrl: objectUrl,
       whatsappMessageId: null,
       replyToId: opts.replyToId || null,
+      sentAt: new Date().toISOString(),
     };
 
     setConversations(prev => prev.map(conv => {
