@@ -132,12 +132,13 @@ serve(async (req) => {
 
         console.log(`[MessageGrouper] Combined content for ${phoneNumber}:`, combinedContent.substring(0, 200));
 
-        // Update the last message with combined content if multiple messages
+        // Update only metadata for grouped messages — DO NOT overwrite content,
+        // since each individual bubble should keep its original text in the UI.
+        // The combined content is passed to Nina via context_data.combined_content below.
         if (dbMessages.length > 1) {
           await supabase
             .from('messages')
             .update({
-              content: combinedContent,
               metadata: {
                 ...lastDbMessage.metadata,
                 grouped_messages: messageIds,
@@ -145,8 +146,8 @@ serve(async (req) => {
               }
             })
             .eq('id', lastDbMessage.id);
-          
-          console.log(`[MessageGrouper] Updated last message with combined content`);
+
+          console.log(`[MessageGrouper] Updated last message metadata only (content preserved)`);
         } else if (dbMessages[0].type === 'audio' && combinedContent !== dbMessages[0].content) {
           // Update single audio message with transcription
           await supabase
