@@ -1,48 +1,52 @@
-# Corrigir separadores de data no chat
+# Corrigir mensagens "duplicadas" no chat
 
-## Problema
+## Diagnóstico
 
-No print, a conversa do Cy aparece como "Ontem" na lista lateral, mas dentro do chat o cabeçalho mostra **"Hoje"** acima de mensagens enviadas em 22:17 / 22:18 / 22:19 de ontem.
+As mensagens nos prints **não são duplicadas de verdade** — o cliente realmente enviou só uma vez cada. O que está acontecendo:
 
-Causa: em `src/components/ChatInterface.tsx` (linha ~1175), o separador de data é uma string fixa:
+Quando o lead manda várias mensagens rápidas (ex.: `Oa`, `Olá`), o `whatsapp-webhook` cria cada mensagem individual no banco imediatamente (para aparecer em tempo real). Depois de 10s, a função `message-grouper` agrupa essas mensagens para mandar para a Nina com contexto completo. **O bug está aqui:**
 
-```tsx
-<span ...>Hoje</span>
+`supabase/functions/message-grouper/index.ts` (~linha 115):
+
+```ts
+if (dbMessages.length > 1) {
+  await supabase
+    .from('messages')
+    .update({
+      content: combinedContent,   // ← sobrescreve "Olá" com "Oa\nOlá"
+      metadata: { ...lastDbMessage.metadata, grouped_messages: messageIds, ... }
+    })
+    .eq('id', lastDbMessage.id);
+}
 ```
 
-Não existe nenhum cálculo baseado em `msg.sent_at`. Por isso toda conversa mostra "Hoje", independente do dia real das mensagens. Também não há separador quando mensagens passam de um dia para outro dentro da mesma conversa.
+A última mensagem do grupo é **reescrita** com a concatenação de todas as anteriores. Resultado visível no chat:
+
+```
+[bubble 1] Oa
+[bubble 2] Oa
+           Olá        ← era só "Olá", virou "Oa\nOlá"
+```
+
+Por isso o print do Naty mostra `Olay` / `Boa tarde Donatella` / `Olay\nBoa tarde Donatella\nTd bem?` — cada bolha individual continua existindo, mas a última foi inflada com o texto das anteriores.
 
 ## Solução
 
-Tornar o separador dinâmico, agrupando as mensagens por dia (no fuso horário local) e renderizando um chip de data antes do primeiro item de cada grupo.
+A Nina **já recebe** o conteúdo combinado via `context_data.combined_content` na fila `nina_processing_queue`, então não há razão para alterar o `content` da mensagem no banco. Basta:
 
-### Mudanças
+1. **`supabase/functions/message-grouper/index.ts`**
+   - Remover o `update({ content: combinedContent, ... })` da última mensagem quando `dbMessages.length > 1`.
+   - Manter apenas a atualização de `metadata` (opcional: `grouped_messages`, `message_count`) para fins de auditoria — sem mexer em `content`.
+   - Manter o caso especial de áudio único: continuar gravando a transcrição em `content` quando `dbMessages.length === 1 && type === 'audio'` (esse update é legítimo e não causa duplicação visual).
+   - O `combinedContent` segue sendo enviado para a Nina via `context_data.combined_content` exatamente como hoje.
 
-1. **`src/types.ts`**
-   - Expor `sent_at` cru no `UIMessage` (campo novo `sentAt: string`) ou já incluir, para podermos comparar datas no front sem reparsear strings exibidas. Atualizar `transformDBToUIMessage` para popular esse campo.
-   - Atualizar todos os pontos que criam `UIMessage` "otimistas" em `useConversations.ts` (sendMessage, sendMediaMessage, sendTemplateMessage) para também setar `sentAt: new Date().toISOString()`.
-
-2. **`src/components/ChatInterface.tsx`**
-   - Remover o bloco fixo `<span>Hoje</span>`.
-   - Criar helper `formatDaySeparator(date: Date)` que retorna:
-     - `"Hoje"` se for o mesmo dia local
-     - `"Ontem"` se for o dia anterior
-     - Nome do dia da semana (`"Segunda-feira"`) se < 7 dias
-     - Caso contrário `DD/MM/YYYY` via `toLocaleDateString('pt-BR')`
-   - No `.map(messages)`, manter um cursor `lastDayKey` (ex.: `YYYY-MM-DD` local). Antes de cada mensagem, se a data muda, renderizar o chip com `formatDaySeparator`.
-
-3. **Comparação de dias**
-   - Usar comparação por dia de calendário local (mesma lógica já existente em `formatRelativeTime`: `new Date(y, m, d).getTime()`), evitando `new Date(string)` direto para datas sem timezone.
-
-## Detalhes técnicos
-
-- Manter o estilo visual atual do chip (`px-4 py-1.5 bg-slate-800/80 ...`).
-- O cabeçalho "fixo" no topo é removido — o primeiro chip será o do dia da primeira mensagem.
-- Mensagens otimistas (`temp-*`) usam `new Date()` agora, então naturalmente caem em "Hoje".
-- Não mexer em `formatMessageTime` (HH:MM dentro do balão continua igual).
+2. **Nada mais precisa mudar** — `nina-orchestrator` já lê `context_data.combined_content` quando disponível para montar o prompt, então o agrupamento semântico para a IA continua funcionando.
 
 ## Arquivos
 
-- `src/types.ts` — adicionar `sentAt` a `UIMessage` + popular em `transformDBToUIMessage`.
-- `src/hooks/useConversations.ts` — popular `sentAt` nas 3 mensagens otimistas.
-- `src/components/ChatInterface.tsx` — substituir chip fixo "Hoje" por separadores dinâmicos por dia.
+- `supabase/functions/message-grouper/index.ts` — remover sobrescrita de `content` no agrupamento de mensagens de texto.
+
+## Observações
+
+- Mensagens já existentes no banco que foram "infladas" continuarão exibindo o texto concatenado (são dados históricos). A correção evita que o problema aconteça em novas conversas.
+- Se quiser limpar o histórico, posso adicionar uma migration opcional que detecta mensagens com `metadata.grouped_messages` e restaura o `content` original a partir do payload em `message_grouping_queue.message_data`. Avise se quer incluir.
