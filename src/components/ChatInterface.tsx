@@ -1274,7 +1274,8 @@ const ChatInterface: React.FC = () => {
                     };
 
                     const previewFor = (m: UIMessage) => {
-                      if (m.type === MessageType.IMAGE) return '📷 Imagem';
+                      if (m.metadata?.is_contacts) return '👤 Contato';
+                      if (m.type === MessageType.IMAGE) return m.metadata?.is_sticker ? '🎟️ Figurinha' : '📷 Imagem';
                       if (m.type === MessageType.AUDIO) return '🎵 Áudio';
                       if (m.type === MessageType.DOCUMENT) return '📄 ' + (m.content || 'Documento');
                       return m.content || '';
