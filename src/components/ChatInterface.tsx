@@ -1569,7 +1569,8 @@ const ChatInterface: React.FC = () => {
                         Respondendo a {replyingTo.fromType === 'user' ? activeChat.contactName : replyingTo.fromType === 'nina' ? sdrName : 'Você'}
                       </p>
                       <p className="text-xs text-slate-400 truncate mt-0.5">
-                        {replyingTo.type === MessageType.IMAGE ? '📷 Imagem' :
+                        {replyingTo.metadata?.is_contacts ? '👤 Contato' :
+                         replyingTo.type === MessageType.IMAGE ? (replyingTo.metadata?.is_sticker ? '🎟️ Figurinha' : '📷 Imagem') :
                          replyingTo.type === MessageType.AUDIO ? '🎵 Áudio' :
                          replyingTo.type === MessageType.DOCUMENT ? `📄 ${replyingTo.content || 'Documento'}` :
                          replyingTo.content}
