@@ -654,6 +654,77 @@ const ChatInterface: React.FC = () => {
   };
 
   const renderMessageContent = (msg: UIMessage) => {
+    if (msg.metadata?.is_contacts) {
+      const list: any[] = Array.isArray(msg.metadata?.contacts) ? msg.metadata.contacts : [];
+      const openByPhone = (rawPhone: string) => {
+        const digits = (rawPhone || '').replace(/\D/g, '');
+        if (!digits) return;
+        const found = conversations.find(c => (c.contactPhone || '').replace(/\D/g, '').endsWith(digits.slice(-8)));
+        if (found) {
+          setSelectedChatId(found.id);
+          toast.success('Conversa aberta');
+        } else {
+          toast.error('Contato ainda não está no sistema');
+        }
+      };
+      return (
+        <div className="mb-1 flex flex-col gap-2">
+          {list.map((c, i) => {
+            const name = c?.name?.formatted_name
+              || [c?.name?.first_name, c?.name?.last_name].filter(Boolean).join(' ')
+              || 'Sem nome';
+            const initial = (name || '?').trim().charAt(0).toUpperCase();
+            const phones: any[] = Array.isArray(c?.phones) ? c.phones : [];
+            const emails: any[] = Array.isArray(c?.emails) ? c.emails : [];
+            const company = c?.org?.company || c?.org?.title;
+            return (
+              <div key={i} className="bg-slate-800/80 border border-slate-700 rounded-lg p-3 min-w-[240px]">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center text-sm font-semibold">
+                    {initial}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{name}</p>
+                    {company && <p className="text-[11px] text-slate-400 truncate">{company}</p>}
+                  </div>
+                </div>
+                {phones.map((p, pi) => (
+                  <div key={pi} className="flex items-center gap-2 text-xs py-1 border-t border-slate-700/50 first:border-t-0">
+                    <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                    <span className="flex-1 truncate">{p?.phone || p?.wa_id || '—'}</span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(p?.phone || ''); toast.success('Copiado'); }}
+                      className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[10px]"
+                    >
+                      Copiar
+                    </button>
+                    <button
+                      onClick={() => openByPhone(p?.wa_id || p?.phone || '')}
+                      className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px]"
+                    >
+                      Abrir
+                    </button>
+                  </div>
+                ))}
+                {emails.map((e, ei) => (
+                  <div key={`e-${ei}`} className="flex items-center gap-2 text-xs py-1 border-t border-slate-700/50">
+                    <span className="text-slate-400 shrink-0">@</span>
+                    <span className="flex-1 truncate">{e?.email}</span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(e?.email || ''); toast.success('Copiado'); }}
+                      className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[10px]"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
     if (msg.type === MessageType.IMAGE) {
       const isSticker = !!msg.metadata?.is_sticker;
       if (!msg.mediaUrl) {
@@ -928,10 +999,14 @@ const ChatInterface: React.FC = () => {
                     <span className="text-[10px] text-slate-500 font-medium">{chat.lastMessageAt ? formatRelativeTime(chat.lastMessageAt) : chat.lastMessageTime}</span>
                   </div>
                   <p className="text-xs text-slate-500 truncate">
-                    {chat.messages[chat.messages.length - 1]?.type === MessageType.IMAGE ? '📷 Imagem' : 
-                     chat.messages[chat.messages.length - 1]?.type === MessageType.AUDIO ? '🎵 Áudio' : 
-                     chat.messages[chat.messages.length - 1]?.type === MessageType.DOCUMENT ? '📄 Documento' :
-                     chat.lastMessage || 'Sem mensagens'}
+                    {(() => {
+                      const last = chat.messages[chat.messages.length - 1];
+                      if (last?.metadata?.is_contacts) return '👤 Contato';
+                      if (last?.type === MessageType.IMAGE) return last?.metadata?.is_sticker ? '🎟️ Figurinha' : '📷 Imagem';
+                      if (last?.type === MessageType.AUDIO) return '🎵 Áudio';
+                      if (last?.type === MessageType.DOCUMENT) return '📄 Documento';
+                      return chat.lastMessage || 'Sem mensagens';
+                    })()}
                   </p>
                   
                   <div className="flex items-center mt-2 gap-1.5">
@@ -1199,7 +1274,8 @@ const ChatInterface: React.FC = () => {
                     };
 
                     const previewFor = (m: UIMessage) => {
-                      if (m.type === MessageType.IMAGE) return '📷 Imagem';
+                      if (m.metadata?.is_contacts) return '👤 Contato';
+                      if (m.type === MessageType.IMAGE) return m.metadata?.is_sticker ? '🎟️ Figurinha' : '📷 Imagem';
                       if (m.type === MessageType.AUDIO) return '🎵 Áudio';
                       if (m.type === MessageType.DOCUMENT) return '📄 ' + (m.content || 'Documento');
                       return m.content || '';
@@ -1493,7 +1569,8 @@ const ChatInterface: React.FC = () => {
                         Respondendo a {replyingTo.fromType === 'user' ? activeChat.contactName : replyingTo.fromType === 'nina' ? sdrName : 'Você'}
                       </p>
                       <p className="text-xs text-slate-400 truncate mt-0.5">
-                        {replyingTo.type === MessageType.IMAGE ? '📷 Imagem' :
+                        {replyingTo.metadata?.is_contacts ? '👤 Contato' :
+                         replyingTo.type === MessageType.IMAGE ? (replyingTo.metadata?.is_sticker ? '🎟️ Figurinha' : '📷 Imagem') :
                          replyingTo.type === MessageType.AUDIO ? '🎵 Áudio' :
                          replyingTo.type === MessageType.DOCUMENT ? `📄 ${replyingTo.content || 'Documento'}` :
                          replyingTo.content}

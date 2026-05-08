@@ -292,6 +292,8 @@ serve(async (req) => {
           let messageType = 'text';
           let mediaType = null;
           let isSticker = false;
+          let isContacts = false;
+          let contactsPayload: any = null;
 
           switch (message.type) {
             case 'text':
@@ -326,6 +328,16 @@ serve(async (req) => {
               messageType = 'document';
               mediaType = 'document';
               break;
+            case 'contacts': {
+              const list = Array.isArray(message.contacts) ? message.contacts : [];
+              contactsPayload = list;
+              isContacts = true;
+              messageType = 'text';
+              messageContent = list.length > 1
+                ? `👥 ${list.length} contatos compartilhados`
+                : '👤 Contato compartilhado';
+              break;
+            }
             default:
               messageContent = `[${message.type}]`;
           }
@@ -345,6 +357,8 @@ serve(async (req) => {
               metadata: { 
                 original_type: message.type,
                 is_sticker: isSticker,
+                is_contacts: isContacts,
+                contacts: contactsPayload,
                 media_id: message.audio?.id || message.image?.id || message.video?.id || message.document?.id || message.sticker?.id || null
               }
             })
@@ -380,9 +394,13 @@ serve(async (req) => {
             }
           }
 
-          // Stickers don't trigger Nina — skip queue + last_message update
-          if (isSticker) {
-            console.log('[Webhook] Sticker stored, skipping Nina queue');
+          // Stickers/contacts don't trigger Nina — update last_message but skip queue
+          if (isSticker || isContacts) {
+            await supabase
+              .from('conversations')
+              .update({ last_message_at: new Date().toISOString() })
+              .eq('id', conversation.id);
+            console.log('[Webhook]', isSticker ? 'Sticker' : 'Contacts', 'stored, skipping Nina queue');
             continue;
           }
 
