@@ -1324,6 +1324,19 @@ const ChatInterface: React.FC = () => {
                                   </button>
                                 )}
                                 {renderMessageContent(msg)}
+                                {(() => {
+                                  const reactions = msg.metadata?.reactions as Record<string, string> | undefined;
+                                  const emojis = reactions ? Object.values(reactions).filter(Boolean) : [];
+                                  if (emojis.length === 0) return null;
+                                  return (
+                                    <div
+                                      className={`absolute -bottom-3 ${isOutgoing ? 'left-2' : 'right-2'} flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-slate-900 border border-slate-700 shadow-md text-sm leading-none`}
+                                      title="Reação"
+                                    >
+                                      {emojis.map((e, i) => <span key={i}>{e}</span>)}
+                                    </div>
+                                  );
+                                })()}
                               </div>
 
                               <div className="flex items-center mt-1.5 gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity px-1 flex-wrap">
