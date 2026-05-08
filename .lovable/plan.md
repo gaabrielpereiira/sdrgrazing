@@ -1,52 +1,52 @@
-# Corrigir mensagens "duplicadas" no chat
+# Suporte a Stickers e Reactions
 
-## Diagnóstico
+Hoje o webhook do WhatsApp cai no `default` para `sticker` e `reaction`, gravando textos genéricos `[sticker]` / `[reaction]`. Vamos tratar os dois tipos corretamente: sticker como mídia visual e reaction como emoji anexado à mensagem original.
 
-As mensagens nos prints **não são duplicadas de verdade** — o cliente realmente enviou só uma vez cada. O que está acontecendo:
+## 1. Stickers (figurinhas)
 
-Quando o lead manda várias mensagens rápidas (ex.: `Oa`, `Olá`), o `whatsapp-webhook` cria cada mensagem individual no banco imediatamente (para aparecer em tempo real). Depois de 10s, a função `message-grouper` agrupa essas mensagens para mandar para a Nina com contexto completo. **O bug está aqui:**
+**Backend — `whatsapp-webhook/index.ts`**
+- Adicionar `case 'sticker'` no switch:
+  - `messageType = 'image'` (o enum `message_type` só aceita text/audio/image/document/video; aproveitamos `image` pois sticker é WebP)
+  - `mediaType = 'sticker'`
+  - `messageContent = ''`
+  - Salvar `metadata.is_sticker = true` e `metadata.media_id = message.sticker.id`
+- Incluir `'sticker'` na lista que dispara `download-whatsapp-media` (já é genérico por `media_id`, funciona com WebP).
 
-`supabase/functions/message-grouper/index.ts` (~linha 115):
+**Frontend — `ChatInterface.tsx`**
+- Em `MessageType.IMAGE`, se `mediaType === 'sticker'` (ou `metadata.is_sticker`), renderizar variante "sticker": imagem ~140px, fundo transparente, sem bubble, sem caption.
+- Atualizar previews da lista de conversas (linhas ~918, ~1189, ~1466): mostrar `🎟️ Figurinha` em vez de `📷 Imagem` quando for sticker.
 
-```ts
-if (dbMessages.length > 1) {
-  await supabase
-    .from('messages')
-    .update({
-      content: combinedContent,   // ← sobrescreve "Olá" com "Oa\nOlá"
-      metadata: { ...lastDbMessage.metadata, grouped_messages: messageIds, ... }
-    })
-    .eq('id', lastDbMessage.id);
-}
-```
+**Tipos — `src/types.ts`**
+- Garantir que `transformDBToUIMessage` propague `mediaType` e `metadata.is_sticker` para a UI (adicionar campo `isSticker` ou usar `mediaType === 'sticker'`).
 
-A última mensagem do grupo é **reescrita** com a concatenação de todas as anteriores. Resultado visível no chat:
+## 2. Reactions (emojis em mensagens)
 
-```
-[bubble 1] Oa
-[bubble 2] Oa
-           Olá        ← era só "Olá", virou "Oa\nOlá"
-```
+Reactions do WhatsApp não são mensagens normais — referenciam outra mensagem com um emoji. Vamos armazenar e exibir como badge anexado.
 
-Por isso o print do Naty mostra `Olay` / `Boa tarde Donatella` / `Olay\nBoa tarde Donatella\nTd bem?` — cada bolha individual continua existindo, mas a última foi inflada com o texto das anteriores.
+**Backend — `whatsapp-webhook/index.ts`**
+- Adicionar `case 'reaction'` no switch ANTES do insert genérico, com fluxo separado:
+  - Ler `message.reaction.message_id` (alvo) e `message.reaction.emoji` (vazio = remoção).
+  - Buscar a mensagem alvo: `messages.where(whatsapp_message_id = reaction.message_id)`.
+  - Se encontrada, fazer `update` em `metadata.reactions` (objeto `{ [from_phone]: emoji }`). Emoji vazio → remover entrada.
+  - **Não** inserir nova linha em `messages`, **não** enfileirar em `message_grouping_queue` (reaction não deve gerar resposta da Nina).
+  - `continue` no loop.
 
-## Solução
+**Frontend — `ChatInterface.tsx`**
+- Ler `metadata.reactions` da mensagem e renderizar um pequeno chip com o(s) emoji(s) sobreposto no canto inferior do bubble (estilo WhatsApp).
+- Atualizar `transformDBToUIMessage` para expor `reactions`.
 
-A Nina **já recebe** o conteúdo combinado via `context_data.combined_content` na fila `nina_processing_queue`, então não há razão para alterar o `content` da mensagem no banco. Basta:
+**Realtime**
+- A subscription já reage a `UPDATE` em `messages`, então a reaction aparece sem reload. Confirmar que o handler de UPDATE substitui a mensagem inteira (já faz isso em `useConversations.ts`).
 
-1. **`supabase/functions/message-grouper/index.ts`**
-   - Remover o `update({ content: combinedContent, ... })` da última mensagem quando `dbMessages.length > 1`.
-   - Manter apenas a atualização de `metadata` (opcional: `grouped_messages`, `message_count`) para fins de auditoria — sem mexer em `content`.
-   - Manter o caso especial de áudio único: continuar gravando a transcrição em `content` quando `dbMessages.length === 1 && type === 'audio'` (esse update é legítimo e não causa duplicação visual).
-   - O `combinedContent` segue sendo enviado para a Nina via `context_data.combined_content` exatamente como hoje.
+## 3. Garantias adicionais
+- Stickers e reactions precisam ser ignorados pelo `nina-orchestrator` para não gerar resposta automática inadequada. Reactions já não entram na fila. Para stickers, o orchestrator vai ver uma "imagem" — adicionar verificação simples: se `metadata.is_sticker`, pular geração de resposta (ou tratar como contexto vazio).
 
-2. **Nada mais precisa mudar** — `nina-orchestrator` já lê `context_data.combined_content` quando disponível para montar o prompt, então o agrupamento semântico para a IA continua funcionando.
+## Arquivos afetados
+- `supabase/functions/whatsapp-webhook/index.ts`
+- `supabase/functions/nina-orchestrator/index.ts` (skip de sticker)
+- `src/types.ts`
+- `src/components/ChatInterface.tsx`
 
-## Arquivos
-
-- `supabase/functions/message-grouper/index.ts` — remover sobrescrita de `content` no agrupamento de mensagens de texto.
-
-## Observações
-
-- Mensagens já existentes no banco que foram "infladas" continuarão exibindo o texto concatenado (são dados históricos). A correção evita que o problema aconteça em novas conversas.
-- Se quiser limpar o histórico, posso adicionar uma migration opcional que detecta mensagens com `metadata.grouped_messages` e restaura o `content` original a partir do payload em `message_grouping_queue.message_data`. Avise se quer incluir.
+## Fora de escopo
+- Enviar stickers/reactions a partir do painel (apenas recebimento e exibição).
+- Migration de banco (usamos `metadata` jsonb existente).

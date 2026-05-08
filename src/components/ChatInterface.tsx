@@ -655,11 +655,24 @@ const ChatInterface: React.FC = () => {
 
   const renderMessageContent = (msg: UIMessage) => {
     if (msg.type === MessageType.IMAGE) {
+      const isSticker = !!msg.metadata?.is_sticker;
       if (!msg.mediaUrl) {
         return (
           <div className="mb-1 flex items-center gap-2 px-3 py-6 rounded-lg bg-slate-900/60 border border-slate-700/50 text-slate-400 text-xs">
             <Loader2 className="w-4 h-4 animate-spin" />
-            Baixando imagem do WhatsApp...
+            {isSticker ? 'Baixando figurinha...' : 'Baixando imagem do WhatsApp...'}
+          </div>
+        );
+      }
+      if (isSticker) {
+        return (
+          <div className="mb-1">
+            <img
+              src={msg.mediaUrl}
+              alt="Figurinha"
+              className="max-w-[140px] max-h-[140px] object-contain"
+              loading="lazy"
+            />
           </div>
         );
       }
@@ -1236,12 +1249,16 @@ const ChatInterface: React.FC = () => {
                           <div className={`flex items-center gap-2 max-w-[75%] ${isOutgoing ? 'flex-row-reverse' : 'flex-row'}`}>
                             <div className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'} flex-1 min-w-0`}>
                               <div
-                                className={`px-5 py-3 rounded-2xl shadow-md relative text-sm leading-relaxed ${
-                                  isOutgoing
-                                    ? msg.fromType === 'nina'
-                                      ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-tr-sm shadow-violet-900/20'
-                                      : 'bg-gradient-to-br from-cyan-600 to-teal-700 text-white rounded-tr-sm shadow-cyan-900/20'
-                                    : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
+                                className={`relative text-sm leading-relaxed ${
+                                  msg.metadata?.is_sticker
+                                    ? 'bg-transparent p-0 shadow-none'
+                                    : `px-5 py-3 rounded-2xl shadow-md ${
+                                        isOutgoing
+                                          ? msg.fromType === 'nina'
+                                            ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-tr-sm shadow-violet-900/20'
+                                            : 'bg-gradient-to-br from-cyan-600 to-teal-700 text-white rounded-tr-sm shadow-cyan-900/20'
+                                          : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
+                                      }`
                                 } ${msg.status === 'failed' ? 'ring-1 ring-red-500/60' : ''}`}
                               >
                                 {(() => {
@@ -1307,6 +1324,19 @@ const ChatInterface: React.FC = () => {
                                   </button>
                                 )}
                                 {renderMessageContent(msg)}
+                                {(() => {
+                                  const reactions = msg.metadata?.reactions as Record<string, string> | undefined;
+                                  const emojis = reactions ? Object.values(reactions).filter(Boolean) : [];
+                                  if (emojis.length === 0) return null;
+                                  return (
+                                    <div
+                                      className={`absolute -bottom-3 ${isOutgoing ? 'left-2' : 'right-2'} flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-slate-900 border border-slate-700 shadow-md text-sm leading-none`}
+                                      title="Reação"
+                                    >
+                                      {emojis.map((e, i) => <span key={i}>{e}</span>)}
+                                    </div>
+                                  );
+                                })()}
                               </div>
 
                               <div className="flex items-center mt-1.5 gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity px-1 flex-wrap">

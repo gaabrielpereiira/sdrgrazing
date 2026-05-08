@@ -254,10 +254,44 @@ serve(async (req) => {
           }
           // Removed user_id update to maintain single-tenant null pattern
 
+          // 3a. REACTION: not a regular message — attach emoji to target message and skip queue
+          if (message.type === 'reaction') {
+            const targetWaId = message.reaction?.message_id;
+            const emoji = message.reaction?.emoji || '';
+            if (!targetWaId) {
+              console.log('[Webhook] Reaction without target message_id, ignoring');
+              continue;
+            }
+            const { data: targetMsg, error: targetErr } = await supabase
+              .from('messages')
+              .select('id, metadata')
+              .eq('whatsapp_message_id', targetWaId)
+              .maybeSingle();
+
+            if (targetErr || !targetMsg) {
+              console.log('[Webhook] Reaction target not found:', targetWaId);
+              continue;
+            }
+            const meta = (targetMsg.metadata || {}) as Record<string, any>;
+            const reactions = { ...(meta.reactions || {}) } as Record<string, string>;
+            if (emoji) {
+              reactions[phoneNumber] = emoji;
+            } else {
+              delete reactions[phoneNumber];
+            }
+            await supabase
+              .from('messages')
+              .update({ metadata: { ...meta, reactions } })
+              .eq('id', targetMsg.id);
+            console.log('[Webhook] Reaction', emoji || '(removed)', 'applied to', targetMsg.id);
+            continue;
+          }
+
           // 3. Determine message content and type
           let messageContent = '';
           let messageType = 'text';
           let mediaType = null;
+          let isSticker = false;
 
           switch (message.type) {
             case 'text':
@@ -268,6 +302,13 @@ serve(async (req) => {
               messageContent = message.image?.caption || '[imagem recebida]';
               messageType = 'image';
               mediaType = 'image';
+              break;
+            case 'sticker':
+              // Stickers are WebP images — store as image with sticker flag
+              messageContent = '🎟️ Figurinha';
+              messageType = 'image';
+              mediaType = 'sticker';
+              isSticker = true;
               break;
             case 'audio':
               // Audio will be transcribed by message-grouper
@@ -303,7 +344,8 @@ serve(async (req) => {
               sent_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
               metadata: { 
                 original_type: message.type,
-                media_id: message.audio?.id || message.image?.id || message.video?.id || message.document?.id || null
+                is_sticker: isSticker,
+                media_id: message.audio?.id || message.image?.id || message.video?.id || message.document?.id || message.sticker?.id || null
               }
             })
             .select()
@@ -321,9 +363,9 @@ serve(async (req) => {
 
           console.log('[Webhook] Created message:', dbMessage.id, 'for conversation:', conversation.id);
 
-          // 4b. Trigger media download for image/video/document/audio (non-blocking)
-          if (['image', 'video', 'document', 'audio'].includes(message.type)) {
-            const mediaId = message.image?.id || message.video?.id || message.document?.id || message.audio?.id;
+          // 4b. Trigger media download for image/video/document/audio/sticker (non-blocking)
+          if (['image', 'video', 'document', 'audio', 'sticker'].includes(message.type)) {
+            const mediaId = message.image?.id || message.video?.id || message.document?.id || message.audio?.id || message.sticker?.id;
             if (mediaId) {
               EdgeRuntime.waitUntil(
                 fetch(`${supabaseUrl}/functions/v1/download-whatsapp-media`, {
@@ -336,6 +378,12 @@ serve(async (req) => {
                 }).catch(err => console.error('[Webhook] Error triggering media download:', err))
               );
             }
+          }
+
+          // Stickers don't trigger Nina — skip queue + last_message update
+          if (isSticker) {
+            console.log('[Webhook] Sticker stored, skipping Nina queue');
+            continue;
           }
 
           // 5. Update conversation last_message_at
