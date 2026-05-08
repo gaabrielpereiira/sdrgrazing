@@ -1249,12 +1249,16 @@ const ChatInterface: React.FC = () => {
                           <div className={`flex items-center gap-2 max-w-[75%] ${isOutgoing ? 'flex-row-reverse' : 'flex-row'}`}>
                             <div className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'} flex-1 min-w-0`}>
                               <div
-                                className={`px-5 py-3 rounded-2xl shadow-md relative text-sm leading-relaxed ${
-                                  isOutgoing
-                                    ? msg.fromType === 'nina'
-                                      ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-tr-sm shadow-violet-900/20'
-                                      : 'bg-gradient-to-br from-cyan-600 to-teal-700 text-white rounded-tr-sm shadow-cyan-900/20'
-                                    : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
+                                className={`relative text-sm leading-relaxed ${
+                                  msg.metadata?.is_sticker
+                                    ? 'bg-transparent p-0 shadow-none'
+                                    : `px-5 py-3 rounded-2xl shadow-md ${
+                                        isOutgoing
+                                          ? msg.fromType === 'nina'
+                                            ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-tr-sm shadow-violet-900/20'
+                                            : 'bg-gradient-to-br from-cyan-600 to-teal-700 text-white rounded-tr-sm shadow-cyan-900/20'
+                                          : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
+                                      }`
                                 } ${msg.status === 'failed' ? 'ring-1 ring-red-500/60' : ''}`}
                               >
                                 {(() => {
