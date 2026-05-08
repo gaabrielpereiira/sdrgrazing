@@ -1,52 +1,48 @@
-# Suporte a Stickers e Reactions
+# Recebimento de Contatos Compartilhados (vCard)
 
-Hoje o webhook do WhatsApp cai no `default` para `sticker` e `reaction`, gravando textos genéricos `[sticker]` / `[reaction]`. Vamos tratar os dois tipos corretamente: sticker como mídia visual e reaction como emoji anexado à mensagem original.
+Hoje mensagens do tipo `contacts` caem no `default` do switch e gravam apenas `[contacts]`. Vamos tratar corretamente: armazenar a lista de contatos no `metadata` e renderizar cards bonitos no chat.
 
-## 1. Stickers (figurinhas)
+## 1. Backend — `supabase/functions/whatsapp-webhook/index.ts`
 
-**Backend — `whatsapp-webhook/index.ts`**
-- Adicionar `case 'sticker'` no switch:
-  - `messageType = 'image'` (o enum `message_type` só aceita text/audio/image/document/video; aproveitamos `image` pois sticker é WebP)
-  - `mediaType = 'sticker'`
-  - `messageContent = ''`
-  - Salvar `metadata.is_sticker = true` e `metadata.media_id = message.sticker.id`
-- Incluir `'sticker'` na lista que dispara `download-whatsapp-media` (já é genérico por `media_id`, funciona com WebP).
+Adicionar `case 'contacts'` no switch, antes do `default`:
 
-**Frontend — `ChatInterface.tsx`**
-- Em `MessageType.IMAGE`, se `mediaType === 'sticker'` (ou `metadata.is_sticker`), renderizar variante "sticker": imagem ~140px, fundo transparente, sem bubble, sem caption.
-- Atualizar previews da lista de conversas (linhas ~918, ~1189, ~1466): mostrar `🎟️ Figurinha` em vez de `📷 Imagem` quando for sticker.
+- `messageType = 'text'`
+- `messageContent = '👤 Contato compartilhado'` (ou `'👥 N contatos compartilhados'` se `length > 1`)
+- Salvar no metadata da mensagem:
+  - `is_contacts: true`
+  - `contacts: message.contacts` (array completo do payload do WhatsApp, com `name`, `phones`, `emails`, `org`, `addresses`, `urls`, `birthday`)
 
-**Tipos — `src/types.ts`**
-- Garantir que `transformDBToUIMessage` propague `mediaType` e `metadata.is_sticker` para a UI (adicionar campo `isSticker` ou usar `mediaType === 'sticker'`).
+Após o insert da mensagem, **pular a fila da Nina** (igual sticker): atualizar `last_message_at` da conversa, mas dar `continue` antes de inserir em `message_grouping_queue`. Compartilhar vCard não deve disparar resposta automática da IA.
 
-## 2. Reactions (emojis em mensagens)
+Sem download de mídia (contatos são JSON puros, não têm `media_id`).
 
-Reactions do WhatsApp não são mensagens normais — referenciam outra mensagem com um emoji. Vamos armazenar e exibir como badge anexado.
+## 2. Frontend — `src/components/ChatInterface.tsx`
 
-**Backend — `whatsapp-webhook/index.ts`**
-- Adicionar `case 'reaction'` no switch ANTES do insert genérico, com fluxo separado:
-  - Ler `message.reaction.message_id` (alvo) e `message.reaction.emoji` (vazio = remoção).
-  - Buscar a mensagem alvo: `messages.where(whatsapp_message_id = reaction.message_id)`.
-  - Se encontrada, fazer `update` em `metadata.reactions` (objeto `{ [from_phone]: emoji }`). Emoji vazio → remover entrada.
-  - **Não** inserir nova linha em `messages`, **não** enfileirar em `message_grouping_queue` (reaction não deve gerar resposta da Nina).
-  - `continue` no loop.
+**Em `renderMessageContent`**, adicionar branch antes do switch de tipos:
+```
+if (msg.metadata?.is_contacts) { ...render cards... }
+```
 
-**Frontend — `ChatInterface.tsx`**
-- Ler `metadata.reactions` da mensagem e renderizar um pequeno chip com o(s) emoji(s) sobreposto no canto inferior do bubble (estilo WhatsApp).
-- Atualizar `transformDBToUIMessage` para expor `reactions`.
+Para cada contato no array, renderizar um card com:
+- Avatar circular com inicial do nome
+- Nome formatado (`name.formatted_name` ou `name.first_name + last_name`)
+- Empresa/cargo (`org.company`, `org.title`) se existir
+- Lista de telefones com botão **Copiar** e botão **Iniciar conversa**
+  - "Iniciar conversa": busca `contacts` por `phone_number` normalizado; se achar conversa ativa, abre via `setSelectedConversation`; senão, mostra toast "Contato não encontrado no sistema"
+- Lista de emails (se existir) com botão Copiar
+- Estilo: `bg-slate-800 border border-slate-700 rounded-lg p-3`, similar aos cards de áudio/documento já existentes
 
-**Realtime**
-- A subscription já reage a `UPDATE` em `messages`, então a reaction aparece sem reload. Confirmar que o handler de UPDATE substitui a mensagem inteira (já faz isso em `useConversations.ts`).
+**Previews da lista de conversas** (linhas ~918, ~1189, ~1466 e no preview de reply): se `metadata.is_contacts`, mostrar `👤 Contato` em vez do conteúdo bruto.
 
-## 3. Garantias adicionais
-- Stickers e reactions precisam ser ignorados pelo `nina-orchestrator` para não gerar resposta automática inadequada. Reactions já não entram na fila. Para stickers, o orchestrator vai ver uma "imagem" — adicionar verificação simples: se `metadata.is_sticker`, pular geração de resposta (ou tratar como contexto vazio).
+## 3. Tipos — `src/types.ts`
+
+Sem mudanças de schema. `metadata` já é propagado em `transformDBToUIMessage`.
 
 ## Arquivos afetados
 - `supabase/functions/whatsapp-webhook/index.ts`
-- `supabase/functions/nina-orchestrator/index.ts` (skip de sticker)
-- `src/types.ts`
 - `src/components/ChatInterface.tsx`
 
 ## Fora de escopo
-- Enviar stickers/reactions a partir do painel (apenas recebimento e exibição).
-- Migration de banco (usamos `metadata` jsonb existente).
+- Importar contatos recebidos automaticamente para a tabela `contacts`
+- Enviar contatos a partir do painel
+- Migration de banco (usamos `metadata` jsonb existente)

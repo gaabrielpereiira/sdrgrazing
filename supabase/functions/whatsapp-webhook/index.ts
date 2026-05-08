@@ -292,6 +292,8 @@ serve(async (req) => {
           let messageType = 'text';
           let mediaType = null;
           let isSticker = false;
+          let isContacts = false;
+          let contactsPayload: any = null;
 
           switch (message.type) {
             case 'text':
