@@ -655,11 +655,24 @@ const ChatInterface: React.FC = () => {
 
   const renderMessageContent = (msg: UIMessage) => {
     if (msg.type === MessageType.IMAGE) {
+      const isSticker = !!msg.metadata?.is_sticker;
       if (!msg.mediaUrl) {
         return (
           <div className="mb-1 flex items-center gap-2 px-3 py-6 rounded-lg bg-slate-900/60 border border-slate-700/50 text-slate-400 text-xs">
             <Loader2 className="w-4 h-4 animate-spin" />
-            Baixando imagem do WhatsApp...
+            {isSticker ? 'Baixando figurinha...' : 'Baixando imagem do WhatsApp...'}
+          </div>
+        );
+      }
+      if (isSticker) {
+        return (
+          <div className="mb-1">
+            <img
+              src={msg.mediaUrl}
+              alt="Figurinha"
+              className="max-w-[140px] max-h-[140px] object-contain"
+              loading="lazy"
+            />
           </div>
         );
       }
