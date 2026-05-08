@@ -344,7 +344,8 @@ serve(async (req) => {
               sent_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
               metadata: { 
                 original_type: message.type,
-                media_id: message.audio?.id || message.image?.id || message.video?.id || message.document?.id || null
+                is_sticker: isSticker,
+                media_id: message.audio?.id || message.image?.id || message.video?.id || message.document?.id || message.sticker?.id || null
               }
             })
             .select()
