@@ -999,10 +999,14 @@ const ChatInterface: React.FC = () => {
                     <span className="text-[10px] text-slate-500 font-medium">{chat.lastMessageAt ? formatRelativeTime(chat.lastMessageAt) : chat.lastMessageTime}</span>
                   </div>
                   <p className="text-xs text-slate-500 truncate">
-                    {chat.messages[chat.messages.length - 1]?.type === MessageType.IMAGE ? '📷 Imagem' : 
-                     chat.messages[chat.messages.length - 1]?.type === MessageType.AUDIO ? '🎵 Áudio' : 
-                     chat.messages[chat.messages.length - 1]?.type === MessageType.DOCUMENT ? '📄 Documento' :
-                     chat.lastMessage || 'Sem mensagens'}
+                    {(() => {
+                      const last = chat.messages[chat.messages.length - 1];
+                      if (last?.metadata?.is_contacts) return '👤 Contato';
+                      if (last?.type === MessageType.IMAGE) return last?.metadata?.is_sticker ? '🎟️ Figurinha' : '📷 Imagem';
+                      if (last?.type === MessageType.AUDIO) return '🎵 Áudio';
+                      if (last?.type === MessageType.DOCUMENT) return '📄 Documento';
+                      return chat.lastMessage || 'Sem mensagens';
+                    })()}
                   </p>
                   
                   <div className="flex items-center mt-2 gap-1.5">
