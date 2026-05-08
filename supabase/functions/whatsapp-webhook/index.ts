@@ -363,9 +363,9 @@ serve(async (req) => {
 
           console.log('[Webhook] Created message:', dbMessage.id, 'for conversation:', conversation.id);
 
-          // 4b. Trigger media download for image/video/document/audio (non-blocking)
-          if (['image', 'video', 'document', 'audio'].includes(message.type)) {
-            const mediaId = message.image?.id || message.video?.id || message.document?.id || message.audio?.id;
+          // 4b. Trigger media download for image/video/document/audio/sticker (non-blocking)
+          if (['image', 'video', 'document', 'audio', 'sticker'].includes(message.type)) {
+            const mediaId = message.image?.id || message.video?.id || message.document?.id || message.audio?.id || message.sticker?.id;
             if (mediaId) {
               EdgeRuntime.waitUntil(
                 fetch(`${supabaseUrl}/functions/v1/download-whatsapp-media`, {
@@ -378,6 +378,12 @@ serve(async (req) => {
                 }).catch(err => console.error('[Webhook] Error triggering media download:', err))
               );
             }
+          }
+
+          // Stickers don't trigger Nina — skip queue + last_message update
+          if (isSticker) {
+            console.log('[Webhook] Sticker stored, skipping Nina queue');
+            continue;
           }
 
           // 5. Update conversation last_message_at
