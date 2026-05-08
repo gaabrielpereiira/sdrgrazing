@@ -328,6 +328,16 @@ serve(async (req) => {
               messageType = 'document';
               mediaType = 'document';
               break;
+            case 'contacts': {
+              const list = Array.isArray(message.contacts) ? message.contacts : [];
+              contactsPayload = list;
+              isContacts = true;
+              messageType = 'text';
+              messageContent = list.length > 1
+                ? `👥 ${list.length} contatos compartilhados`
+                : '👤 Contato compartilhado';
+              break;
+            }
             default:
               messageContent = `[${message.type}]`;
           }
@@ -347,6 +357,8 @@ serve(async (req) => {
               metadata: { 
                 original_type: message.type,
                 is_sticker: isSticker,
+                is_contacts: isContacts,
+                contacts: contactsPayload,
                 media_id: message.audio?.id || message.image?.id || message.video?.id || message.document?.id || message.sticker?.id || null
               }
             })
