@@ -1,48 +1,63 @@
-# Recebimento de Contatos Compartilhados (vCard)
+# Bug: Histórico de conversas longas é truncado
 
-Hoje mensagens do tipo `contacts` caem no `default` do switch e gravam apenas `[contacts]`. Vamos tratar corretamente: armazenar a lista de contatos no `metadata` e renderizar cards bonitos no chat.
+## Diagnóstico
 
-## 1. Backend — `supabase/functions/whatsapp-webhook/index.ts`
+Investiguei a conversa da Cintia (`5513996390706`) no banco:
 
-Adicionar `case 'contacts'` no switch, antes do `default`:
+- A conversa **tem 132 mensagens** salvas (de 05/05 a 09/05).
+- A UI carrega só uma fração delas, então parece que "sumiu" o histórico.
 
-- `messageType = 'text'`
-- `messageContent = '👤 Contato compartilhado'` (ou `'👥 N contatos compartilhados'` se `length > 1`)
-- Salvar no metadata da mensagem:
-  - `is_contacts: true`
-  - `contacts: message.contacts` (array completo do payload do WhatsApp, com `name`, `phones`, `emails`, `org`, `addresses`, `urls`, `birthday`)
+A causa está em `src/services/api.ts`, função `fetchConversations` (linha ~1390):
 
-Após o insert da mensagem, **pular a fila da Nina** (igual sticker): atualizar `last_message_at` da conversa, mas dar `continue` antes de inserir em `message_grouping_queue`. Compartilhar vCard não deve disparar resposta automática da IA.
-
-Sem download de mídia (contatos são JSON puros, não têm `media_id`).
-
-## 2. Frontend — `src/components/ChatInterface.tsx`
-
-**Em `renderMessageContent`**, adicionar branch antes do switch de tipos:
-```
-if (msg.metadata?.is_contacts) { ...render cards... }
+```ts
+.from('messages')
+.select('*')
+.eq('conversation_id', conv.id)
+.order('sent_at', { ascending: true })   // ← ordena do mais ANTIGO pro mais NOVO
+.limit(100);                              // ← pega só 100
 ```
 
-Para cada contato no array, renderizar um card com:
-- Avatar circular com inicial do nome
-- Nome formatado (`name.formatted_name` ou `name.first_name + last_name`)
-- Empresa/cargo (`org.company`, `org.title`) se existir
-- Lista de telefones com botão **Copiar** e botão **Iniciar conversa**
-  - "Iniciar conversa": busca `contacts` por `phone_number` normalizado; se achar conversa ativa, abre via `setSelectedConversation`; senão, mostra toast "Contato não encontrado no sistema"
-- Lista de emails (se existir) com botão Copiar
-- Estilo: `bg-slate-800 border border-slate-700 rounded-lg p-3`, similar aos cards de áudio/documento já existentes
+Ordenando ascendente + `limit(100)` o Postgres retorna as **100 mensagens mais antigas**, e descarta as mais recentes quando há mais de 100. Confirmado via query:
 
-**Previews da lista de conversas** (linhas ~918, ~1189, ~1466 e no preview de reply): se `metadata.is_contacts`, mostrar `👤 Contato` em vez do conteúdo bruto.
+- Total: 132 mensagens
+- Retornadas pelo limit(100) asc: 05/05 → **07/05** (faltam 32 das mais recentes)
 
-## 3. Tipos — `src/types.ts`
+As mensagens dos últimos dias só aparecem porque o **realtime** vai inserindo-as conforme chegam. **Quando o realtime cai e o polling refaz o `fetchConversations`** (a cada 10s no fallback), o estado é sobrescrito pelas 100 antigas — e as mensagens recentes desaparecem da UI até a próxima chegar pelo realtime.
 
-Sem mudanças de schema. `metadata` já é propagado em `transformDBToUIMessage`.
+Esse mesmo padrão também aparece no `simulate-webhook` e em qualquer recarregamento da página: usuários com conversas longas vêem só as mensagens antigas + as que entrarem em tempo real.
 
-## Arquivos afetados
-- `supabase/functions/whatsapp-webhook/index.ts`
-- `src/components/ChatInterface.tsx`
+## Correção proposta
+
+### 1. `src/services/api.ts` — `fetchConversations` (linha ~1390)
+
+Trocar a ordenação para **descendente** e aumentar o teto, garantindo que as mais recentes (que são as que importam na UI) sejam sempre carregadas. O `transformDBToUIConversation` já reordena ascendente para exibir, então a UI continua igual.
+
+```ts
+.order('sent_at', { ascending: false })   // pega as mais NOVAS
+.limit(300);                               // teto maior pra cobrir conversas longas
+```
+
+300 cobre conversas bem ativas sem carregar payload demais. Se a conversa tiver mais que isso, ainda assim o usuário verá as 300 mais recentes (não as mais antigas).
+
+### 2. `src/hooks/useConversations.ts` — `fetchAndAddConversation` (linha ~56)
+
+Mesma correção defensiva (atualmente não tem limit, mas deixar consistente):
+
+```ts
+.order('sent_at', { ascending: false })
+.limit(300);
+```
+
+### 3. Polling fallback
+
+Não precisa mudar — uma vez que `fetchConversations` retorne as mensagens recentes, o polling para de "apagar" o histórico recente.
 
 ## Fora de escopo
-- Importar contatos recebidos automaticamente para a tabela `contacts`
-- Enviar contatos a partir do painel
-- Migration de banco (usamos `metadata` jsonb existente)
+
+- Paginação infinita (carregar mensagens antigas sob demanda ao rolar pra cima). Vale a pena num próximo passo, mas exige mudanças maiores no `ChatInterface` e na assinatura de realtime. Posso abrir como melhoria separada se quiser.
+- Mudança no schema/RLS — não é necessária.
+
+## Arquivos afetados
+
+- `src/services/api.ts`
+- `src/hooks/useConversations.ts`
