@@ -1391,8 +1391,8 @@ export const api = {
           .from('messages')
           .select('*')
           .eq('conversation_id', conv.id)
-          .order('sent_at', { ascending: true })
-          .limit(100);
+          .order('sent_at', { ascending: false })
+          .limit(300);
 
         if (msgError) {
           console.error(`[API] Error fetching messages for ${conv.id}:`, msgError);
