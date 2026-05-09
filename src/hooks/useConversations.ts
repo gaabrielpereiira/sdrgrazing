@@ -57,7 +57,8 @@ export function useConversations(options?: { active?: boolean }) {
         .from('messages')
         .select('*')
         .eq('conversation_id', conversationId)
-        .order('sent_at', { ascending: true });
+        .order('sent_at', { ascending: false })
+        .limit(300);
       
       if (msgError) {
         console.error('[Realtime] Error fetching messages:', msgError);
