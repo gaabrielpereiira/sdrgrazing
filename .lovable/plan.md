@@ -1,26 +1,33 @@
-## Bug
-Ao trocar para a aba "Suporte", continuam aparecendo conversas de Atendimento. Causa: em `useConversations.fetchConversations`, a lógica de merge mantém "órfãos" (conversas presentes no estado anterior que não vieram no novo fetch). O filtro de órfão considera apenas `isActive`, ignorando `queue`. Quando o admin muda de Atendimento → Suporte, todas as conversas de `sales` ficam preservadas como órfãos.
+## Objetivo
+Reforçar a aba "Suporte" já existente no topo da lista de conversas em `/chat`, com visual mais claro de aba independente e contador de não lidas por fila.
 
-## Correção
-Em `src/hooks/useConversations.ts`, no `fetchConversations`:
-- Filtrar órfãos também por `queue`: descartar conversas cujo `queue` não bate com `queueFilter` (quando ele não é `'all'`).
-- Quando `queueFilter` mudar, qualquer conversa do estado anterior que não pertença à fila ativa deve ser removida.
+## Mudanças (somente frontend, em `src/components/ChatInterface.tsx`)
 
-Trecho alvo (linha 164):
-```ts
-const orphans = prev.filter(c =>
-  !freshIds.has(c.id) &&
-  c.isActive === isActiveFilter &&
-  (queueFilter === 'all' || (c as any).queue === queueFilter)
-);
-```
+1. **Visual das abas Atendimento | Suporte** (admin)
+   - Manter o componente `Tabs`, mas reestilizar para ficar mais alto e com ícones (`Bot` para Atendimento, `LifeBuoy` para Suporte) ao lado do label.
+   - Trigger ativo ganha cor própria por fila: ciano para Atendimento, âmbar/laranja para Suporte, alinhado ao restante do design system (tokens em `index.css` / `tailwind.config`).
+   - Mostrar badge com contador de não lidas em cada aba (somando `unreadCount` das conversas daquela fila no fetch atual).
 
-Verificar também que objetos `UIConversation` carregam o campo `queue`. Se `transformDBToUIConversation` ainda não propaga `queue`, adicionar o campo ali (lendo de `conversation.queue`) para que o filtro de órfãos funcione.
+2. **Contador de não lidas por fila**
+   - Para o admin, fazer um segundo fetch leve só de `id, queue, unread` (ou reutilizar `useConversations` com `queue:'all'` em paralelo) — opção mais simples: um hook adicional `useQueueUnreadCounts()` que faz `select id, queue` em `conversations` + count de mensagens com `from_type='user' and read_at is null` agrupado por fila. Atualiza a cada 30s e em eventos realtime de `messages`.
+   - Para SDR/Suporte (que veem só a sua fila), mostrar apenas o badge da própria fila no header da lista — sem chamadas extras.
 
-## Validação
-- Logar como admin, abrir Atendimento (lista cheia) → trocar para Suporte → lista deve ficar vazia (DB hoje não tem conversas com `queue='support'`).
-- Mover uma conversa para Suporte pelo botão do header → some de Atendimento e aparece em Suporte.
-- Nenhum efeito colateral em SDR/Support puros (que já recebem `queueFilter` fixo).
+3. **Header da lista**
+   - Substituir o `<h2>Conversas · Suporte/Atendimento` atual por:
+     - Título grande "Conversas".
+     - Linha abaixo com o nome da fila ativa em pill colorida (ciano/âmbar).
+
+4. **Indicador "novas/não lidas" nas conversas** (já existe parcialmente)
+   - Manter ponto pulsante ciano + badge numérica.
+   - Em conversas de Suporte na lista, trocar a borda esquerda do item selecionado para âmbar quando `chat.queue === 'support'`, deixando claro o contexto.
+
+5. **Reset de seleção** ao trocar `queueTab` (hoje só reseta em `chatTab`): adicionar `useEffect(() => setSelectedChatId(null), [queueTab])` para evitar painel direito mostrando conversa de outra fila.
 
 ## Fora de escopo
-Roteamento automático pela IA (`analyze-conversation`) — pendente, sem relação com este bug.
+- Roteamento automático IA → fila Suporte (continua próxima iteração).
+- Rota dedicada `/support` na sidebar (descartado).
+- Mudanças de backend / RLS (já implementadas).
+
+## Validação
+- Admin: alternar Atendimento/Suporte mostra cores distintas; badges de não lidas refletem o estado real; trocar aba zera seleção.
+- SDR e Suporte: continuam vendo só sua fila, sem as abas, com badge da própria fila.
