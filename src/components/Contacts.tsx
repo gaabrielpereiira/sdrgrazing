@@ -288,7 +288,7 @@ const Contacts: React.FC = () => {
           onClick={() => !creating && setShowCreate(false)}
         >
           <div
-            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl"
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
@@ -367,7 +367,7 @@ const Contacts: React.FC = () => {
           onClick={() => !savingEdit && setEditingContact(null)}
         >
           <div
-            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl"
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
