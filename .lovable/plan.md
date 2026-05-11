@@ -1,63 +1,111 @@
-# Bug: Histórico de conversas longas é truncado
+## Debug das conversas que "perdem histórico"
 
-## Diagnóstico
+### O que já foi confirmado no banco
 
-Investiguei a conversa da Cintia (`5513996390706`) no banco:
+A conversa da Cintia (`5513996390706`) tem **139 mensagens preservadas** no banco (de 05/05 a 09/05) e está hoje com `is_active = false`. Ou seja: **nada foi deletado no banco**. O problema é de **estado do front-end**, e há 2 gatilhos plausíveis para o sintoma "abro a conversa, vejo o histórico, e depois de um tempo somem mensagens":
 
-- A conversa **tem 132 mensagens** salvas (de 05/05 a 09/05).
-- A UI carrega só uma fração delas, então parece que "sumiu" o histórico.
+### Gatilho 1 — UPDATE em `conversations` flipa `is_active` e a conversa é removida da view inteira
 
-A causa está em `src/services/api.ts`, função `fetchConversations` (linha ~1390):
-
-```ts
-.from('messages')
-.select('*')
-.eq('conversation_id', conv.id)
-.order('sent_at', { ascending: true })   // ← ordena do mais ANTIGO pro mais NOVO
-.limit(100);                              // ← pega só 100
-```
-
-Ordenando ascendente + `limit(100)` o Postgres retorna as **100 mensagens mais antigas**, e descarta as mais recentes quando há mais de 100. Confirmado via query:
-
-- Total: 132 mensagens
-- Retornadas pelo limit(100) asc: 05/05 → **07/05** (faltam 32 das mais recentes)
-
-As mensagens dos últimos dias só aparecem porque o **realtime** vai inserindo-as conforme chegam. **Quando o realtime cai e o polling refaz o `fetchConversations`** (a cada 10s no fallback), o estado é sobrescrito pelas 100 antigas — e as mensagens recentes desaparecem da UI até a próxima chegar pelo realtime.
-
-Esse mesmo padrão também aparece no `simulate-webhook` e em qualquer recarregamento da página: usuários com conversas longas vêem só as mensagens antigas + as que entrarem em tempo real.
-
-## Correção proposta
-
-### 1. `src/services/api.ts` — `fetchConversations` (linha ~1390)
-
-Trocar a ordenação para **descendente** e aumentar o teto, garantindo que as mais recentes (que são as que importam na UI) sejam sempre carregadas. O `transformDBToUIConversation` já reordena ascendente para exibir, então a UI continua igual.
+`src/hooks/useConversations.ts` (linha ~326):
 
 ```ts
-.order('sent_at', { ascending: false })   // pega as mais NOVAS
-.limit(300);                               // teto maior pra cobrir conversas longas
+if (typeof updated.is_active === 'boolean' && updated.is_active !== isActiveFilter) {
+  setConversations(prev => prev.filter(c => c.id !== updated.id));
+  return;
+}
 ```
 
-300 cobre conversas bem ativas sem carregar payload demais. Se a conversa tiver mais que isso, ainda assim o usuário verá as 300 mais recentes (não as mais antigas).
+Quando uma conversa que está aberta na aba "Ativas" é marcada como `is_active=false` (por edge function ou ação de outro operador), ela **some inteira da lista** — o usuário pode interpretar isso como "perdeu o histórico". O `activeChat` apontado pela UI fica órfão.
 
-### 2. `src/hooks/useConversations.ts` — `fetchAndAddConversation` (linha ~56)
+### Gatilho 2 — Polling/refetch ressincroniza o array com o que vier do banco e descarta msgs locais não persistidas ainda
 
-Mesma correção defensiva (atualmente não tem limit, mas deixar consistente):
+`fetchConversations` (api.ts:1361) tem `.limit(50)` em conversas e `.limit(300)` em mensagens. Quando o polling roda (a cada 10s no fallback) ele **substitui** o `state` inteiro. Qualquer conversa que não esteja no top-50 por `last_message_at` cai da lista. E se houver mensagens "in flight" (temp-id otimista, ou ainda não commitadas) elas são descartadas.
+
+### Gatilho 3 — `fetchAndAddConversation` puxa só 300 msgs descendentes
+
+Já corrigido na rodada anterior, então não deve ser ele agora — mas vou validar com logs.
+
+---
+
+## Plano de debug + correções mínimas
+
+### 1. Instrumentação (diagnóstico)
+
+Adicionar em `src/hooks/useConversations.ts` um log estruturado **toda vez que o array de mensagens de uma conversa diminuir**:
 
 ```ts
-.order('sent_at', { ascending: false })
-.limit(300);
+// wrapper em setConversations que detecta queda
+const setConversationsTracked = (updater) => {
+  setConversations(prev => {
+    const next = typeof updater === 'function' ? updater(prev) : updater;
+    next.forEach(nc => {
+      const old = prev.find(p => p.id === nc.id);
+      if (old && nc.messages.length < old.messages.length) {
+        console.error('[Debug] ⚠️ Mensagens diminuíram em', nc.id,
+          'de', old.messages.length, '→', nc.messages.length,
+          'stack:', new Error().stack);
+      }
+    });
+    // detectar conversa sumindo
+    prev.forEach(p => {
+      if (!next.some(n => n.id === p.id)) {
+        console.error('[Debug] ⚠️ Conversa removida do estado:', p.id, p.contact?.name);
+      }
+    });
+    return next;
+  });
+};
 ```
 
-### 3. Polling fallback
+Substituir todos os `setConversations(...)` por essa versão. Em produção podemos manter como `console.warn` silencioso.
 
-Não precisa mudar — uma vez que `fetchConversations` retorne as mensagens recentes, o polling para de "apagar" o histórico recente.
+### 2. Não remover conversa do array quando `is_active` flipa — apenas marcar
 
-## Fora de escopo
+Na aba "Ativas", se uma conversa for marcada como inativa **enquanto o usuário está vendo o chat dela**, mantemos no estado até o próximo refetch manual (ou navegação). Isso evita o "sumiço" percebido.
 
-- Paginação infinita (carregar mensagens antigas sob demanda ao rolar pra cima). Vale a pena num próximo passo, mas exige mudanças maiores no `ChatInterface` e na assinatura de realtime. Posso abrir como melhoria separada se quiser.
-- Mudança no schema/RLS — não é necessária.
+```ts
+// trocar o filter por um update que sinaliza, sem remover
+setConversations(prev => prev.map(c =>
+  c.id === updated.id ? { ...c, isActive: updated.is_active, status: updated.status } : c
+));
+```
+
+A aba já filtra por `isActive` na exibição; se não filtra, adicionar filtro local.
+
+### 3. Polling defensivo: merge em vez de replace
+
+No `fetchConversations` chamado pelo polling, fazer **merge** preservando `messages` locais quando o servidor retornar a mesma conversa com menos mensagens:
+
+```ts
+setConversations(prev => {
+  return fresh.map(f => {
+    const old = prev.find(p => p.id === f.id);
+    if (!old) return f;
+    // se local tem mais msgs que o fetch, preserve as locais
+    return f.messages.length >= old.messages.length ? f : { ...f, messages: old.messages };
+  });
+});
+```
+
+### 4. Carregar mensagens sob demanda ao selecionar uma conversa
+
+Quando o usuário clica numa conversa, refazer um fetch das **últimas 500 mensagens** daquela conversa (em vez de depender do que veio no fetch geral). Garante que o chat aberto sempre exibe o histórico completo recente, mesmo se o array em memória tiver sido mexido.
+
+`src/components/ChatInterface.tsx` — no `useEffect` de `activeChat?.id`, chamar `api.fetchConversationMessages(id, 500)` e atualizar só aquela conversa.
+
+### 5. Reproduzir o caso da Cintia
+
+Após implementar (1) e (4), abrir a Cintia (aba Finalizadas) e deixar a aba aberta por uns minutos, alternando para outras conversas. Os logs do passo (1) vão imprimir exatamente em qual handler o array encolhe — confirmando se é polling, UPDATE de is_active, ou outra coisa.
+
+---
 
 ## Arquivos afetados
 
-- `src/services/api.ts`
-- `src/hooks/useConversations.ts`
+- `src/hooks/useConversations.ts` — wrapper de log, ajuste do handler de UPDATE, merge no polling
+- `src/services/api.ts` — adicionar `fetchConversationMessages(id, limit)` (talvez já exista parcialmente em api.ts:1995)
+- `src/components/ChatInterface.tsx` — refetch ao selecionar conversa
+
+## Fora do escopo
+
+- Paginação infinita pra carregar mensagens > 500 (próximo passo)
+- Mexer no schema/RLS — confirmado que o banco preserva tudo
