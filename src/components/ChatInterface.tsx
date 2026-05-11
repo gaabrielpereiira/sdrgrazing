@@ -3,7 +3,7 @@ import {
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck, 
   Smile, Play, Loader2, MessageSquare, Info, X, Mail, 
   Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon, Bell, AlertTriangle,
-  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate, Mic, Trash2, LifeBuoy
+  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate, Mic, Trash2, LifeBuoy, ChevronLeft
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition, formatRelativeTime } from '../types';
 import { Button } from './Button';
@@ -957,7 +957,7 @@ const ChatInterface: React.FC = () => {
     <div className="flex h-full bg-slate-950 rounded-tl-2xl overflow-hidden border-t border-l border-slate-800/50 shadow-2xl">
       
       {/* Left Sidebar: Chat List */}
-      <div className="w-80 lg:w-96 border-r border-slate-800 flex flex-col bg-slate-900/50 backdrop-blur-md z-20 flex-shrink-0">
+      <div className={`${selectedChatId ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 border-r border-slate-800 flex-col bg-slate-900/50 backdrop-blur-md z-20 md:flex-shrink-0`}>
         {/* Search Header */}
         <div className="p-4 border-b border-slate-800/50">
           <div className="flex items-center justify-between mb-3 px-1">
@@ -1148,7 +1148,7 @@ const ChatInterface: React.FC = () => {
 
       {/* Right Area: Chat Window & Profile */}
       {activeChat ? (
-        <div className="flex-1 flex overflow-hidden bg-[#0B0E14]">
+        <div className={`${selectedChatId ? 'flex' : 'hidden md:flex'} flex-1 overflow-hidden bg-[#0B0E14]`}>
           {/* Main Chat Content */}
           <div
             className="flex-1 flex flex-col min-w-0 relative"
@@ -1169,7 +1169,15 @@ const ChatInterface: React.FC = () => {
             )}
 
             {/* Chat Header */}
-            <div className="h-16 px-6 flex items-center justify-between bg-slate-900/80 backdrop-blur-md border-b border-slate-800 z-10 shrink-0">
+            <div className="h-16 px-3 md:px-6 flex items-center justify-between bg-slate-900/80 backdrop-blur-md border-b border-slate-800 z-10 shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedChatId(null)}
+                className="md:hidden p-2 -ml-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
+                aria-label="Voltar"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
               <div 
                 className="flex items-center p-1.5 -ml-1.5 rounded-lg pr-3 group/header"
               >
@@ -1840,7 +1848,7 @@ const ChatInterface: React.FC = () => {
 
           {/* Right Profile Sidebar (CRM View) */}
           <div 
-            className={`${showProfileInfo ? 'w-80 border-l border-slate-800 opacity-100' : 'w-0 opacity-0 border-none'} transition-all duration-300 ease-in-out bg-slate-900/95 flex-shrink-0 flex flex-col overflow-hidden`}
+            className={`${showProfileInfo ? 'w-80 border-l border-slate-800 opacity-100' : 'w-0 opacity-0 border-none'} transition-all duration-300 ease-in-out bg-slate-900/95 flex-shrink-0 hidden md:flex flex-col overflow-hidden`}
           >
             <div className="w-80 h-full flex flex-col">
               {/* Header */}
@@ -2044,7 +2052,7 @@ const ChatInterface: React.FC = () => {
 
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center bg-[#0B0E14] relative overflow-hidden">
+        <div className="hidden md:flex flex-1 flex-col items-center justify-center bg-[#0B0E14] relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-b from-slate-900/20 to-transparent"></div>
           <div className="relative z-10 flex flex-col items-center p-8 text-center max-w-md">
             <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center mb-6 shadow-2xl border border-slate-800 relative group">

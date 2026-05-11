@@ -93,7 +93,7 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-8 overflow-y-auto h-full bg-slate-950 text-slate-50 custom-scrollbar">
+    <div className="p-4 sm:p-6 space-y-6 sm:space-y-8 overflow-y-auto h-full bg-slate-950 text-slate-50 custom-scrollbar">
       {/* Onboarding Banner */}
       <OnboardingBanner onOpenWizard={() => setShowOnboarding(true)} />
 
@@ -125,7 +125,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         {metrics.map((stat, index) => (
           <div 
             key={index} 
@@ -152,9 +152,9 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Charts Section */}
-      <div className="grid gap-6 md:grid-cols-7">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-7">
         {/* Main Chart */}
-        <div className="col-span-4 rounded-2xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm p-6 shadow-lg">
+        <div className="md:col-span-4 rounded-2xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm p-4 sm:p-6 shadow-lg min-w-0">
           <div className="mb-6 flex items-center justify-between">
             <div>
                 <h3 className="text-lg font-semibold text-white">Volume de Atendimentos</h3>
@@ -209,7 +209,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Secondary Chart */}
-        <div className="col-span-3 rounded-2xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm p-6 shadow-lg flex flex-col">
+        <div className="md:col-span-3 rounded-2xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm p-4 sm:p-6 shadow-lg flex flex-col min-w-0">
            <div className="mb-6">
             <h3 className="text-lg font-semibold text-white">Conversões</h3>
             <p className="text-sm text-slate-400">Reuniões, vendas e ações concluídas</p>

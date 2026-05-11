@@ -31,18 +31,18 @@ const AppLayout: React.FC = () => {
   }, [loading, isComplete, hasSeenWizard]);
 
   return (
-    <div className="flex h-screen w-full bg-background text-foreground overflow-hidden">
+    <div className="flex flex-col md:flex-row h-screen w-full bg-background text-foreground overflow-hidden">
       {/* Background Ambient Glows */}
       <div className="fixed top-0 left-0 w-[500px] h-[500px] bg-primary/20 rounded-full blur-[128px] pointer-events-none -translate-x-1/2 -translate-y-1/2 z-0"></div>
       <div className="fixed bottom-0 right-0 w-[500px] h-[500px] bg-accent/10 rounded-full blur-[128px] pointer-events-none translate-x-1/2 translate-y-1/2 z-0"></div>
       
       <Sidebar />
       
-      <main className="flex-1 h-full overflow-hidden relative z-10 flex flex-col">
+      <main className="flex-1 min-h-0 min-w-0 overflow-hidden relative z-10 flex flex-col">
         {/* Top Border Gradient */}
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border to-transparent opacity-50 z-20"></div>
         
-        <div className="flex-1 w-full h-full relative">
+        <div className="flex-1 w-full h-full relative min-h-0 min-w-0">
           <Outlet context={{ showOnboarding, setShowOnboarding }} />
         </div>
       </main>
