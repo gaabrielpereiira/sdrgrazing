@@ -55,6 +55,12 @@ const AppLayout: React.FC = () => {
   );
 };
 
+const RoleHomeRedirect: React.FC = () => {
+  const { role, roleLoading } = useAuth();
+  if (roleLoading) return null;
+  return <Navigate to={defaultRouteForRole(role)} replace />;
+};
+
 const App: React.FC = () => {
   return (
     <AuthProvider>
