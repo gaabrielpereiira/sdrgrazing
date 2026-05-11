@@ -187,7 +187,8 @@ const WhatsAppTemplates: React.FC = () => {
             </div>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-muted/30 text-muted-foreground text-xs uppercase tracking-wider">
               <tr>
                 <th className="text-left px-4 py-3">Nome</th>
