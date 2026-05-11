@@ -345,6 +345,15 @@ const ChatInterface: React.FC = () => {
     }
   }, [selectedChatId, activeChat?.unreadCount, markAsRead]);
 
+  // On chat open, force-reload that conversation's messages from the server
+  // so the panel always shows the latest persisted history (defends against
+  // any in-memory state drift caused by realtime/polling).
+  useEffect(() => {
+    if (selectedChatId) {
+      reloadConversationMessages(selectedChatId);
+    }
+  }, [selectedChatId, reloadConversationMessages]);
+
   // Sync notes value with active chat
   useEffect(() => {
     if (activeChat) {
