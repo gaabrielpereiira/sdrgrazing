@@ -1,33 +1,35 @@
-## Objetivo
-Reforçar a aba "Suporte" já existente no topo da lista de conversas em `/chat`, com visual mais claro de aba independente e contador de não lidas por fila.
+## Escalada automática Donatella → Suporte
 
-## Mudanças (somente frontend, em `src/components/ChatInterface.tsx`)
+Hoje, quando a IA chama `request_human_handoff` (ou cai no safety-net), a conversa só recebe `status = 'human'` e uma notificação. Ela continua na fila `sales`, então não aparece na aba Suporte e a Donatella pode voltar a responder. As permissões por aba (Atendimento × Suporte) já estão cobertas pelo `user_queue_access` + RLS e pelas tabs no `ChatInterface`, então o trabalho restante é só no momento da escalada.
 
-1. **Visual das abas Atendimento | Suporte** (admin)
-   - Manter o componente `Tabs`, mas reestilizar para ficar mais alto e com ícones (`Bot` para Atendimento, `LifeBuoy` para Suporte) ao lado do label.
-   - Trigger ativo ganha cor própria por fila: ciano para Atendimento, âmbar/laranja para Suporte, alinhado ao restante do design system (tokens em `index.css` / `tailwind.config`).
-   - Mostrar badge com contador de não lidas em cada aba (somando `unreadCount` das conversas daquela fila no fetch atual).
+### Mudanças (somente backend, em `supabase/functions/nina-orchestrator/index.ts`)
 
-2. **Contador de não lidas por fila**
-   - Para o admin, fazer um segundo fetch leve só de `id, queue, unread` (ou reutilizar `useConversations` com `queue:'all'` em paralelo) — opção mais simples: um hook adicional `useQueueUnreadCounts()` que faz `select id, queue` em `conversations` + count de mensagens com `from_type='user' and read_at is null` agrupado por fila. Atualiza a cada 30s e em eventos realtime de `messages`.
-   - Para SDR/Suporte (que veem só a sua fila), mostrar apenas o badge da própria fila no header da lista — sem chamadas extras.
+1. **Mover a conversa para a fila Suporte no handoff**
+   - No bloco `if (toolCall.function?.name === 'request_human_handoff')` (~linha 943), além de `status: 'human'`, atualizar também `queue: 'support'` na mesma chamada `update`.
+   - Replicar no safety-net (~linha 1036) que detecta texto interno de handoff.
+   - Resultado: a conversa some da aba Atendimento e aparece imediatamente na aba Suporte (a UI já escuta realtime de `conversations`).
 
-3. **Header da lista**
-   - Substituir o `<h2>Conversas · Suporte/Atendimento` atual por:
-     - Título grande "Conversas".
-     - Linha abaixo com o nome da fila ativa em pill colorida (ciano/âmbar).
+2. **Pausar a Donatella naquela conversa**
+   - Já existe o early-skip em `~linha 200`: `if (conversation.queue === 'support') { skip Nina }`. Como agora o handoff muda a fila para `support`, qualquer mensagem futura do cliente naquela conversa será ignorada pela IA automaticamente, até que um humano mova a conversa de volta manualmente.
+   - Nada precisa ser feito na resposta atual: a IA ainda envia a última mensagem amigável que ela mesma gerou ao chamar a tool; mensagens subsequentes não disparam mais resposta da IA.
 
-4. **Indicador "novas/não lidas" nas conversas** (já existe parcialmente)
-   - Manter ponto pulsante ciano + badge numérica.
-   - Em conversas de Suporte na lista, trocar a borda esquerda do item selecionado para âmbar quando `chat.queue === 'support'`, deixando claro o contexto.
+3. **Sinalização de "nova conversa pendente para o suporte"**
+   - A notificação `handoff_requested` / `handoff_urgent` já é criada (sino de notificações).
+   - O badge da aba Suporte (`useQueueUnreadCounts`) passa a contar essa conversa porque ela agora vive em `queue = 'support'` e a próxima mensagem do cliente fica como não lida.
 
-5. **Reset de seleção** ao trocar `queueTab` (hoje só reseta em `chatTab`): adicionar `useEffect(() => setSelectedChatId(null), [queueTab])` para evitar painel direito mostrando conversa de outra fila.
+4. **Histórico preservado**
+   - Nenhuma mensagem é movida/duplicada — só muda `queue` e `status` da `conversation`. Toda a troca anterior com a Donatella permanece visível ao abrir a conversa na aba Suporte.
 
-## Fora de escopo
-- Roteamento automático IA → fila Suporte (continua próxima iteração).
-- Rota dedicada `/support` na sidebar (descartado).
-- Mudanças de backend / RLS (já implementadas).
+### Fora de escopo (já existe)
 
-## Validação
-- Admin: alternar Atendimento/Suporte mostra cores distintas; badges de não lidas refletem o estado real; trocar aba zera seleção.
-- SDR e Suporte: continuam vendo só sua fila, sem as abas, com badge da própria fila.
+- Tabs Atendimento/Suporte e badges de não lidas no `ChatInterface`.
+- RLS por fila (`user_queue_access`): SDR só vê `sales`, Suporte só vê `support`, Admin vê ambas — já implementado nas migrations anteriores.
+- Tela e fluxo de chat idênticos entre as abas (mesmo componente).
+
+### Reativar Donatella manualmente (opcional, deixar para depois se não pedido agora)
+
+Não vou adicionar UI nova nesta etapa. A reativação manual hoje já é possível mudando a `queue` da conversa de volta para `sales` (via DB ou via uma futura ação "Devolver para IA" no header do chat). Se quiser que eu adicione esse botão agora, me avise no aprovar.
+
+### Arquivos tocados
+
+- `supabase/functions/nina-orchestrator/index.ts` — 2 pequenos updates (handoff + safety-net) para incluir `queue: 'support'`.
