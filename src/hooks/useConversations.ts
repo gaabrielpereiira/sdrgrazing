@@ -388,13 +388,18 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
           // operator/edge-fn finalizes (or reopens) the chat they're viewing.
           setConversationsTracked(prev => {
             const exists = prev.some(c => c.id === updated.id);
+            const matchesQueue = queueFilter === 'all' || updated.queue === queueFilter;
             if (!exists) {
-              // Only fetch when the new state matches the filter for this view.
-              if (updated.is_active === isActiveFilter) {
+              if (updated.is_active === isActiveFilter && matchesQueue) {
                 console.log('[Realtime] Conversation entered current filter — fetching:', updated.id);
                 fetchAndAddConversation(updated.id);
               }
               return prev;
+            }
+            // If the conversation moved out of the queue this view tracks, remove it
+            if (!matchesQueue) {
+              console.log('[Realtime] Conversation left queue, removing from view:', updated.id);
+              return prev.filter(c => c.id !== updated.id);
             }
             return prev.map(conv => {
               if (conv.id === updated.id) {
@@ -403,7 +408,8 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
                   status: updated.status,
                   isActive: updated.is_active,
                   assignedTeam: updated.assigned_team,
-                };
+                  queue: updated.queue,
+                } as any;
               }
               return conv;
             });
