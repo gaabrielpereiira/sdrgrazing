@@ -154,7 +154,7 @@ const Dashboard: React.FC = () => {
       {/* Charts Section */}
       <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-7">
         {/* Main Chart */}
-        <div className="col-span-4 rounded-2xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm p-6 shadow-lg">
+        <div className="md:col-span-4 rounded-2xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm p-4 sm:p-6 shadow-lg min-w-0">
           <div className="mb-6 flex items-center justify-between">
             <div>
                 <h3 className="text-lg font-semibold text-white">Volume de Atendimentos</h3>
