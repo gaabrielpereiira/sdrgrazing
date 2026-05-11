@@ -610,7 +610,8 @@ const Scheduling: React.FC = () => {
                  <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
              </div>
         ) : (
-            <>
+            <div className="flex-1 overflow-auto">
+              <div className="min-w-[700px] h-full flex flex-col">
                 {viewMode === 'month' && (
                     <>
                         <div className="grid grid-cols-7 border-b border-slate-800 bg-slate-900">
@@ -625,7 +626,8 @@ const Scheduling: React.FC = () => {
                 )}
                 {viewMode === 'week' && renderWeekView()}
                 {viewMode === 'day' && renderDayView()}
-            </>
+              </div>
+            </div>
         )}
       </div>
 
