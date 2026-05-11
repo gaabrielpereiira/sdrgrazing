@@ -557,7 +557,7 @@ const Scheduling: React.FC = () => {
            <p className="text-slate-400 text-sm mt-1">Gerencie demos, reuniões e suporte técnico.</p>
         </div>
         
-        <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 w-full xl:w-auto">
             {/* View Switcher */}
             <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
                 <button 
