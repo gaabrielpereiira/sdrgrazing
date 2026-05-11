@@ -1148,7 +1148,7 @@ const ChatInterface: React.FC = () => {
 
       {/* Right Area: Chat Window & Profile */}
       {activeChat ? (
-        <div className="flex-1 flex overflow-hidden bg-[#0B0E14]">
+        <div className={`${selectedChatId ? 'flex' : 'hidden md:flex'} flex-1 overflow-hidden bg-[#0B0E14]`}>
           {/* Main Chat Content */}
           <div
             className="flex-1 flex flex-col min-w-0 relative"
