@@ -134,16 +134,40 @@ export function useConversations(options?: { active?: boolean }) {
       setLoading(true);
       setError(null);
       const data = await api.fetchConversations({ active: isActiveFilter });
-      
-      // Reset processed IDs on fresh fetch and populate with existing messages
-      processedMessageIds.current.clear();
-      data.forEach(conv => {
-        conv.messages.forEach(msg => {
-          processedMessageIds.current.add(msg.id);
+
+      // Merge with existing state — never destroy local messages we already have.
+      // The fetch is capped (limit 300 per conv); if local memory has more after
+      // realtime updates, prefer the local copy.
+      setConversationsTracked(prev => {
+        const prevById = new Map(prev.map(c => [c.id, c]));
+        const merged = data.map(fresh => {
+          const old = prevById.get(fresh.id);
+          if (!old) return fresh;
+          // Build a union of messages by id, preferring local where they overlap.
+          const byId = new Map<string, typeof fresh.messages[number]>();
+          for (const m of fresh.messages) byId.set(m.id, m);
+          for (const m of old.messages) {
+            // local wins on conflict (might have status updates not yet on server)
+            if (m.id.startsWith('temp-') || !byId.has(m.id)) byId.set(m.id, m);
+            else byId.set(m.id, m);
+          }
+          const union = Array.from(byId.values()).sort((a, b) => {
+            const ta = new Date(a.timestamp || 0).getTime();
+            const tb = new Date(b.timestamp || 0).getTime();
+            return ta - tb;
+          });
+          return { ...fresh, messages: union };
         });
+        // Keep any local-only conversations (not returned by this fetch) that still
+        // belong to this filter, so they don't disappear due to limit(50) churn.
+        const freshIds = new Set(data.map(c => c.id));
+        const orphans = prev.filter(c => !freshIds.has(c.id) && c.isActive === isActiveFilter);
+        // Refresh processedMessageIds based on merged set
+        processedMessageIds.current.clear();
+        for (const c of merged) for (const m of c.messages) processedMessageIds.current.add(m.id);
+        for (const c of orphans) for (const m of c.messages) processedMessageIds.current.add(m.id);
+        return [...merged, ...orphans];
       });
-      
-      setConversationsTracked(data);
     } catch (err) {
       console.error('[useConversations] Error fetching:', err);
       setError('Erro ao carregar conversas');
