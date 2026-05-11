@@ -133,7 +133,7 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
     } finally {
       fetchingConversationIds.current.delete(conversationId);
     }
-  }, []);
+  }, [queueFilter]);
 
   // Initial fetch
   const fetchConversations = useCallback(async () => {
