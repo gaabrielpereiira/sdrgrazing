@@ -33,6 +33,7 @@ const ChatInterface: React.FC = () => {
   const effectiveQueue: 'sales' | 'support' = isAdmin ? queueTab : (queueForRole(role) ?? 'sales');
   const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: effectiveQueue });
   const { sdrName, companyName } = useCompanySettings();
+  const queueUnread = useQueueUnreadCounts();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [showProfileInfo, setShowProfileInfo] = useState(true);
