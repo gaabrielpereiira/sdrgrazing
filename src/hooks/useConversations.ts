@@ -709,6 +709,38 @@ export function useConversations(options?: { active?: boolean }) {
     }
   }, []);
 
+  // Force-reload the messages of a single conversation from the server.
+  // Used when the user opens a chat, so the panel always reflects DB truth
+  // even if the in-memory list was mutated by realtime/polling.
+  const reloadConversationMessages = useCallback(async (conversationId: string) => {
+    try {
+      const { data: messages, error: msgError } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('sent_at', { ascending: false })
+        .limit(500);
+      if (msgError) {
+        console.error('[reloadConversationMessages] error:', msgError);
+        return;
+      }
+      const ascending = (messages || []).slice().reverse() as DBMessage[];
+      const uiMsgs = ascending.map(transformDBToUIMessage);
+      setConversationsTracked(prev => prev.map(conv => {
+        if (conv.id !== conversationId) return conv;
+        // Preserve any optimistic temp messages not yet persisted
+        const tempOnly = conv.messages.filter(m => m.id.startsWith('temp-'));
+        const merged = [...uiMsgs, ...tempOnly].sort((a, b) =>
+          new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime()
+        );
+        for (const m of uiMsgs) processedMessageIds.current.add(m.id);
+        return { ...conv, messages: merged };
+      }));
+    } catch (err) {
+      console.error('[reloadConversationMessages] unexpected:', err);
+    }
+  }, []);
+
   return {
     conversations,
     loading,
@@ -722,6 +754,7 @@ export function useConversations(options?: { active?: boolean }) {
     assignConversation,
     endConversation,
     reopenConversation,
+    reloadConversationMessages,
     refetch: fetchConversations
   };
 }
