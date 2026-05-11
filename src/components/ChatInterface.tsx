@@ -957,7 +957,7 @@ const ChatInterface: React.FC = () => {
     <div className="flex h-full bg-slate-950 rounded-tl-2xl overflow-hidden border-t border-l border-slate-800/50 shadow-2xl">
       
       {/* Left Sidebar: Chat List */}
-      <div className="w-80 lg:w-96 border-r border-slate-800 flex flex-col bg-slate-900/50 backdrop-blur-md z-20 flex-shrink-0">
+      <div className={`${selectedChatId ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 border-r border-slate-800 flex-col bg-slate-900/50 backdrop-blur-md z-20 md:flex-shrink-0`}>
         {/* Search Header */}
         <div className="p-4 border-b border-slate-800/50">
           <div className="flex items-center justify-between mb-3 px-1">
