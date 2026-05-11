@@ -32,7 +32,7 @@ export function useConversations(options?: { active?: boolean }) {
 
   // Diagnostic wrapper: detect when a conversation loses messages or disappears
   const setConversationsTracked = useCallback(
-    (updater: React.SetStateAction<UIConversation[]>) => {
+    (updater: UIConversation[] | ((prev: UIConversation[]) => UIConversation[])) => {
       setConversations(prev => {
         const next = typeof updater === 'function'
           ? (updater as (p: UIConversation[]) => UIConversation[])(prev)
