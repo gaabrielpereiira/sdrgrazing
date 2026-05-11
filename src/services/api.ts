@@ -1358,11 +1358,12 @@ export const api = {
   /**
    * Fetch conversations with messages from database
    */
-  fetchConversations: async (opts?: { active?: boolean }): Promise<UIConversation[]> => {
+  fetchConversations: async (opts?: { active?: boolean; queue?: 'sales' | 'support' | 'all' }): Promise<UIConversation[]> => {
     const isActive = opts?.active ?? true;
-    console.log('[API] Fetching conversations from Supabase, active=', isActive);
+    const queue = opts?.queue ?? 'all';
+    console.log('[API] Fetching conversations from Supabase, active=', isActive, 'queue=', queue);
     
-    const { data: conversations, error: convError } = await supabase
+    let query = supabase
       .from('conversations')
       .select(`
         *,
@@ -1371,6 +1372,12 @@ export const api = {
       .eq('is_active', isActive)
       .order('last_message_at', { ascending: false })
       .limit(50);
+
+    if (queue !== 'all') {
+      query = query.eq('queue', queue);
+    }
+
+    const { data: conversations, error: convError } = await query;
 
     if (convError) {
       console.error('[API] Error fetching conversations:', convError);
