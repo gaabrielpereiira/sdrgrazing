@@ -1,111 +1,58 @@
-## Debug das conversas que "perdem histórico"
+## Bug: Nina envia a mesma resposta 2x (ex.: "Olá! Como posso ajudar você hoje? 😊" duplicado)
 
-### O que já foi confirmado no banco
+### Diagnóstico (confirmado no banco)
 
-A conversa da Cintia (`5513996390706`) tem **139 mensagens preservadas** no banco (de 05/05 a 09/05) e está hoje com `is_active = false`. Ou seja: **nada foi deletado no banco**. O problema é de **estado do front-end**, e há 2 gatilhos plausíveis para o sintoma "abro a conversa, vejo o histórico, e depois de um tempo somem mensagens":
+Cada balão duplicado vem do **mesmo `response_to_message_id`** com `chunk_index:0` repetido. Consultando `nina_processing_queue`:
 
-### Gatilho 1 — UPDATE em `conversations` flipa `is_active` e a conversa é removida da view inteira
+- Mensagem `5049ca70…` → 2 entradas na fila criadas com 4ms de diferença, ambas processadas → 2 respostas
+- Mensagem `95335c1b…` → 2 entradas com 20ms de diferença → 2 sequências completas de 4 chunks (8 mensagens enviadas em vez de 4)
+- Mensagem `ddf8151a…` → **3 entradas** com ~30ms de diferença → 3 respostas
 
-`src/hooks/useConversations.ts` (linha ~326):
+Ou seja: a mesma mensagem do cliente está sendo enfileirada várias vezes para a Nina, e a Nina processa cada entrada separadamente (o claim com `FOR UPDATE SKIP LOCKED` é correto, mas as linhas são duplicadas).
 
-```ts
-if (typeof updated.is_active === 'boolean' && updated.is_active !== isActiveFilter) {
-  setConversations(prev => prev.filter(c => c.id !== updated.id));
-  return;
-}
-```
+### Causa-raiz
 
-Quando uma conversa que está aberta na aba "Ativas" é marcada como `is_active=false` (por edge function ou ação de outro operador), ela **some inteira da lista** — o usuário pode interpretar isso como "perdeu o histórico". O `activeChat` apontado pela UI fica órfão.
-
-### Gatilho 2 — Polling/refetch ressincroniza o array com o que vier do banco e descarta msgs locais não persistidas ainda
-
-`fetchConversations` (api.ts:1361) tem `.limit(50)` em conversas e `.limit(300)` em mensagens. Quando o polling roda (a cada 10s no fallback) ele **substitui** o `state` inteiro. Qualquer conversa que não esteja no top-50 por `last_message_at` cai da lista. E se houver mensagens "in flight" (temp-id otimista, ou ainda não commitadas) elas são descartadas.
-
-### Gatilho 3 — `fetchAndAddConversation` puxa só 300 msgs descendentes
-
-Já corrigido na rodada anterior, então não deve ser ele agora — mas vou validar com logs.
-
----
-
-## Plano de debug + correções mínimas
-
-### 1. Instrumentação (diagnóstico)
-
-Adicionar em `src/hooks/useConversations.ts` um log estruturado **toda vez que o array de mensagens de uma conversa diminuir**:
+`supabase/functions/message-grouper/index.ts` (linhas 162-205) tenta deduplicar com:
 
 ```ts
-// wrapper em setConversations que detecta queda
-const setConversationsTracked = (updater) => {
-  setConversations(prev => {
-    const next = typeof updater === 'function' ? updater(prev) : updater;
-    next.forEach(nc => {
-      const old = prev.find(p => p.id === nc.id);
-      if (old && nc.messages.length < old.messages.length) {
-        console.error('[Debug] ⚠️ Mensagens diminuíram em', nc.id,
-          'de', old.messages.length, '→', nc.messages.length,
-          'stack:', new Error().stack);
-      }
-    });
-    // detectar conversa sumindo
-    prev.forEach(p => {
-      if (!next.some(n => n.id === p.id)) {
-        console.error('[Debug] ⚠️ Conversa removida do estado:', p.id, p.contact?.name);
-      }
-    });
-    return next;
-  });
-};
+const { data: existingQueue } = await supabase
+  .from('nina_processing_queue')
+  .select('id').eq('message_id', lastDbMessage.id).maybeSingle();
+if (!existingQueue) { /* insert */ }
 ```
 
-Substituir todos os `setConversations(...)` por essa versão. Em produção podemos manter como `console.warn` silencioso.
+Esse padrão **check-then-insert** tem race condition. Quando o webhook recebe rajada de mensagens, o `message-grouper` é disparado várias vezes em paralelo (cada `waitUntil` do whatsapp-webhook + cada `scheduleNextProcessing`). Duas execuções concorrentes leem a fila ao mesmo tempo, ambas não encontram nada, ambas inserem → 2 linhas idênticas → 2 chamadas à Nina → 2 respostas iguais ao cliente.
 
-### 2. Não remover conversa do array quando `is_active` flipa — apenas marcar
+Não há `UNIQUE` em `nina_processing_queue.message_id` no schema, então o banco aceita as duplicatas silenciosamente.
 
-Na aba "Ativas", se uma conversa for marcada como inativa **enquanto o usuário está vendo o chat dela**, mantemos no estado até o próximo refetch manual (ou navegação). Isso evita o "sumiço" percebido.
+### Correção
 
-```ts
-// trocar o filter por um update que sinaliza, sem remover
-setConversations(prev => prev.map(c =>
-  c.id === updated.id ? { ...c, isActive: updated.is_active, status: updated.status } : c
-));
+**1. Migration**: adicionar índice único parcial em `nina_processing_queue(message_id)` para mensagens ainda processáveis (qualquer linha não-failed):
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS nina_processing_queue_message_id_unique
+  ON public.nina_processing_queue(message_id)
+  WHERE status IN ('pending','processing','completed');
 ```
 
-A aba já filtra por `isActive` na exibição; se não filtra, adicionar filtro local.
+Isso garante no banco que não pode existir mais de uma entrada para a mesma `message_id`. Falhas (`failed`) ficam de fora para permitir re-tentativas reais futuras.
 
-### 3. Polling defensivo: merge em vez de replace
+**2. `supabase/functions/message-grouper/index.ts`**: trocar o check-then-insert por insert idempotente. Tratar erro de unique-violation (`code === '23505'`) como sucesso silencioso ("já enfileirado por outra execução"). Continuar disparando o orchestrator só quando a inserção realmente acontecer (não disparar se foi conflito — a outra execução já disparou).
 
-No `fetchConversations` chamado pelo polling, fazer **merge** preservando `messages` locais quando o servidor retornar a mesma conversa com menos mensagens:
+**3. Defesa extra no `nina-orchestrator/index.ts`** (linha 166, dentro do loop `for (const item of queueItems)`): antes de chamar `processQueueItem`, verificar se já existe alguma mensagem com `metadata->>'response_to_message_id' = item.message_id` E `from_type = 'nina'` criada nos últimos 60s. Se existir, marcar a entrada como `completed` e pular. Isso protege contra qualquer outra fonte futura de duplicação (ex.: re-tentativa após timeout) e também limpa o histórico de duplicatas que estiverem ainda enfileiradas.
 
-```ts
-setConversations(prev => {
-  return fresh.map(f => {
-    const old = prev.find(p => p.id === f.id);
-    if (!old) return f;
-    // se local tem mais msgs que o fetch, preserve as locais
-    return f.messages.length >= old.messages.length ? f : { ...f, messages: old.messages };
-  });
-});
-```
+### Como validar
 
-### 4. Carregar mensagens sob demanda ao selecionar uma conversa
+- Após deploy, simular rajada (3 mensagens do mesmo número em <1s via `simulate-webhook`) e confirmar que `nina_processing_queue` tem só **1 linha por `message_id`** e o cliente recebeu **uma única resposta**.
+- Consultar a Cintia/Ana Beatriz nos próximos atendimentos e confirmar que não há mais `chunk_index:0` repetido para o mesmo `response_to_message_id`.
 
-Quando o usuário clica numa conversa, refazer um fetch das **últimas 500 mensagens** daquela conversa (em vez de depender do que veio no fetch geral). Garante que o chat aberto sempre exibe o histórico completo recente, mesmo se o array em memória tiver sido mexido.
+### Arquivos afetados
 
-`src/components/ChatInterface.tsx` — no `useEffect` de `activeChat?.id`, chamar `api.fetchConversationMessages(id, 500)` e atualizar só aquela conversa.
+- Migration nova (índice único)
+- `supabase/functions/message-grouper/index.ts` — insert idempotente
+- `supabase/functions/nina-orchestrator/index.ts` — guard de "resposta já existe"
 
-### 5. Reproduzir o caso da Cintia
+### Fora do escopo
 
-Após implementar (1) e (4), abrir a Cintia (aba Finalizadas) e deixar a aba aberta por uns minutos, alternando para outras conversas. Os logs do passo (1) vão imprimir exatamente em qual handler o array encolhe — confirmando se é polling, UPDATE de is_active, ou outra coisa.
-
----
-
-## Arquivos afetados
-
-- `src/hooks/useConversations.ts` — wrapper de log, ajuste do handler de UPDATE, merge no polling
-- `src/services/api.ts` — adicionar `fetchConversationMessages(id, limit)` (talvez já exista parcialmente em api.ts:1995)
-- `src/components/ChatInterface.tsx` — refetch ao selecionar conversa
-
-## Fora do escopo
-
-- Paginação infinita pra carregar mensagens > 500 (próximo passo)
-- Mexer no schema/RLS — confirmado que o banco preserva tudo
+- Limpar duplicatas históricas (não interfere com novas respostas)
+- Revisar polling/grouper scheduling (não é a causa, só amplifica)
