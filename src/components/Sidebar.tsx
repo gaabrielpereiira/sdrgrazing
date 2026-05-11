@@ -11,15 +11,17 @@ import viaIcon from '@/assets/icon-via.png';
 import viaLogoWhite from '@/assets/logo-via-white.png';
 import { NotificationsBell } from '@/components/NotificationsBell';
 
-const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'pipeline', label: 'Pipeline', icon: Kanban },
-  { id: 'chat', label: 'Chat Ao Vivo', icon: MessageSquare },
-  { id: 'contacts', label: 'Contatos', icon: Users },
-  { id: 'scheduling', label: 'Agendamentos', icon: Calendar },
-  { id: 'templates', label: 'Templates WhatsApp', icon: FileText },
-  { id: 'team', label: 'Equipe', icon: ShieldCheck },
-  { id: 'settings', label: 'Configurações', icon: SettingsIcon },
+type MenuRole = 'admin' | 'sdr' | 'support' | 'user';
+
+const menuItems: { id: string; label: string; icon: any; roles: MenuRole[] }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin','sdr','user'] },
+  { id: 'pipeline', label: 'Pipeline', icon: Kanban, roles: ['admin','sdr','user'] },
+  { id: 'chat', label: 'Chat Ao Vivo', icon: MessageSquare, roles: ['admin','sdr','support','user'] },
+  { id: 'contacts', label: 'Contatos', icon: Users, roles: ['admin','sdr','user'] },
+  { id: 'scheduling', label: 'Agendamentos', icon: Calendar, roles: ['admin','sdr','user'] },
+  { id: 'templates', label: 'Templates WhatsApp', icon: FileText, roles: ['admin','sdr','user'] },
+  { id: 'team', label: 'Equipe', icon: ShieldCheck, roles: ['admin'] },
+  { id: 'settings', label: 'Configurações', icon: SettingsIcon, roles: ['admin'] },
 ];
 
 const Logo = ({ companyName }: { companyName: string }) => {
