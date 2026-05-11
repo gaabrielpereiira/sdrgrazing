@@ -293,6 +293,7 @@ export interface UIConversation {
   messages: UIMessage[];
   clientMemory: ClientMemory;
   notes: string | null;
+  queue: 'sales' | 'support';
 }
 
 export interface UIMessage {
