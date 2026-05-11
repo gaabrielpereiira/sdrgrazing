@@ -165,6 +165,31 @@ serve(async (req) => {
 
     for (const item of queueItems) {
       try {
+        // Guard: if Nina already produced a response for this exact message recently,
+        // skip to avoid sending the same answer twice (defense-in-depth on top of unique index).
+        const { data: existingResponse } = await supabase
+          .from('messages')
+          .select('id')
+          .eq('from_type', 'nina')
+          .eq('conversation_id', item.conversation_id)
+          .filter('metadata->>response_to_message_id', 'eq', item.message_id)
+          .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+          .limit(1)
+          .maybeSingle();
+
+        if (existingResponse) {
+          console.log('[Nina] Response already exists for message', item.message_id, '— skipping duplicate processing');
+          await supabase
+            .from('nina_processing_queue')
+            .update({
+              status: 'completed',
+              processed_at: new Date().toISOString(),
+              error_message: 'Duplicate processing skipped (response already sent)'
+            })
+            .eq('id', item.id);
+          continue;
+        }
+
         // Get user_id from conversation to fetch correct settings
         const { data: conversation } = await supabase
           .from('conversations')

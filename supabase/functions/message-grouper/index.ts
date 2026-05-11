@@ -160,47 +160,42 @@ serve(async (req) => {
 
         // If conversation is handled by Nina, queue for AI processing
         if (conversation.status === 'nina') {
-          // Check if already in queue to avoid duplicates
-          const { data: existingQueue } = await supabase
+          // Idempotent insert — relies on unique partial index on message_id.
+          // Race-safe: if another concurrent grouper already queued this message,
+          // Postgres will reject the duplicate with code 23505 and we skip silently.
+          const { error: ninaQueueError } = await supabase
             .from('nina_processing_queue')
-            .select('id')
-            .eq('message_id', lastDbMessage.id)
-            .maybeSingle();
+            .insert({
+              message_id: lastDbMessage.id,
+              conversation_id: conversationId,
+              contact_id: conversation.contact_id,
+              priority: 1,
+              context_data: {
+                phone_number_id: phoneNumberId,
+                contact_name: conversation.contacts?.name || conversation.contacts?.call_name,
+                message_type: lastDbMessage.type,
+                grouped_count: messageIds.length,
+                combined_content: combinedContent
+              }
+            });
 
-          if (!existingQueue) {
-            const { error: ninaQueueError } = await supabase
-              .from('nina_processing_queue')
-              .insert({
-                message_id: lastDbMessage.id,
-                conversation_id: conversationId,
-                contact_id: conversation.contact_id,
-                priority: 1,
-                context_data: {
-                  phone_number_id: phoneNumberId,
-                  contact_name: conversation.contacts?.name || conversation.contacts?.call_name,
-                  message_type: lastDbMessage.type,
-                  grouped_count: messageIds.length,
-                  combined_content: combinedContent
-                }
-              });
-
-            if (ninaQueueError) {
-              console.error('[MessageGrouper] Error queuing for Nina:', ninaQueueError);
+          if (ninaQueueError) {
+            if ((ninaQueueError as any).code === '23505') {
+              console.log('[MessageGrouper] Message already queued by concurrent run, skipping trigger:', lastDbMessage.id);
             } else {
-              console.log('[MessageGrouper] Message queued for Nina processing');
-              
-              // Trigger nina-orchestrator
-              fetch(`${supabaseUrl}/functions/v1/nina-orchestrator`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${supabaseServiceKey}`
-                },
-                body: JSON.stringify({ triggered_by: 'message-grouper' })
-              }).catch(err => console.error('[MessageGrouper] Error triggering nina-orchestrator:', err));
+              console.error('[MessageGrouper] Error queuing for Nina:', ninaQueueError);
             }
           } else {
-            console.log('[MessageGrouper] Message already in Nina queue, skipping');
+            console.log('[MessageGrouper] Message queued for Nina processing');
+            // Trigger nina-orchestrator only when WE were the inserter
+            fetch(`${supabaseUrl}/functions/v1/nina-orchestrator`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseServiceKey}`
+              },
+              body: JSON.stringify({ triggered_by: 'message-grouper' })
+            }).catch(err => console.error('[MessageGrouper] Error triggering nina-orchestrator:', err));
           }
         }
 
