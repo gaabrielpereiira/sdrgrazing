@@ -1415,6 +1415,18 @@ export const api = {
     return conversationsWithMessages;
   },
 
+  /** Move a conversation to a different queue ('sales' | 'support'). */
+  moveConversationQueue: async (conversationId: string, queue: 'sales' | 'support'): Promise<void> => {
+    const { error } = await supabase
+      .from('conversations')
+      .update({ queue, updated_at: new Date().toISOString() })
+      .eq('id', conversationId);
+    if (error) {
+      console.error('[API] Error moving conversation queue:', error);
+      throw error;
+    }
+  },
+
   /**
    * Send a message (insert into send_queue for human messages)
    * Returns the ID of the created message
