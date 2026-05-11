@@ -108,7 +108,7 @@ export function useConversations(options?: { active?: boolean }) {
       );
       
       // Add new conversation to state (at top, sorted by recency)
-      setConversations(prev => {
+      setConversationsTracked(prev => {
         // Check if already added by another event
         if (prev.some(c => c.id === uiConversation.id)) {
           console.log('[Realtime] Conversation already in state, skipping add');
@@ -143,7 +143,7 @@ export function useConversations(options?: { active?: boolean }) {
         });
       });
       
-      setConversations(data);
+      setConversationsTracked(data);
     } catch (err) {
       console.error('[useConversations] Error fetching:', err);
       setError('Erro ao carregar conversas');
@@ -199,7 +199,7 @@ export function useConversations(options?: { active?: boolean }) {
             return;
           }
           
-          setConversations(prev => {
+          setConversationsTracked(prev => {
             // Check if conversation exists in our state
             const conversationExists = prev.some(c => c.id === newMessage.conversation_id);
             
@@ -291,7 +291,7 @@ export function useConversations(options?: { active?: boolean }) {
           console.log('[Realtime] Message updated:', payload.new);
           const updatedMessage = payload.new as DBMessage;
           
-          setConversations(prev => {
+          setConversationsTracked(prev => {
             return prev.map(conv => {
               if (conv.id === updatedMessage.conversation_id) {
                 return {
@@ -338,7 +338,7 @@ export function useConversations(options?: { active?: boolean }) {
           const newConv = payload.new as any;
           
           // Check if already in state
-          setConversations(prev => {
+          setConversationsTracked(prev => {
             if (prev.some(c => c.id === newConv.id)) {
               console.log('[Realtime] Conversation already in state from INSERT');
               return prev;
@@ -362,11 +362,11 @@ export function useConversations(options?: { active?: boolean }) {
           
           // If is_active no longer matches our filter, remove it from this view
           if (typeof updated.is_active === 'boolean' && updated.is_active !== isActiveFilter) {
-            setConversations(prev => prev.filter(c => c.id !== updated.id));
+            setConversationsTracked(prev => prev.filter(c => c.id !== updated.id));
             return;
           }
           
-          setConversations(prev => {
+          setConversationsTracked(prev => {
             const exists = prev.some(c => c.id === updated.id);
             // Conversation matches our filter but isn't in the list yet (e.g. reactivated after being finalized).
             // Fetch it with the full message history so the previous context shows up immediately.
@@ -432,7 +432,7 @@ export function useConversations(options?: { active?: boolean }) {
       sentAt: new Date().toISOString()
     };
 
-    setConversations(prev => {
+    setConversationsTracked(prev => {
       return prev.map(conv => {
         if (conv.id === conversationId) {
           return {
@@ -455,7 +455,7 @@ export function useConversations(options?: { active?: boolean }) {
       toast.error('Erro ao enviar mensagem');
       
       // Remove optimistic message on error
-      setConversations(prev => {
+      setConversationsTracked(prev => {
         return prev.map(conv => {
           if (conv.id === conversationId) {
             return {
@@ -496,7 +496,7 @@ export function useConversations(options?: { active?: boolean }) {
       sentAt: new Date().toISOString(),
     };
 
-    setConversations(prev => prev.map(conv => {
+    setConversationsTracked(prev => prev.map(conv => {
       if (conv.id === conversationId) {
         return {
           ...conv,
@@ -514,7 +514,7 @@ export function useConversations(options?: { active?: boolean }) {
     } catch (err: any) {
       console.error('[useConversations] Error sending media:', err);
       toast.error(err?.message || 'Erro ao enviar arquivo');
-      setConversations(prev => prev.map(conv => {
+      setConversationsTracked(prev => prev.map(conv => {
         if (conv.id === conversationId) {
           return { ...conv, messages: conv.messages.filter(m => m.id !== tempId) };
         }
@@ -531,7 +531,7 @@ export function useConversations(options?: { active?: boolean }) {
     try {
       await api.updateConversationStatus(conversationId, status);
       
-      setConversations(prev => {
+      setConversationsTracked(prev => {
         return prev.map(conv => {
           if (conv.id === conversationId) {
             return { ...conv, status };
@@ -555,7 +555,7 @@ export function useConversations(options?: { active?: boolean }) {
   // Mark messages as read
   const markAsRead = useCallback(async (conversationId: string) => {
     // Optimistic UI update
-    setConversations(prev => {
+    setConversationsTracked(prev => {
       return prev.map(conv => {
         if (conv.id === conversationId) {
           return { ...conv, unreadCount: 0 };
@@ -580,7 +580,7 @@ export function useConversations(options?: { active?: boolean }) {
     if (!conv) return;
 
     // Optimistic UI update
-    setConversations(prev => {
+    setConversationsTracked(prev => {
       return prev.map(c => {
         if (c.id === conversationId) {
           return { ...c, assignedUserId: userId };
@@ -596,7 +596,7 @@ export function useConversations(options?: { active?: boolean }) {
     } catch (err) {
       console.error('[useConversations] Error assigning conversation:', err);
       // Revert on error
-      setConversations(prev => {
+      setConversationsTracked(prev => {
         return prev.map(c => {
           if (c.id === conversationId) {
             return { ...c, assignedUserId: conv.assignedUserId };
@@ -610,7 +610,7 @@ export function useConversations(options?: { active?: boolean }) {
   // Finalize a conversation (close)
   const endConversation = useCallback(async (conversationId: string) => {
     // Optimistic: remove from current view
-    setConversations(prev => prev.filter(c => c.id !== conversationId));
+    setConversationsTracked(prev => prev.filter(c => c.id !== conversationId));
     try {
       await api.endConversation(conversationId);
       toast.success('Conversa finalizada');
@@ -623,7 +623,7 @@ export function useConversations(options?: { active?: boolean }) {
 
   // Reopen a finalized conversation
   const reopenConversation = useCallback(async (conversationId: string) => {
-    setConversations(prev => prev.filter(c => c.id !== conversationId));
+    setConversationsTracked(prev => prev.filter(c => c.id !== conversationId));
     try {
       await api.reopenConversation(conversationId);
       toast.success('Conversa reaberta');
@@ -658,7 +658,7 @@ export function useConversations(options?: { active?: boolean }) {
       sentAt: new Date().toISOString(),
     };
 
-    setConversations(prev => prev.map(conv => {
+    setConversationsTracked(prev => prev.map(conv => {
       if (conv.id === conversationId) {
         return {
           ...conv,
@@ -677,7 +677,7 @@ export function useConversations(options?: { active?: boolean }) {
     } catch (err: any) {
       console.error('[useConversations] Error sending template:', err);
       toast.error(err?.message || 'Erro ao enviar template');
-      setConversations(prev => prev.map(conv => {
+      setConversationsTracked(prev => prev.map(conv => {
         if (conv.id === conversationId) {
           return { ...conv, messages: conv.messages.filter(m => m.id !== tempId) };
         }
