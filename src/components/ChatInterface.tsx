@@ -342,6 +342,11 @@ const ChatInterface: React.FC = () => {
     setSelectedChatId(null);
   }, [chatTab]);
 
+  // Reset selection when switching queues (admin)
+  useEffect(() => {
+    setSelectedChatId(null);
+  }, [queueTab]);
+
   // Mark as read when selecting conversation
   useEffect(() => {
     if (selectedChatId && (activeChat?.unreadCount ?? 0) > 0) {
