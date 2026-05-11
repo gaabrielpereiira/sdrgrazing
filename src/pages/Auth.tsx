@@ -91,7 +91,7 @@ const Auth: React.FC = () => {
           return;
         }
         toast.success('Login realizado com sucesso!');
-        navigate('/dashboard', { replace: true });
+        // Redirect handled by useEffect once role is loaded
       } else {
         if (!registrationEnabled) {
           toast.error('Novos registros estão desabilitados no momento.');
@@ -107,7 +107,7 @@ const Auth: React.FC = () => {
           return;
         }
         toast.success('Conta criada com sucesso! Você já pode usar a plataforma.');
-        navigate('/dashboard', { replace: true });
+        // Redirect handled by useEffect once role is loaded
       }
     } finally {
       setIsSubmitting(false);
