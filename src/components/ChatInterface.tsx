@@ -26,7 +26,7 @@ import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picke
 
 const ChatInterface: React.FC = () => {
   const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
-  const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation } = useConversations({ active: chatTab === 'active' });
+  const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active' });
   const { sdrName, companyName } = useCompanySettings();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
@@ -344,6 +344,15 @@ const ChatInterface: React.FC = () => {
       markAsRead(selectedChatId);
     }
   }, [selectedChatId, activeChat?.unreadCount, markAsRead]);
+
+  // On chat open, force-reload that conversation's messages from the server
+  // so the panel always shows the latest persisted history (defends against
+  // any in-memory state drift caused by realtime/polling).
+  useEffect(() => {
+    if (selectedChatId) {
+      reloadConversationMessages(selectedChatId);
+    }
+  }, [selectedChatId, reloadConversationMessages]);
 
   // Sync notes value with active chat
   useEffect(() => {

@@ -30,6 +30,44 @@ export function useConversations(options?: { active?: boolean }) {
   // Track conversation IDs being fetched to prevent duplicate fetches
   const fetchingConversationIds = useRef(new Set<string>());
 
+  // Diagnostic wrapper: detect when a conversation loses messages or disappears
+  const setConversationsTracked = useCallback(
+    (updater: UIConversation[] | ((prev: UIConversation[]) => UIConversation[])) => {
+      setConversations(prev => {
+        const next = typeof updater === 'function'
+          ? (updater as (p: UIConversation[]) => UIConversation[])(prev)
+          : updater;
+        try {
+          for (const nc of next) {
+            const old = prev.find(p => p.id === nc.id);
+            if (old && nc.messages.length < old.messages.length) {
+              console.error(
+                '[Debug] ⚠️ Mensagens diminuíram em',
+                nc.id,
+                `(${old.messages.length} → ${nc.messages.length})`,
+                'contato:', (nc as any).contact?.name || (nc as any).contactName,
+                'stack:', new Error().stack
+              );
+            }
+          }
+          for (const p of prev) {
+            if (!next.some(n => n.id === p.id)) {
+              console.warn(
+                '[Debug] ⚠️ Conversa removida do estado:',
+                p.id,
+                'contato:', (p as any).contact?.name || (p as any).contactName
+              );
+            }
+          }
+        } catch (e) {
+          // never let debug code break state
+        }
+        return next;
+      });
+    },
+    []
+  );
+
   // Fetch a single conversation and add it to state
   const fetchAndAddConversation = useCallback(async (conversationId: string) => {
     // Prevent duplicate fetches
@@ -70,7 +108,7 @@ export function useConversations(options?: { active?: boolean }) {
       );
       
       // Add new conversation to state (at top, sorted by recency)
-      setConversations(prev => {
+      setConversationsTracked(prev => {
         // Check if already added by another event
         if (prev.some(c => c.id === uiConversation.id)) {
           console.log('[Realtime] Conversation already in state, skipping add');
@@ -96,16 +134,40 @@ export function useConversations(options?: { active?: boolean }) {
       setLoading(true);
       setError(null);
       const data = await api.fetchConversations({ active: isActiveFilter });
-      
-      // Reset processed IDs on fresh fetch and populate with existing messages
-      processedMessageIds.current.clear();
-      data.forEach(conv => {
-        conv.messages.forEach(msg => {
-          processedMessageIds.current.add(msg.id);
+
+      // Merge with existing state — never destroy local messages we already have.
+      // The fetch is capped (limit 300 per conv); if local memory has more after
+      // realtime updates, prefer the local copy.
+      setConversationsTracked(prev => {
+        const prevById = new Map(prev.map(c => [c.id, c]));
+        const merged = data.map(fresh => {
+          const old = prevById.get(fresh.id);
+          if (!old) return fresh;
+          // Build a union of messages by id, preferring local where they overlap.
+          const byId = new Map<string, typeof fresh.messages[number]>();
+          for (const m of fresh.messages) byId.set(m.id, m);
+          for (const m of old.messages) {
+            // local wins on conflict (might have status updates not yet on server)
+            if (m.id.startsWith('temp-') || !byId.has(m.id)) byId.set(m.id, m);
+            else byId.set(m.id, m);
+          }
+          const union = Array.from(byId.values()).sort((a, b) => {
+            const ta = new Date(a.timestamp || 0).getTime();
+            const tb = new Date(b.timestamp || 0).getTime();
+            return ta - tb;
+          });
+          return { ...fresh, messages: union };
         });
+        // Keep any local-only conversations (not returned by this fetch) that still
+        // belong to this filter, so they don't disappear due to limit(50) churn.
+        const freshIds = new Set(data.map(c => c.id));
+        const orphans = prev.filter(c => !freshIds.has(c.id) && c.isActive === isActiveFilter);
+        // Refresh processedMessageIds based on merged set
+        processedMessageIds.current.clear();
+        for (const c of merged) for (const m of c.messages) processedMessageIds.current.add(m.id);
+        for (const c of orphans) for (const m of c.messages) processedMessageIds.current.add(m.id);
+        return [...merged, ...orphans];
       });
-      
-      setConversations(data);
     } catch (err) {
       console.error('[useConversations] Error fetching:', err);
       setError('Erro ao carregar conversas');
@@ -161,7 +223,7 @@ export function useConversations(options?: { active?: boolean }) {
             return;
           }
           
-          setConversations(prev => {
+          setConversationsTracked(prev => {
             // Check if conversation exists in our state
             const conversationExists = prev.some(c => c.id === newMessage.conversation_id);
             
@@ -253,7 +315,7 @@ export function useConversations(options?: { active?: boolean }) {
           console.log('[Realtime] Message updated:', payload.new);
           const updatedMessage = payload.new as DBMessage;
           
-          setConversations(prev => {
+          setConversationsTracked(prev => {
             return prev.map(conv => {
               if (conv.id === updatedMessage.conversation_id) {
                 return {
@@ -300,7 +362,7 @@ export function useConversations(options?: { active?: boolean }) {
           const newConv = payload.new as any;
           
           // Check if already in state
-          setConversations(prev => {
+          setConversationsTracked(prev => {
             if (prev.some(c => c.id === newConv.id)) {
               console.log('[Realtime] Conversation already in state from INSERT');
               return prev;
@@ -322,19 +384,17 @@ export function useConversations(options?: { active?: boolean }) {
           console.log('[Realtime] Conversation UPDATE:', payload.new);
           const updated = payload.new as any;
           
-          // If is_active no longer matches our filter, remove it from this view
-          if (typeof updated.is_active === 'boolean' && updated.is_active !== isActiveFilter) {
-            setConversations(prev => prev.filter(c => c.id !== updated.id));
-            return;
-          }
-          
-          setConversations(prev => {
+          // Always update fields in place — never remove from state on is_active flip,
+          // otherwise the user perceives "the conversation lost its history" when another
+          // operator/edge-fn finalizes (or reopens) the chat they're viewing.
+          setConversationsTracked(prev => {
             const exists = prev.some(c => c.id === updated.id);
-            // Conversation matches our filter but isn't in the list yet (e.g. reactivated after being finalized).
-            // Fetch it with the full message history so the previous context shows up immediately.
             if (!exists) {
-              console.log('[Realtime] Conversation reactivated — fetching with history:', updated.id);
-              fetchAndAddConversation(updated.id);
+              // Only fetch when the new state matches the filter for this view.
+              if (updated.is_active === isActiveFilter) {
+                console.log('[Realtime] Conversation entered current filter — fetching:', updated.id);
+                fetchAndAddConversation(updated.id);
+              }
               return prev;
             }
             return prev.map(conv => {
@@ -343,7 +403,7 @@ export function useConversations(options?: { active?: boolean }) {
                   ...conv,
                   status: updated.status,
                   isActive: updated.is_active,
-                  assignedTeam: updated.assigned_team
+                  assignedTeam: updated.assigned_team,
                 };
               }
               return conv;
@@ -394,7 +454,7 @@ export function useConversations(options?: { active?: boolean }) {
       sentAt: new Date().toISOString()
     };
 
-    setConversations(prev => {
+    setConversationsTracked(prev => {
       return prev.map(conv => {
         if (conv.id === conversationId) {
           return {
@@ -417,7 +477,7 @@ export function useConversations(options?: { active?: boolean }) {
       toast.error('Erro ao enviar mensagem');
       
       // Remove optimistic message on error
-      setConversations(prev => {
+      setConversationsTracked(prev => {
         return prev.map(conv => {
           if (conv.id === conversationId) {
             return {
@@ -458,7 +518,7 @@ export function useConversations(options?: { active?: boolean }) {
       sentAt: new Date().toISOString(),
     };
 
-    setConversations(prev => prev.map(conv => {
+    setConversationsTracked(prev => prev.map(conv => {
       if (conv.id === conversationId) {
         return {
           ...conv,
@@ -476,7 +536,7 @@ export function useConversations(options?: { active?: boolean }) {
     } catch (err: any) {
       console.error('[useConversations] Error sending media:', err);
       toast.error(err?.message || 'Erro ao enviar arquivo');
-      setConversations(prev => prev.map(conv => {
+      setConversationsTracked(prev => prev.map(conv => {
         if (conv.id === conversationId) {
           return { ...conv, messages: conv.messages.filter(m => m.id !== tempId) };
         }
@@ -493,7 +553,7 @@ export function useConversations(options?: { active?: boolean }) {
     try {
       await api.updateConversationStatus(conversationId, status);
       
-      setConversations(prev => {
+      setConversationsTracked(prev => {
         return prev.map(conv => {
           if (conv.id === conversationId) {
             return { ...conv, status };
@@ -517,7 +577,7 @@ export function useConversations(options?: { active?: boolean }) {
   // Mark messages as read
   const markAsRead = useCallback(async (conversationId: string) => {
     // Optimistic UI update
-    setConversations(prev => {
+    setConversationsTracked(prev => {
       return prev.map(conv => {
         if (conv.id === conversationId) {
           return { ...conv, unreadCount: 0 };
@@ -542,7 +602,7 @@ export function useConversations(options?: { active?: boolean }) {
     if (!conv) return;
 
     // Optimistic UI update
-    setConversations(prev => {
+    setConversationsTracked(prev => {
       return prev.map(c => {
         if (c.id === conversationId) {
           return { ...c, assignedUserId: userId };
@@ -558,7 +618,7 @@ export function useConversations(options?: { active?: boolean }) {
     } catch (err) {
       console.error('[useConversations] Error assigning conversation:', err);
       // Revert on error
-      setConversations(prev => {
+      setConversationsTracked(prev => {
         return prev.map(c => {
           if (c.id === conversationId) {
             return { ...c, assignedUserId: conv.assignedUserId };
@@ -572,7 +632,7 @@ export function useConversations(options?: { active?: boolean }) {
   // Finalize a conversation (close)
   const endConversation = useCallback(async (conversationId: string) => {
     // Optimistic: remove from current view
-    setConversations(prev => prev.filter(c => c.id !== conversationId));
+    setConversationsTracked(prev => prev.filter(c => c.id !== conversationId));
     try {
       await api.endConversation(conversationId);
       toast.success('Conversa finalizada');
@@ -585,7 +645,7 @@ export function useConversations(options?: { active?: boolean }) {
 
   // Reopen a finalized conversation
   const reopenConversation = useCallback(async (conversationId: string) => {
-    setConversations(prev => prev.filter(c => c.id !== conversationId));
+    setConversationsTracked(prev => prev.filter(c => c.id !== conversationId));
     try {
       await api.reopenConversation(conversationId);
       toast.success('Conversa reaberta');
@@ -620,7 +680,7 @@ export function useConversations(options?: { active?: boolean }) {
       sentAt: new Date().toISOString(),
     };
 
-    setConversations(prev => prev.map(conv => {
+    setConversationsTracked(prev => prev.map(conv => {
       if (conv.id === conversationId) {
         return {
           ...conv,
@@ -639,13 +699,45 @@ export function useConversations(options?: { active?: boolean }) {
     } catch (err: any) {
       console.error('[useConversations] Error sending template:', err);
       toast.error(err?.message || 'Erro ao enviar template');
-      setConversations(prev => prev.map(conv => {
+      setConversationsTracked(prev => prev.map(conv => {
         if (conv.id === conversationId) {
           return { ...conv, messages: conv.messages.filter(m => m.id !== tempId) };
         }
         return conv;
       }));
       throw err;
+    }
+  }, []);
+
+  // Force-reload the messages of a single conversation from the server.
+  // Used when the user opens a chat, so the panel always reflects DB truth
+  // even if the in-memory list was mutated by realtime/polling.
+  const reloadConversationMessages = useCallback(async (conversationId: string) => {
+    try {
+      const { data: messages, error: msgError } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('sent_at', { ascending: false })
+        .limit(500);
+      if (msgError) {
+        console.error('[reloadConversationMessages] error:', msgError);
+        return;
+      }
+      const ascending = (messages || []).slice().reverse() as DBMessage[];
+      const uiMsgs = ascending.map(transformDBToUIMessage);
+      setConversationsTracked(prev => prev.map(conv => {
+        if (conv.id !== conversationId) return conv;
+        // Preserve any optimistic temp messages not yet persisted
+        const tempOnly = conv.messages.filter(m => m.id.startsWith('temp-'));
+        const merged = [...uiMsgs, ...tempOnly].sort((a, b) =>
+          new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime()
+        );
+        for (const m of uiMsgs) processedMessageIds.current.add(m.id);
+        return { ...conv, messages: merged };
+      }));
+    } catch (err) {
+      console.error('[reloadConversationMessages] unexpected:', err);
     }
   }, []);
 
@@ -662,6 +754,7 @@ export function useConversations(options?: { active?: boolean }) {
     assignConversation,
     endConversation,
     reopenConversation,
+    reloadConversationMessages,
     refetch: fetchConversations
   };
 }
