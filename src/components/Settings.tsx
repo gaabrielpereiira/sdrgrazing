@@ -48,10 +48,10 @@ const Settings: React.FC = () => {
     : apiRef.current?.isSaving;
   
   return (
-    <div className="p-8 max-w-5xl mx-auto h-full overflow-y-auto bg-slate-950 text-slate-50 custom-scrollbar">
-      <div className="mb-10 flex items-center justify-between">
+    <div className="p-4 sm:p-8 max-w-5xl mx-auto h-full overflow-y-auto bg-slate-950 text-slate-50 custom-scrollbar">
+      <div className="mb-6 sm:mb-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-white">Configurações</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Configurações</h2>
           <p className="text-sm text-slate-400 mt-1">
             Central de controle da sua instância {companyName}.
             {!isAdmin && (
@@ -59,7 +59,7 @@ const Settings: React.FC = () => {
             )}
           </p>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex flex-wrap gap-2 items-center">
           {isAdmin && (
             <Button
               variant="ghost"
@@ -68,7 +68,8 @@ const Settings: React.FC = () => {
               className="text-slate-400 hover:text-white gap-2"
             >
               <RotateCcw className="w-4 h-4" />
-              Refazer Onboarding
+              <span className="hidden sm:inline">Refazer Onboarding</span>
+              <span className="sm:hidden">Onboarding</span>
             </Button>
           )}
           <span className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs rounded-full font-mono flex items-center">
