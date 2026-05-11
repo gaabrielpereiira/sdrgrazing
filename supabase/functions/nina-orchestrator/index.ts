@@ -948,7 +948,7 @@ async function processQueueItem(
         // 1) Mark conversation as needing/under human handling
         await supabase
           .from('conversations')
-          .update({ status: 'human' })
+          .update({ status: 'human', queue: 'support' })
           .eq('id', conversation.id);
 
         // 2) Build a friendly title for the notification
