@@ -13,7 +13,7 @@ import Auth from './pages/Auth';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import { CompanySettingsProvider } from './hooks/useCompanySettings';
-import { AuthProvider } from './hooks/useAuth';
+import { AuthProvider, useAuth, defaultRouteForRole } from './hooks/useAuth';
 import { Toaster } from 'sonner';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { useOnboardingStatus } from './hooks/useOnboardingStatus';
