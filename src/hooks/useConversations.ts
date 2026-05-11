@@ -14,8 +14,9 @@ import {
 } from '@/types';
 import { toast } from 'sonner';
 
-export function useConversations(options?: { active?: boolean }) {
+export function useConversations(options?: { active?: boolean; queue?: 'sales' | 'support' | 'all' }) {
   const isActiveFilter = options?.active ?? true;
+  const queueFilter = options?.queue ?? 'all';
   const [conversations, setConversations] = useState<UIConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
