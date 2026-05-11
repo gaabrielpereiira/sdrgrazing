@@ -546,12 +546,12 @@ const Scheduling: React.FC = () => {
   };
 
   return (
-    <div className="p-6 h-full flex flex-col bg-slate-950 text-slate-50">
+    <div className="p-4 sm:p-6 h-full flex flex-col bg-slate-950 text-slate-50">
       {/* Header */}
-      <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-6 gap-4">
+      <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-4 sm:mb-6 gap-4">
         <div>
-           <h2 className="text-3xl font-bold text-white flex items-center gap-2">
-            <CalendarIcon className="w-8 h-8 text-cyan-500" />
+           <h2 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-2">
+            <CalendarIcon className="w-7 h-7 sm:w-8 sm:h-8 text-cyan-500" />
             Agendamentos
            </h2>
            <p className="text-slate-400 text-sm mt-1">Gerencie demos, reuniões e suporte técnico.</p>
