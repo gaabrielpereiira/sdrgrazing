@@ -109,14 +109,14 @@ const Contacts: React.FC = () => {
   };
 
   return (
-    <div className="p-8 h-full overflow-y-auto bg-slate-950 text-slate-50">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+    <div className="p-4 sm:p-8 h-full overflow-y-auto bg-slate-950 text-slate-50">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-white">Contatos</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Contatos</h2>
           <p className="text-sm text-slate-400 mt-1">Gerencie sua base de leads e clientes com inteligência.</p>
         </div>
         <Button 
-          className="shadow-lg shadow-cyan-500/20"
+          className="w-full sm:w-auto shadow-lg shadow-cyan-500/20"
           onClick={() => setShowCreate(true)}
         >
           <UserPlus className="w-4 h-4 mr-2" />
@@ -163,7 +163,39 @@ const Contacts: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden divide-y divide-slate-800/50">
+              {filteredContacts.map((contact) => (
+                <div key={contact.id} className="p-4 flex items-start gap-3">
+                  <div className="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-700 flex items-center justify-center text-sm font-bold text-cyan-400">
+                    {(contact.name || contact.phone || '?').substring(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-semibold text-slate-200 truncate">{contact.name || 'Sem nome'}</div>
+                      <span className={`shrink-0 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${getStatusColor(contact.status)}`}>
+                        {contact.status === 'customer' ? 'Cliente' : contact.status === 'lead' ? 'Lead' : 'Churned'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5"><Phone className="w-3 h-3" />{contact.phone}</div>
+                    {contact.email && (
+                      <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 truncate"><Mail className="w-3 h-3" />{contact.email}</div>
+                    )}
+                    <div className="flex gap-2 mt-3">
+                      <Button size="sm" variant="primary" className="flex-1" onClick={() => handleStartConversation(contact)} disabled={startingChatId === contact.id}>
+                        {startingChatId === contact.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><MessageSquare className="w-4 h-4 mr-1" />Conversar</>}
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-slate-400" onClick={() => openEdit(contact)}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 font-medium text-xs uppercase tracking-wider">
                 <tr>
@@ -244,7 +276,8 @@ const Contacts: React.FC = () => {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -255,7 +288,7 @@ const Contacts: React.FC = () => {
           onClick={() => !creating && setShowCreate(false)}
         >
           <div
-            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl"
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
@@ -334,7 +367,7 @@ const Contacts: React.FC = () => {
           onClick={() => !savingEdit && setEditingContact(null)}
         >
           <div
-            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl"
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">

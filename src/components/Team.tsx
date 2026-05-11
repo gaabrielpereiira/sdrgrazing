@@ -249,23 +249,23 @@ const Team: React.FC = () => {
   };
 
   return (
-    <div className="p-8 h-full overflow-y-auto bg-slate-950 text-slate-50 relative custom-scrollbar">
+    <div className="p-4 sm:p-8 h-full overflow-y-auto bg-slate-950 text-slate-50 relative custom-scrollbar">
       {/* Header Section */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-white">Equipe</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Equipe</h2>
           <p className="text-sm text-slate-400 mt-1">Gerencie usuários e times da organização</p>
         </div>
-        <div className="flex gap-3">
-          <Button onClick={handleSyncUsers} variant="outline" className="border-slate-700" disabled={syncing}>
+        <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
+          <Button onClick={handleSyncUsers} variant="outline" className="border-slate-700 flex-1 sm:flex-none" disabled={syncing}>
             {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
             Sincronizar
           </Button>
-          <Button onClick={() => setShowConfigModal(true)} variant="outline" className="border-slate-700">
+          <Button onClick={() => setShowConfigModal(true)} variant="outline" className="border-slate-700 flex-1 sm:flex-none">
             <Settings className="w-4 h-4 mr-2" />
             Configurar
           </Button>
-          <Button onClick={() => setShowModal(true)} className="shadow-lg shadow-cyan-500/20 bg-slate-100 text-slate-900 hover:bg-white hover:text-black">
+          <Button onClick={() => setShowModal(true)} className="shadow-lg shadow-cyan-500/20 bg-slate-100 text-slate-900 hover:bg-white hover:text-black w-full sm:w-auto">
             <UserPlus className="w-4 h-4 mr-2" />
             Convidar Usuário
           </Button>
@@ -298,7 +298,7 @@ const Team: React.FC = () => {
       </div>
 
       {/* Stats Cards Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 shadow-sm">
             <div className="text-sm font-medium text-slate-400 mb-2">Total de Usuários</div>
             <div className="text-3xl font-bold text-white">{loading ? '-' : stats.total}</div>
@@ -352,7 +352,7 @@ const Team: React.FC = () => {
             </div>
         ) : (
             <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full text-left border-collapse min-w-[900px]">
                     <thead>
                         <tr className="border-b border-slate-800/50">
                             <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Usuário</th>

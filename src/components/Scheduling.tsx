@@ -546,18 +546,18 @@ const Scheduling: React.FC = () => {
   };
 
   return (
-    <div className="p-6 h-full flex flex-col bg-slate-950 text-slate-50">
+    <div className="p-4 sm:p-6 h-full flex flex-col bg-slate-950 text-slate-50">
       {/* Header */}
-      <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-6 gap-4">
+      <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-4 sm:mb-6 gap-4">
         <div>
-           <h2 className="text-3xl font-bold text-white flex items-center gap-2">
-            <CalendarIcon className="w-8 h-8 text-cyan-500" />
+           <h2 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-2">
+            <CalendarIcon className="w-7 h-7 sm:w-8 sm:h-8 text-cyan-500" />
             Agendamentos
            </h2>
            <p className="text-slate-400 text-sm mt-1">Gerencie demos, reuniões e suporte técnico.</p>
         </div>
         
-        <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 w-full xl:w-auto">
             {/* View Switcher */}
             <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
                 <button 
@@ -610,7 +610,8 @@ const Scheduling: React.FC = () => {
                  <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
              </div>
         ) : (
-            <>
+            <div className="flex-1 overflow-auto">
+              <div className="min-w-[700px] h-full flex flex-col">
                 {viewMode === 'month' && (
                     <>
                         <div className="grid grid-cols-7 border-b border-slate-800 bg-slate-900">
@@ -625,7 +626,8 @@ const Scheduling: React.FC = () => {
                 )}
                 {viewMode === 'week' && renderWeekView()}
                 {viewMode === 'day' && renderDayView()}
-            </>
+              </div>
+            </div>
         )}
       </div>
 
@@ -945,7 +947,7 @@ const Scheduling: React.FC = () => {
       {/* Edit Appointment Modal */}
       {showEditModal && selectedAppointment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-slate-800 bg-gradient-to-r from-cyan-950/30 to-slate-900">
               <div className="flex items-center gap-3">
