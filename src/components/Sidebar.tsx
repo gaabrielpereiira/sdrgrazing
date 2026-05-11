@@ -61,17 +61,20 @@ const LogoIcon = () => {
 
 const SidebarContent = () => {
   const { companyName } = useCompanySettings();
-  const { user, signOut } = useAuth();
+  const { user, signOut, role } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const currentPath = location.pathname.substring(1) || 'dashboard';
   const { open, setOpen } = useSidebar();
 
-  const links = menuItems.map(item => ({
-    label: item.label,
-    href: `/${item.id}`,
-    icon: <item.icon className="h-5 w-5" />,
-  }));
+  const effectiveRole: MenuRole = (role as MenuRole) || 'user';
+  const links = menuItems
+    .filter(item => item.roles.includes(effectiveRole))
+    .map(item => ({
+      label: item.label,
+      href: `/${item.id}`,
+      icon: <item.icon className="h-5 w-5" />,
+    }));
 
   const handleLogout = async () => {
     try {
