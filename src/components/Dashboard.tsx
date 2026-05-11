@@ -152,7 +152,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Charts Section */}
-      <div className="grid gap-6 md:grid-cols-7">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-7">
         {/* Main Chart */}
         <div className="col-span-4 rounded-2xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm p-6 shadow-lg">
           <div className="mb-6 flex items-center justify-between">
