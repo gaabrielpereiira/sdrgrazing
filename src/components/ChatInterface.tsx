@@ -958,14 +958,46 @@ const ChatInterface: React.FC = () => {
       <div className="w-80 lg:w-96 border-r border-slate-800 flex flex-col bg-slate-900/50 backdrop-blur-md z-20 flex-shrink-0">
         {/* Search Header */}
         <div className="p-4 border-b border-slate-800/50">
-          <h2 className="text-lg font-bold text-white mb-3 px-1">
-            Conversas {effectiveQueue === 'support' ? '· Suporte' : '· Atendimento'}
-          </h2>
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h2 className="text-lg font-bold text-white">Conversas</h2>
+            <span
+              className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border flex items-center gap-1 ${
+                effectiveQueue === 'support'
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                  : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
+              }`}
+            >
+              {effectiveQueue === 'support' ? <LifeBuoy className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
+              {effectiveQueue === 'support' ? 'Suporte' : 'Atendimento'}
+            </span>
+          </div>
           {isAdmin && (
             <Tabs value={queueTab} onValueChange={(v) => setQueueTab(v as 'sales' | 'support')} className="mb-3">
-              <TabsList className="grid grid-cols-2 w-full h-9">
-                <TabsTrigger value="sales" className="text-xs">Atendimento</TabsTrigger>
-                <TabsTrigger value="support" className="text-xs">Suporte</TabsTrigger>
+              <TabsList className="grid grid-cols-2 w-full h-10 p-1">
+                <TabsTrigger
+                  value="sales"
+                  className="text-xs gap-1.5 data-[state=active]:bg-cyan-500/15 data-[state=active]:text-cyan-300 data-[state=active]:shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  Atendimento
+                  {queueUnread.sales > 0 && (
+                    <span className="ml-1 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-cyan-500 text-white">
+                      {queueUnread.sales > 99 ? '99+' : queueUnread.sales}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="support"
+                  className="text-xs gap-1.5 data-[state=active]:bg-amber-500/15 data-[state=active]:text-amber-300 data-[state=active]:shadow-[inset_0_-2px_0_0_rgb(245_158_11)]"
+                >
+                  <LifeBuoy className="w-3.5 h-3.5" />
+                  Suporte
+                  {queueUnread.support > 0 && (
+                    <span className="ml-1 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-amber-500 text-white animate-pulse">
+                      {queueUnread.support > 99 ? '99+' : queueUnread.support}
+                    </span>
+                  )}
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           )}
