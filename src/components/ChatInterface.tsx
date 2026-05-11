@@ -1207,6 +1207,25 @@ const ChatInterface: React.FC = () => {
                   <Pause className="w-5 h-5" />
                 </Button>
                 <div className="h-6 w-px bg-slate-800 mx-1"></div>
+                {isAdmin && activeChat && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-400 hover:text-cyan-400 text-xs px-2"
+                    title={effectiveQueue === 'sales' ? 'Mover para Suporte' : 'Mover para Atendimento'}
+                    onClick={async () => {
+                      try {
+                        const target: 'sales' | 'support' = effectiveQueue === 'sales' ? 'support' : 'sales';
+                        await api.moveConversationQueue(activeChat.id, target);
+                        toast.success(`Conversa movida para ${target === 'support' ? 'Suporte' : 'Atendimento'}`);
+                      } catch {
+                        toast.error('Não foi possível mover a conversa');
+                      }
+                    }}
+                  >
+                    {effectiveQueue === 'sales' ? '→ Suporte' : '→ Atendimento'}
+                  </Button>
+                )}
                 {chatTab === 'active' ? (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
