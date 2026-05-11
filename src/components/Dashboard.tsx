@@ -209,7 +209,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Secondary Chart */}
-        <div className="col-span-3 rounded-2xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm p-6 shadow-lg flex flex-col">
+        <div className="md:col-span-3 rounded-2xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm p-4 sm:p-6 shadow-lg flex flex-col min-w-0">
            <div className="mb-6">
             <h3 className="text-lg font-semibold text-white">Conversões</h3>
             <p className="text-sm text-slate-400">Reuniões, vendas e ações concluídas</p>
