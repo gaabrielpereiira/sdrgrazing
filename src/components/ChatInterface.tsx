@@ -951,7 +951,17 @@ const ChatInterface: React.FC = () => {
       <div className="w-80 lg:w-96 border-r border-slate-800 flex flex-col bg-slate-900/50 backdrop-blur-md z-20 flex-shrink-0">
         {/* Search Header */}
         <div className="p-4 border-b border-slate-800/50">
-          <h2 className="text-lg font-bold text-white mb-3 px-1">Conversas</h2>
+          <h2 className="text-lg font-bold text-white mb-3 px-1">
+            Conversas {effectiveQueue === 'support' ? '· Suporte' : '· Atendimento'}
+          </h2>
+          {isAdmin && (
+            <Tabs value={queueTab} onValueChange={(v) => setQueueTab(v as 'sales' | 'support')} className="mb-3">
+              <TabsList className="grid grid-cols-2 w-full h-9">
+                <TabsTrigger value="sales" className="text-xs">Atendimento</TabsTrigger>
+                <TabsTrigger value="support" className="text-xs">Suporte</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
           <Tabs value={chatTab} onValueChange={(v) => setChatTab(v as 'active' | 'finished')} className="mb-3">
             <TabsList className="grid grid-cols-2 w-full h-9">
               <TabsTrigger value="active" className="text-xs">Ativas</TabsTrigger>
