@@ -24,6 +24,7 @@ import { TemplatePickerModal } from './chat/TemplatePickerModal';
 import { useAttendantNames } from '@/hooks/useAttendantNames';
 import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picker-react';
 import { useAuth, queueForRole } from '@/hooks/useAuth';
+import { useQueueUnreadCounts } from '@/hooks/useQueueUnreadCounts';
 
 const ChatInterface: React.FC = () => {
   const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
