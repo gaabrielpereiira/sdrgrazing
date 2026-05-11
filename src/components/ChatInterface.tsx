@@ -23,10 +23,14 @@ import { useAllPendingActivities } from '@/hooks/useConversationActivities';
 import { TemplatePickerModal } from './chat/TemplatePickerModal';
 import { useAttendantNames } from '@/hooks/useAttendantNames';
 import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picker-react';
+import { useAuth, queueForRole } from '@/hooks/useAuth';
 
 const ChatInterface: React.FC = () => {
   const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
-  const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active' });
+  const { role, isAdmin } = useAuth();
+  const [queueTab, setQueueTab] = useState<'sales' | 'support'>(queueForRole(role) === 'support' ? 'support' : 'sales');
+  const effectiveQueue: 'sales' | 'support' = isAdmin ? queueTab : (queueForRole(role) ?? 'sales');
+  const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: effectiveQueue });
   const { sdrName, companyName } = useCompanySettings();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
@@ -947,7 +951,17 @@ const ChatInterface: React.FC = () => {
       <div className="w-80 lg:w-96 border-r border-slate-800 flex flex-col bg-slate-900/50 backdrop-blur-md z-20 flex-shrink-0">
         {/* Search Header */}
         <div className="p-4 border-b border-slate-800/50">
-          <h2 className="text-lg font-bold text-white mb-3 px-1">Conversas</h2>
+          <h2 className="text-lg font-bold text-white mb-3 px-1">
+            Conversas {effectiveQueue === 'support' ? '· Suporte' : '· Atendimento'}
+          </h2>
+          {isAdmin && (
+            <Tabs value={queueTab} onValueChange={(v) => setQueueTab(v as 'sales' | 'support')} className="mb-3">
+              <TabsList className="grid grid-cols-2 w-full h-9">
+                <TabsTrigger value="sales" className="text-xs">Atendimento</TabsTrigger>
+                <TabsTrigger value="support" className="text-xs">Suporte</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
           <Tabs value={chatTab} onValueChange={(v) => setChatTab(v as 'active' | 'finished')} className="mb-3">
             <TabsList className="grid grid-cols-2 w-full h-9">
               <TabsTrigger value="active" className="text-xs">Ativas</TabsTrigger>
@@ -1193,6 +1207,25 @@ const ChatInterface: React.FC = () => {
                   <Pause className="w-5 h-5" />
                 </Button>
                 <div className="h-6 w-px bg-slate-800 mx-1"></div>
+                {isAdmin && activeChat && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-400 hover:text-cyan-400 text-xs px-2"
+                    title={effectiveQueue === 'sales' ? 'Mover para Suporte' : 'Mover para Atendimento'}
+                    onClick={async () => {
+                      try {
+                        const target: 'sales' | 'support' = effectiveQueue === 'sales' ? 'support' : 'sales';
+                        await api.moveConversationQueue(activeChat.id, target);
+                        toast.success(`Conversa movida para ${target === 'support' ? 'Suporte' : 'Atendimento'}`);
+                      } catch {
+                        toast.error('Não foi possível mover a conversa');
+                      }
+                    }}
+                  >
+                    {effectiveQueue === 'sales' ? '→ Suporte' : '→ Atendimento'}
+                  </Button>
+                )}
                 {chatTab === 'active' ? (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>

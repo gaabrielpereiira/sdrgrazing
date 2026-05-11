@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth, defaultRouteForRole } from '@/hooks/useAuth';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,7 +23,7 @@ const Auth: React.FC = () => {
   const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   
-  const { signIn, signUp, user, loading } = useAuth();
+  const { signIn, signUp, user, loading, role, roleLoading } = useAuth();
   const navigate = useNavigate();
 
   // Check registration setting
@@ -39,12 +39,12 @@ const Auth: React.FC = () => {
     checkRegistration();
   }, []);
 
-  // Redirect if already logged in
+  // Redirect if already logged in (wait for role to land on right screen)
   useEffect(() => {
-    if (!loading && user) {
-      navigate('/dashboard', { replace: true });
+    if (!loading && user && !roleLoading) {
+      navigate(defaultRouteForRole(role), { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, role, roleLoading, navigate]);
 
   const validateForm = (): boolean => {
     const newErrors: { email?: string; password?: string; fullName?: string } = {};
@@ -91,7 +91,7 @@ const Auth: React.FC = () => {
           return;
         }
         toast.success('Login realizado com sucesso!');
-        navigate('/dashboard', { replace: true });
+        // Redirect handled by useEffect once role is loaded
       } else {
         if (!registrationEnabled) {
           toast.error('Novos registros estão desabilitados no momento.');
@@ -107,7 +107,7 @@ const Auth: React.FC = () => {
           return;
         }
         toast.success('Conta criada com sucesso! Você já pode usar a plataforma.');
-        navigate('/dashboard', { replace: true });
+        // Redirect handled by useEffect once role is loaded
       }
     } finally {
       setIsSubmitting(false);

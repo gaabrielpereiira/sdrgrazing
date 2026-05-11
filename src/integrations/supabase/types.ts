@@ -252,6 +252,7 @@ export type Database = {
           last_message_at: string
           metadata: Json | null
           nina_context: Json | null
+          queue: string
           started_at: string
           status: Database["public"]["Enums"]["conversation_status"]
           tags: string[] | null
@@ -268,6 +269,7 @@ export type Database = {
           last_message_at?: string
           metadata?: Json | null
           nina_context?: Json | null
+          queue?: string
           started_at?: string
           status?: Database["public"]["Enums"]["conversation_status"]
           tags?: string[] | null
@@ -284,6 +286,7 @@ export type Database = {
           last_message_at?: string
           metadata?: Json | null
           nina_context?: Json | null
+          queue?: string
           started_at?: string
           status?: Database["public"]["Enums"]["conversation_status"]
           tags?: string[] | null
@@ -1381,9 +1384,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      user_queue_access: { Args: { _user_id: string }; Returns: string[] }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "sdr" | "support"
       appointment_type: "demo" | "meeting" | "support" | "followup"
       conversation_status: "nina" | "human" | "paused"
       member_role: "admin" | "manager" | "agent"
@@ -1520,7 +1524,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "sdr", "support"],
       appointment_type: ["demo", "meeting", "support", "followup"],
       conversation_status: ["nina", "human", "paused"],
       member_role: ["admin", "manager", "agent"],

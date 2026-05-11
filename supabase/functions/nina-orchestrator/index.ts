@@ -193,9 +193,23 @@ serve(async (req) => {
         // Get user_id from conversation to fetch correct settings
         const { data: conversation } = await supabase
           .from('conversations')
-          .select('user_id')
+          .select('user_id, queue')
           .eq('id', item.conversation_id)
           .single();
+
+        // Skip Nina entirely for support queue (humans-only)
+        if (conversation && (conversation as any).queue === 'support') {
+          console.log('[Nina] Conversation in support queue — skipping AI:', item.conversation_id);
+          await supabase
+            .from('nina_processing_queue')
+            .update({
+              status: 'completed',
+              processed_at: new Date().toISOString(),
+              error_message: 'Skipped: support queue (human-only)'
+            })
+            .eq('id', item.id);
+          continue;
+        }
 
         if (!conversation) {
           console.log('[Nina] Conversation not found:', item.conversation_id);

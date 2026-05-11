@@ -1,58 +1,139 @@
-## Bug: Nina envia a mesma resposta 2x (ex.: "Olá! Como posso ajudar você hoje? 😊" duplicado)
 
-### Diagnóstico (confirmado no banco)
+# Separação Atendimento × Suporte com Roles e Filas
 
-Cada balão duplicado vem do **mesmo `response_to_message_id`** com `chunk_index:0` repetido. Consultando `nina_processing_queue`:
+## Objetivo
+Criar duas filas de conversas distintas no sistema:
+- **Atendimento (SDR)** — fluxo atual com Donatella respondendo automaticamente.
+- **Suporte** — 100% humano, isolado do time de SDR.
 
-- Mensagem `5049ca70…` → 2 entradas na fila criadas com 4ms de diferença, ambas processadas → 2 respostas
-- Mensagem `95335c1b…` → 2 entradas com 20ms de diferença → 2 sequências completas de 4 chunks (8 mensagens enviadas em vez de 4)
-- Mensagem `ddf8151a…` → **3 entradas** com ~30ms de diferença → 3 respostas
+Cada usuário entra com login próprio e vê apenas a fila do seu time. Admin enxerga ambas.
 
-Ou seja: a mesma mensagem do cliente está sendo enfileirada várias vezes para a Nina, e a Nina processa cada entrada separadamente (o claim com `FOR UPDATE SKIP LOCKED` é correto, mas as linhas são duplicadas).
+---
 
-### Causa-raiz
+## 1. Banco de dados
 
-`supabase/functions/message-grouper/index.ts` (linhas 162-205) tenta deduplicar com:
+### 1.1 Roles de aplicação
+Adicionar dois valores ao enum `app_role`:
+- `sdr` — vê fila Atendimento
+- `support` — vê fila Suporte
 
-```ts
-const { data: existingQueue } = await supabase
-  .from('nina_processing_queue')
-  .select('id').eq('message_id', lastDbMessage.id).maybeSingle();
-if (!existingQueue) { /* insert */ }
-```
+`admin` continua vendo tudo. `user` permanece como fallback (equivalente a sdr para retrocompatibilidade).
 
-Esse padrão **check-then-insert** tem race condition. Quando o webhook recebe rajada de mensagens, o `message-grouper` é disparado várias vezes em paralelo (cada `waitUntil` do whatsapp-webhook + cada `scheduleNextProcessing`). Duas execuções concorrentes leem a fila ao mesmo tempo, ambas não encontram nada, ambas inserem → 2 linhas idênticas → 2 chamadas à Nina → 2 respostas iguais ao cliente.
+### 1.2 Classificação de fila na conversa
+Adicionar coluna em `conversations`:
+- `queue` (text, default `'sales'`) com valores permitidos `'sales' | 'support'`.
+- Index em `(queue, last_message_at)` para listagem rápida.
 
-Não há `UNIQUE` em `nina_processing_queue.message_id` no schema, então o banco aceita as duplicatas silenciosamente.
+A coluna é populada por:
+- **IA**: `analyze-conversation` passa a sugerir mudança de fila quando detectar intenção de suporte (ex.: "problema com produto", "não funciona", "cancelar"). Se sugerir `support`, atualiza `conversations.queue`.
+- **Manual**: botão na UI do chat para mover conversa entre filas (somente admin e quem tem acesso à fila destino).
 
-### Correção
+### 1.3 Bloquear Nina na fila de suporte
+`nina-orchestrator` checa `conversations.queue` antes de processar; se `support`, marca a entry como `completed` e não responde.
 
-**1. Migration**: adicionar índice único parcial em `nina_processing_queue(message_id)` para mensagens ainda processáveis (qualquer linha não-failed):
+`message-grouper` continua agendando normalmente (a guarda fica no orchestrator para preservar idempotência).
 
-```sql
-CREATE UNIQUE INDEX IF NOT EXISTS nina_processing_queue_message_id_unique
-  ON public.nina_processing_queue(message_id)
-  WHERE status IN ('pending','processing','completed');
-```
+---
 
-Isso garante no banco que não pode existir mais de uma entrada para a mesma `message_id`. Falhas (`failed`) ficam de fora para permitir re-tentativas reais futuras.
+## 2. Autenticação e roteamento
 
-**2. `supabase/functions/message-grouper/index.ts`**: trocar o check-then-insert por insert idempotente. Tratar erro de unique-violation (`code === '23505'`) como sucesso silencioso ("já enfileirado por outra execução"). Continuar disparando o orchestrator só quando a inserção realmente acontecer (não disparar se foi conflito — a outra execução já disparou).
+### 2.1 Cadastro
+- Admin cria usuários via tela de Time atribuindo role (`sdr` ou `support`).
+- Signup público continua desabilitado (já existe `system_settings.registration_enabled`).
 
-**3. Defesa extra no `nina-orchestrator/index.ts`** (linha 166, dentro do loop `for (const item of queueItems)`): antes de chamar `processQueueItem`, verificar se já existe alguma mensagem com `metadata->>'response_to_message_id' = item.message_id` E `from_type = 'nina'` criada nos últimos 60s. Se existir, marcar a entrada como `completed` e pular. Isso protege contra qualquer outra fonte futura de duplicação (ex.: re-tentativa após timeout) e também limpa o histórico de duplicatas que estiverem ainda enfileiradas.
+### 2.2 Login → redirecionamento
+Após login, ler role do usuário:
+- `admin` → `/dashboard` (atual)
+- `sdr` → `/chat?queue=sales`
+- `support` → `/chat?queue=support`
 
-### Como validar
+### 2.3 Guarda de rotas
+`ProtectedRoute` ganha prop opcional `allowedRoles`. Rotas restritas:
+- `/dashboard`, `/pipeline`, `/contacts`, `/scheduling`, `/team`, `/templates`, `/settings` → admin + sdr
+- `/chat` → todos autenticados (mas filtrado por role internamente)
 
-- Após deploy, simular rajada (3 mensagens do mesmo número em <1s via `simulate-webhook`) e confirmar que `nina_processing_queue` tem só **1 linha por `message_id`** e o cliente recebeu **uma única resposta**.
-- Consultar a Cintia/Ana Beatriz nos próximos atendimentos e confirmar que não há mais `chunk_index:0` repetido para o mesmo `response_to_message_id`.
+Sidebar oculta itens fora do escopo do role (suporte só vê Chat e Notificações).
 
-### Arquivos afetados
+---
 
-- Migration nova (índice único)
-- `supabase/functions/message-grouper/index.ts` — insert idempotente
-- `supabase/functions/nina-orchestrator/index.ts` — guard de "resposta já existe"
+## 3. Camada de dados (frontend)
 
-### Fora do escopo
+### 3.1 `useConversations`
+Aceita `queueFilter: 'sales' | 'support' | 'all'`:
+- `sdr` → força `'sales'`
+- `support` → força `'support'`
+- `admin` → default `'all'`, com seletor de aba
 
-- Limpar duplicatas históricas (não interfere com novas respostas)
-- Revisar polling/grouper scheduling (não é a causa, só amplifica)
+Aplica `.eq('queue', ...)` no `fetchConversations` e filtra payloads do realtime que não combinam com a fila ativa.
+
+### 3.2 ChatInterface
+- Tabs no topo apenas para admin: **Atendimento | Suporte**.
+- Botão "Mover para Suporte / Atendimento" no header da conversa (admin sempre; sdr pode enviar para suporte; support pode devolver para atendimento).
+- Indicador visual (badge colorida) na lista de conversas mostrando a fila quando admin está em "all".
+
+### 3.3 Notificações
+`useNotifications` filtra por fila correspondente ao role para não vazar conversa de outra área.
+
+---
+
+## 4. IA — classificação automática
+
+`analyze-conversation` (que já roda a cada N mensagens):
+- Adiciona ao prompt instrução: "Se a conversa indicar dúvida pós-venda, problema técnico, reclamação, cancelamento ou solicitação de suporte, retorne `should_route_to_support: true` com `reason`".
+- Quando flag vier `true`:
+  1. `UPDATE conversations SET queue='support', status='waiting' WHERE id=...`
+  2. Cria notificação para o time de suporte.
+  3. Insere registro em `deal_activities` ou `notifications` com a razão.
+
+Reversa (suporte → vendas) só por ação manual.
+
+---
+
+## 5. RLS
+
+Manter políticas permissivas atuais (single-tenant), mas adicionar policies que filtram por role para `conversations` e `messages`:
+- `sdr` lê apenas `conversations.queue = 'sales'`.
+- `support` lê apenas `conversations.queue = 'support'`.
+- `admin` lê tudo.
+- Mesma lógica para `messages` via subquery em `conversations`.
+
+Helper `public.user_queue_access()` retorna o array de queues permitidos baseado em `has_role`.
+
+---
+
+## 6. UI Time (admin)
+
+Tela `/team`:
+- Selector de role (`Admin | SDR | Suporte`) ao convidar/editar membro.
+- Coluna na lista mostrando role.
+- Filtro por fila.
+
+---
+
+## Detalhes técnicos
+
+### Migrações
+1. `ALTER TYPE app_role ADD VALUE 'sdr';` + `'support';`
+2. `ALTER TABLE conversations ADD COLUMN queue text NOT NULL DEFAULT 'sales' CHECK (queue IN ('sales','support'));`
+3. Index `idx_conversations_queue_last_msg`.
+4. Função `public.user_queue_access(_user_id uuid) RETURNS text[]`.
+5. Substituir policies de SELECT em `conversations` e `messages` por versões que checam `queue = ANY(user_queue_access(auth.uid()))`. Manter ALL para admin.
+
+### Edge functions tocadas
+- `nina-orchestrator/index.ts` — guarda `if (conversation.queue === 'support') skip`.
+- `analyze-conversation/index.ts` — novo campo no schema do LLM e UPDATE de queue.
+
+### Frontend tocado
+- `src/hooks/useAuth.tsx` — expor `role`.
+- `src/components/ProtectedRoute.tsx` — `allowedRoles`.
+- `src/App.tsx` — redirect pós-login conforme role; restrições por rota.
+- `src/components/Sidebar.tsx` — ocultar itens por role.
+- `src/hooks/useConversations.ts` — filtro `queue`.
+- `src/components/ChatInterface.tsx` — tabs (admin), botão mover fila, badge.
+- `src/components/Team.tsx` + `TeamConfigModal.tsx` — selector de role.
+- `src/pages/Auth.tsx` — redirect baseado em role.
+
+### Fora de escopo
+- Migrar conversas históricas (todas ficam como `sales` por default, admin reclassifica manualmente conforme necessário).
+- Métricas separadas no Dashboard (pode ser próxima iteração).
+- Atribuição automática a um agente de suporte específico (round-robin).
