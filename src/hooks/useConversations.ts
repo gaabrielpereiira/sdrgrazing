@@ -360,19 +360,17 @@ export function useConversations(options?: { active?: boolean }) {
           console.log('[Realtime] Conversation UPDATE:', payload.new);
           const updated = payload.new as any;
           
-          // If is_active no longer matches our filter, remove it from this view
-          if (typeof updated.is_active === 'boolean' && updated.is_active !== isActiveFilter) {
-            setConversationsTracked(prev => prev.filter(c => c.id !== updated.id));
-            return;
-          }
-          
+          // Always update fields in place — never remove from state on is_active flip,
+          // otherwise the user perceives "the conversation lost its history" when another
+          // operator/edge-fn finalizes (or reopens) the chat they're viewing.
           setConversationsTracked(prev => {
             const exists = prev.some(c => c.id === updated.id);
-            // Conversation matches our filter but isn't in the list yet (e.g. reactivated after being finalized).
-            // Fetch it with the full message history so the previous context shows up immediately.
             if (!exists) {
-              console.log('[Realtime] Conversation reactivated — fetching with history:', updated.id);
-              fetchAndAddConversation(updated.id);
+              // Only fetch when the new state matches the filter for this view.
+              if (updated.is_active === isActiveFilter) {
+                console.log('[Realtime] Conversation entered current filter — fetching:', updated.id);
+                fetchAndAddConversation(updated.id);
+              }
               return prev;
             }
             return prev.map(conv => {
@@ -381,7 +379,7 @@ export function useConversations(options?: { active?: boolean }) {
                   ...conv,
                   status: updated.status,
                   isActive: updated.is_active,
-                  assignedTeam: updated.assigned_team
+                  assignedTeam: updated.assigned_team,
                 };
               }
               return conv;
