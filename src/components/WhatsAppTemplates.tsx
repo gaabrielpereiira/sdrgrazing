@@ -131,18 +131,18 @@ const WhatsAppTemplates: React.FC = () => {
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto h-full overflow-y-auto bg-background text-foreground custom-scrollbar">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 sm:p-8 max-w-6xl mx-auto h-full overflow-y-auto bg-background text-foreground custom-scrollbar">
+      <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-            <FileText className="w-8 h-8 text-primary" />
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <FileText className="w-7 h-7 sm:w-8 sm:h-8 text-primary" />
             Templates WhatsApp
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
             Gerencie modelos de mensagem aprovados pela Meta para envio em massa e iniciar conversas.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Button variant="ghost" onClick={handleSync} disabled={syncing || !wabaConfigured} className="gap-2">
             {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             Sincronizar com Meta
