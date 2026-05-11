@@ -70,19 +70,19 @@ const App: React.FC = () => {
                 <AppLayout />
               </ProtectedRoute>
             }>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/pipeline" element={<Kanban />} />
+              <Route path="/" element={<RoleHomeRedirect />} />
+              <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['admin','sdr','user']}><Dashboard /></ProtectedRoute>} />
+              <Route path="/pipeline" element={<ProtectedRoute allowedRoles={['admin','sdr','user']}><Kanban /></ProtectedRoute>} />
               <Route path="/chat" element={<ChatInterface />} />
-              <Route path="/contacts" element={<Contacts />} />
-              <Route path="/scheduling" element={<Scheduling />} />
-              <Route path="/team" element={<Team />} />
-              <Route path="/templates" element={<WhatsAppTemplates />} />
-              <Route path="/settings" element={<Settings />} />
+              <Route path="/contacts" element={<ProtectedRoute allowedRoles={['admin','sdr','user']}><Contacts /></ProtectedRoute>} />
+              <Route path="/scheduling" element={<ProtectedRoute allowedRoles={['admin','sdr','user']}><Scheduling /></ProtectedRoute>} />
+              <Route path="/team" element={<ProtectedRoute allowedRoles={['admin']}><Team /></ProtectedRoute>} />
+              <Route path="/templates" element={<ProtectedRoute allowedRoles={['admin','sdr','user']}><WhatsAppTemplates /></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin']}><Settings /></ProtectedRoute>} />
             </Route>
             
-            {/* Catch all - redirect to dashboard */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            {/* Catch all */}
+            <Route path="*" element={<RoleHomeRedirect />} />
           </Routes>
         </BrowserRouter>
         <Toaster 
