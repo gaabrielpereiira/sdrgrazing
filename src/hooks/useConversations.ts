@@ -91,6 +91,12 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
         console.error('[Realtime] Error fetching conversation:', convError);
         return;
       }
+
+      // Skip if conversation doesn't match the active queue filter
+      if (queueFilter !== 'all' && (convData as any).queue !== queueFilter) {
+        console.log('[Realtime] Conversation queue mismatch, skipping:', (convData as any).queue);
+        return;
+      }
       
       const { data: messages, error: msgError } = await supabase
         .from('messages')
