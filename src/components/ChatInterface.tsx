@@ -1169,7 +1169,15 @@ const ChatInterface: React.FC = () => {
             )}
 
             {/* Chat Header */}
-            <div className="h-16 px-6 flex items-center justify-between bg-slate-900/80 backdrop-blur-md border-b border-slate-800 z-10 shrink-0">
+            <div className="h-16 px-3 md:px-6 flex items-center justify-between bg-slate-900/80 backdrop-blur-md border-b border-slate-800 z-10 shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedChatId(null)}
+                className="md:hidden p-2 -ml-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
+                aria-label="Voltar"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
               <div 
                 className="flex items-center p-1.5 -ml-1.5 rounded-lg pr-3 group/header"
               >
