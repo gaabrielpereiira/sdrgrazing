@@ -109,14 +109,14 @@ const Contacts: React.FC = () => {
   };
 
   return (
-    <div className="p-8 h-full overflow-y-auto bg-slate-950 text-slate-50">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+    <div className="p-4 sm:p-8 h-full overflow-y-auto bg-slate-950 text-slate-50">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-white">Contatos</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Contatos</h2>
           <p className="text-sm text-slate-400 mt-1">Gerencie sua base de leads e clientes com inteligência.</p>
         </div>
         <Button 
-          className="shadow-lg shadow-cyan-500/20"
+          className="w-full sm:w-auto shadow-lg shadow-cyan-500/20"
           onClick={() => setShowCreate(true)}
         >
           <UserPlus className="w-4 h-4 mr-2" />
