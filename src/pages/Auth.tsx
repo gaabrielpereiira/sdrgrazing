@@ -23,7 +23,7 @@ const Auth: React.FC = () => {
   const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   
-  const { signIn, signUp, user, loading } = useAuth();
+  const { signIn, signUp, user, loading, role, roleLoading } = useAuth();
   const navigate = useNavigate();
 
   // Check registration setting
@@ -39,12 +39,12 @@ const Auth: React.FC = () => {
     checkRegistration();
   }, []);
 
-  // Redirect if already logged in
+  // Redirect if already logged in (wait for role to land on right screen)
   useEffect(() => {
-    if (!loading && user) {
-      navigate('/dashboard', { replace: true });
+    if (!loading && user && !roleLoading) {
+      navigate(defaultRouteForRole(role), { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, role, roleLoading, navigate]);
 
   const validateForm = (): boolean => {
     const newErrors: { email?: string; password?: string; fullName?: string } = {};
