@@ -298,11 +298,11 @@ const Kanban: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-slate-950 text-slate-50 p-6 overflow-hidden relative">
+    <div className="h-full flex flex-col bg-slate-950 text-slate-50 p-4 sm:p-6 overflow-hidden relative">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4 flex-shrink-0">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-8 gap-4 flex-shrink-0">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-white">Pipeline de Vendas</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Pipeline de Vendas</h2>
           <p className="text-sm text-slate-400 mt-1">Gerencie oportunidades e acompanhe o fluxo de receita.</p>
         </div>
         <div className="flex gap-3 w-full sm:w-auto">
