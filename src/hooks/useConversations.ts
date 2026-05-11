@@ -161,7 +161,11 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
           return { ...fresh, messages: union };
         });
         const freshIds = new Set(data.map(c => c.id));
-        const orphans = prev.filter(c => !freshIds.has(c.id) && c.isActive === isActiveFilter);
+        const orphans = prev.filter(c =>
+          !freshIds.has(c.id) &&
+          c.isActive === isActiveFilter &&
+          (queueFilter === 'all' || (c as any).queue === queueFilter)
+        );
         processedMessageIds.current.clear();
         for (const c of merged) for (const m of c.messages) processedMessageIds.current.add(m.id);
         for (const c of orphans) for (const m of c.messages) processedMessageIds.current.add(m.id);
