@@ -87,28 +87,32 @@ const Settings: React.FC = () => {
       </div>
 
       <Tabs defaultValue="agent" className="w-full" onValueChange={setActiveTab}>
-        <div className="flex items-center justify-between mb-8">
-          <TabsList>
-            <TabsTrigger value="agent" className="gap-2">
-              <Bot className="w-4 h-4" />
-              Agente
-            </TabsTrigger>
-            <TabsTrigger value="apis" className="gap-2">
-              <Plug className="w-4 h-4" />
-              APIs
-            </TabsTrigger>
-            <TabsTrigger value="docs" className="gap-2">
-              <BookOpen className="w-4 h-4" />
-              Documentação
-            </TabsTrigger>
-          </TabsList>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-3">
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <TabsList>
+              <TabsTrigger value="agent" className="gap-2">
+                <Bot className="w-4 h-4" />
+                Agente
+              </TabsTrigger>
+              <TabsTrigger value="apis" className="gap-2">
+                <Plug className="w-4 h-4" />
+                APIs
+              </TabsTrigger>
+              <TabsTrigger value="docs" className="gap-2">
+                <BookOpen className="w-4 h-4" />
+                <span className="hidden sm:inline">Documentação</span>
+                <span className="sm:hidden">Docs</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {activeTab !== 'docs' && isAdmin && (
-            <div className="flex gap-3">
+            <div className="flex gap-2 sm:gap-3">
               <Button
                 variant="ghost"
                 onClick={handleCancel}
                 disabled={isSaving}
+                className="flex-1 sm:flex-none"
               >
                 Cancelar
               </Button>
@@ -116,7 +120,7 @@ const Settings: React.FC = () => {
                 variant="primary"
                 onClick={handleSave}
                 disabled={isSaving}
-                className="gap-2"
+                className="gap-2 flex-1 sm:flex-none"
               >
                 {isSaving ? (
                   <>
