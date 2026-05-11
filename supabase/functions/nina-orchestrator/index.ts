@@ -1033,7 +1033,7 @@ async function processQueueItem(
 
       await supabase
         .from('conversations')
-        .update({ status: 'human' })
+        .update({ status: 'human', queue: 'support' })
         .eq('id', conversation.id);
 
       await supabase.from('notifications').insert({
