@@ -982,8 +982,11 @@ const ChatInterface: React.FC = () => {
                 >
                   <Bot className="w-3.5 h-3.5" />
                   Atendimento
+                  <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                    {tabCounts.activeSales + tabCounts.finishedSales}
+                  </span>
                   {queueUnread.sales > 0 && (
-                    <span className="ml-1 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-cyan-500 text-white">
+                    <span className="ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-cyan-500 text-white">
                       {queueUnread.sales > 99 ? '99+' : queueUnread.sales}
                     </span>
                   )}
@@ -994,8 +997,11 @@ const ChatInterface: React.FC = () => {
                 >
                   <LifeBuoy className="w-3.5 h-3.5" />
                   Suporte
+                  <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                    {tabCounts.activeSupport + tabCounts.finishedSupport}
+                  </span>
                   {queueUnread.support > 0 && (
-                    <span className="ml-1 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-amber-500 text-white animate-pulse">
+                    <span className="ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-amber-500 text-white animate-pulse">
                       {queueUnread.support > 99 ? '99+' : queueUnread.support}
                     </span>
                   )}
@@ -1005,8 +1011,18 @@ const ChatInterface: React.FC = () => {
           )}
           <Tabs value={chatTab} onValueChange={(v) => setChatTab(v as 'active' | 'finished')} className="mb-3">
             <TabsList className="grid grid-cols-2 w-full h-9">
-              <TabsTrigger value="active" className="text-xs">Ativas</TabsTrigger>
-              <TabsTrigger value="finished" className="text-xs">Finalizadas</TabsTrigger>
+              <TabsTrigger value="active" className="text-xs gap-1.5">
+                Ativas
+                <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                  {effectiveQueue === 'support' ? tabCounts.activeSupport : tabCounts.activeSales}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="finished" className="text-xs gap-1.5">
+                Finalizadas
+                <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                  {effectiveQueue === 'support' ? tabCounts.finishedSupport : tabCounts.finishedSales}
+                </span>
+              </TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="relative group">
