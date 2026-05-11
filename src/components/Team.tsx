@@ -298,7 +298,7 @@ const Team: React.FC = () => {
       </div>
 
       {/* Stats Cards Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 shadow-sm">
             <div className="text-sm font-medium text-slate-400 mb-2">Total de Usuários</div>
             <div className="text-3xl font-bold text-white">{loading ? '-' : stats.total}</div>
