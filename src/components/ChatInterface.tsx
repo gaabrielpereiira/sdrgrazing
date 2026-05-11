@@ -23,10 +23,14 @@ import { useAllPendingActivities } from '@/hooks/useConversationActivities';
 import { TemplatePickerModal } from './chat/TemplatePickerModal';
 import { useAttendantNames } from '@/hooks/useAttendantNames';
 import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picker-react';
+import { useAuth, queueForRole } from '@/hooks/useAuth';
 
 const ChatInterface: React.FC = () => {
   const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
-  const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active' });
+  const { role, isAdmin } = useAuth();
+  const [queueTab, setQueueTab] = useState<'sales' | 'support'>(queueForRole(role) === 'support' ? 'support' : 'sales');
+  const effectiveQueue: 'sales' | 'support' = isAdmin ? queueTab : (queueForRole(role) ?? 'sales');
+  const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: effectiveQueue });
   const { sdrName, companyName } = useCompanySettings();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
