@@ -30,6 +30,44 @@ export function useConversations(options?: { active?: boolean }) {
   // Track conversation IDs being fetched to prevent duplicate fetches
   const fetchingConversationIds = useRef(new Set<string>());
 
+  // Diagnostic wrapper: detect when a conversation loses messages or disappears
+  const setConversationsTracked = useCallback(
+    (updater: React.SetStateAction<UIConversation[]>) => {
+      setConversations(prev => {
+        const next = typeof updater === 'function'
+          ? (updater as (p: UIConversation[]) => UIConversation[])(prev)
+          : updater;
+        try {
+          for (const nc of next) {
+            const old = prev.find(p => p.id === nc.id);
+            if (old && nc.messages.length < old.messages.length) {
+              console.error(
+                '[Debug] ⚠️ Mensagens diminuíram em',
+                nc.id,
+                `(${old.messages.length} → ${nc.messages.length})`,
+                'contato:', (nc as any).contact?.name || (nc as any).contactName,
+                'stack:', new Error().stack
+              );
+            }
+          }
+          for (const p of prev) {
+            if (!next.some(n => n.id === p.id)) {
+              console.warn(
+                '[Debug] ⚠️ Conversa removida do estado:',
+                p.id,
+                'contato:', (p as any).contact?.name || (p as any).contactName
+              );
+            }
+          }
+        } catch (e) {
+          // never let debug code break state
+        }
+        return next;
+      });
+    },
+    []
+  );
+
   // Fetch a single conversation and add it to state
   const fetchAndAddConversation = useCallback(async (conversationId: string) => {
     // Prevent duplicate fetches
