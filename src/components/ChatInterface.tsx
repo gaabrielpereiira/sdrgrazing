@@ -977,26 +977,31 @@ const ChatInterface: React.FC = () => {
             <h2 className="text-lg font-bold text-white">Conversas</h2>
             <span
               className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border flex items-center gap-1 ${
-                effectiveQueue === 'support'
-                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
-                  : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
+                isAdmin && mainTab === 'finalizadas'
+                  ? 'bg-slate-500/15 text-slate-300 border-slate-500/40'
+                  : effectiveQueue === 'support'
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                    : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
               }`}
             >
-              {effectiveQueue === 'support' ? <LifeBuoy className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
-              {effectiveQueue === 'support' ? 'Suporte' : 'Atendimento'}
+              {isAdmin && mainTab === 'finalizadas'
+                ? <><XCircle className="w-3 h-3" />Finalizadas</>
+                : effectiveQueue === 'support'
+                  ? <><LifeBuoy className="w-3 h-3" />Suporte</>
+                  : <><Bot className="w-3 h-3" />Atendimento</>}
             </span>
           </div>
-          {isAdmin && (
-            <Tabs value={queueTab} onValueChange={(v) => setQueueTab(v as 'sales' | 'support')} className="mb-3">
-              <TabsList className="grid grid-cols-2 w-full h-10 p-1">
+          {isAdmin ? (
+            <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'atendimento' | 'suporte' | 'finalizadas')} className="mb-3">
+              <TabsList className="grid grid-cols-3 w-full h-10 p-1">
                 <TabsTrigger
-                  value="sales"
+                  value="atendimento"
                   className="text-xs gap-1.5 data-[state=active]:bg-cyan-500/15 data-[state=active]:text-cyan-300 data-[state=active]:shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
                 >
                   <Bot className="w-3.5 h-3.5" />
                   Atendimento
                   <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {tabCounts.activeSales + tabCounts.finishedSales}
+                    {tabCounts.activeSales}
                   </span>
                   {queueUnread.sales > 0 && (
                     <span className="ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-cyan-500 text-white">
@@ -1005,13 +1010,13 @@ const ChatInterface: React.FC = () => {
                   )}
                 </TabsTrigger>
                 <TabsTrigger
-                  value="support"
+                  value="suporte"
                   className="text-xs gap-1.5 data-[state=active]:bg-amber-500/15 data-[state=active]:text-amber-300 data-[state=active]:shadow-[inset_0_-2px_0_0_rgb(245_158_11)]"
                 >
                   <LifeBuoy className="w-3.5 h-3.5" />
                   Suporte
                   <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {tabCounts.activeSupport + tabCounts.finishedSupport}
+                    {tabCounts.activeSupport}
                   </span>
                   {queueUnread.support > 0 && (
                     <span className="ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-amber-500 text-white animate-pulse">
@@ -1019,25 +1024,36 @@ const ChatInterface: React.FC = () => {
                     </span>
                   )}
                 </TabsTrigger>
+                <TabsTrigger
+                  value="finalizadas"
+                  className="text-xs gap-1.5 data-[state=active]:bg-slate-500/15 data-[state=active]:text-slate-200 data-[state=active]:shadow-[inset_0_-2px_0_0_rgb(148_163_184)]"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  Finalizadas
+                  <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                    {tabCounts.finishedSales + tabCounts.finishedSupport}
+                  </span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          ) : (
+            <Tabs value={chatTab} onValueChange={(v) => setChatTab(v as 'active' | 'finished')} className="mb-3">
+              <TabsList className="grid grid-cols-2 w-full h-9">
+                <TabsTrigger value="active" className="text-xs gap-1.5">
+                  Ativas
+                  <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                    {effectiveQueue === 'support' ? tabCounts.activeSupport : tabCounts.activeSales}
+                  </span>
+                </TabsTrigger>
+                <TabsTrigger value="finished" className="text-xs gap-1.5">
+                  Finalizadas
+                  <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                    {effectiveQueue === 'support' ? tabCounts.finishedSupport : tabCounts.finishedSales}
+                  </span>
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           )}
-          <Tabs value={chatTab} onValueChange={(v) => setChatTab(v as 'active' | 'finished')} className="mb-3">
-            <TabsList className="grid grid-cols-2 w-full h-9">
-              <TabsTrigger value="active" className="text-xs gap-1.5">
-                Ativas
-                <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                  {effectiveQueue === 'support' ? tabCounts.activeSupport : tabCounts.activeSales}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="finished" className="text-xs gap-1.5">
-                Finalizadas
-                <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                  {effectiveQueue === 'support' ? tabCounts.finishedSupport : tabCounts.finishedSales}
-                </span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
             <input 
