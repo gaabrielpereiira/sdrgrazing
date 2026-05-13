@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.wc-receiver]
 verify_jwt = false
+
+[functions.automation-runner]
+verify_jwt = false
