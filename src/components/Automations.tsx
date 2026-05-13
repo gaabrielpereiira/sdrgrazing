@@ -1,14 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { Zap, Plus, Search, Pencil, Trash2, Loader2, Activity, FileClock, Inbox } from 'lucide-react';
+import { Zap, Plus, Search, Pencil, Trash2, Loader2, Activity, FileClock, Inbox, BarChart3, FlaskConical } from 'lucide-react';
 import { Button } from './Button';
 import { useAutomations, AutomationRule, TRIGGER_TOPICS, ACTION_TYPES } from '@/hooks/useAutomations';
 import AutomationFormModal from './AutomationFormModal';
 import AutomationLogsModal from './AutomationLogsModal';
 import WebhookEventsMonitor from './WebhookEventsMonitor';
+import AutomationsDashboard from './AutomationsDashboard';
+import SimulateWebhookModal from './SimulateWebhookModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-type Tab = 'rules' | 'events';
+type Tab = 'rules' | 'events' | 'dashboard';
 
 const Automations: React.FC = () => {
   const { rules, loading, pendingEvents, refresh } = useAutomations();
