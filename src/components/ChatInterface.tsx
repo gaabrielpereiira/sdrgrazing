@@ -359,10 +359,10 @@ const ChatInterface: React.FC = () => {
     setSelectedChatId(null);
   }, [chatTab]);
 
-  // Reset selection when switching queues (admin)
+  // Reset selection when switching main tab (admin)
   useEffect(() => {
     setSelectedChatId(null);
-  }, [queueTab]);
+  }, [mainTab]);
 
   // Mark as read when selecting conversation
   useEffect(() => {
