@@ -21,6 +21,7 @@ const menuItems: { id: string; label: string; icon: any; roles: MenuRole[] }[] =
   { id: 'scheduling', label: 'Agendamentos', icon: Calendar, roles: ['admin','sdr','user'] },
   { id: 'templates', label: 'Templates WhatsApp', icon: FileText, roles: ['admin','sdr','user'] },
   { id: 'team', label: 'Equipe', icon: ShieldCheck, roles: ['admin'] },
+  { id: 'automations', label: 'Automações', icon: Zap, roles: ['admin'] },
   { id: 'settings', label: 'Configurações', icon: SettingsIcon, roles: ['admin'] },
 ];
 
