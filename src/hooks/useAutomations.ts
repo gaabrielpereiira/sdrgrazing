@@ -14,6 +14,25 @@ export interface AutomationRule {
   updated_at: string;
 }
 
+export interface AutomationLog {
+  id: string;
+  rule_id: string | null;
+  event_id: string | null;
+  status: 'success' | 'failed' | 'skipped' | string;
+  result: Record<string, any>;
+  executed_at: string;
+}
+
+export interface WebhookEvent {
+  id: string;
+  topic: string;
+  payload: any;
+  source: string;
+  processed: boolean;
+  error: string | null;
+  received_at: string;
+}
+
 export function useAutomations() {
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,7 +86,7 @@ export const OPERATORS = [
 
 export const ACTION_TYPES = [
   { value: 'whatsapp_message', label: 'Enviar mensagem WhatsApp', enabled: true },
-  { value: 'crm_update', label: 'Atualizar CRM (em breve)', enabled: false },
-  { value: 'internal_notification', label: 'Notificação interna (em breve)', enabled: false },
-  { value: 'outbound_webhook', label: 'Webhook externo (em breve)', enabled: false },
+  { value: 'crm_update', label: 'Atualizar CRM (tags / mover deal)', enabled: true },
+  { value: 'internal_notification', label: 'Notificação interna', enabled: true },
+  { value: 'outbound_webhook', label: 'Webhook externo', enabled: true },
 ];

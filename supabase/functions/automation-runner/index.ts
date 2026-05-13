@@ -8,7 +8,6 @@ const corsHeaders = {
 
 function getByPath(obj: any, path: string): any {
   if (!obj || !path) return undefined;
-  // supports "a.b.c" and "a[0].b"
   return path
     .replace(/\[(\d+)\]/g, '.$1')
     .split('.')
@@ -39,7 +38,6 @@ function matchesFilters(payload: any, filters: any): boolean {
   const results = conditions.map((c: any) => {
     const val = getByPath(payload, c.field);
     if (c.operator === 'is_first_order') {
-      // Heuristic: WooCommerce includes customer's order count via meta or we trust truthy
       return Boolean(payload?._is_first_order ?? false);
     }
     return compareValues(val, c.operator, c.value);
@@ -48,45 +46,37 @@ function matchesFilters(payload: any, filters: any): boolean {
   return logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
 }
 
+function renderTemplate(tpl: string, payload: any): string {
+  if (!tpl) return '';
+  return String(tpl).replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, path) => {
+    const v = getByPath(payload, String(path).trim());
+    return v == null ? '' : String(v);
+  });
+}
+
 async function findOrCreateContact(supabase: any, phone: string, payload: any) {
   const { data: existing } = await supabase
-    .from('contacts')
-    .select('id, name')
-    .eq('phone_number', phone)
-    .maybeSingle();
+    .from('contacts').select('id, name').eq('phone_number', phone).maybeSingle();
   if (existing) return existing;
-
   const name =
     [getByPath(payload, 'billing.first_name'), getByPath(payload, 'billing.last_name')]
       .filter(Boolean).join(' ').trim() ||
-    getByPath(payload, 'first_name') ||
-    null;
-
+    getByPath(payload, 'first_name') || null;
   const { data: created, error } = await supabase
-    .from('contacts')
-    .insert({ phone_number: phone, name, whatsapp_id: phone })
-    .select('id, name')
-    .single();
+    .from('contacts').insert({ phone_number: phone, name, whatsapp_id: phone })
+    .select('id, name').single();
   if (error) throw new Error(`contact insert: ${error.message}`);
   return created;
 }
 
 async function findOrCreateConversation(supabase: any, contactId: string) {
   const { data: existing } = await supabase
-    .from('conversations')
-    .select('id')
-    .eq('contact_id', contactId)
-    .eq('is_active', true)
-    .order('last_message_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .from('conversations').select('id').eq('contact_id', contactId).eq('is_active', true)
+    .order('last_message_at', { ascending: false }).limit(1).maybeSingle();
   if (existing) return existing;
-
   const { data: created, error } = await supabase
-    .from('conversations')
-    .insert({ contact_id: contactId, status: 'nina', queue: 'sales', is_active: true })
-    .select('id')
-    .single();
+    .from('conversations').insert({ contact_id: contactId, status: 'nina', queue: 'sales', is_active: true })
+    .select('id').single();
   if (error) throw new Error(`conversation insert: ${error.message}`);
   return created;
 }
@@ -94,25 +84,165 @@ async function findOrCreateConversation(supabase: any, contactId: string) {
 async function isInCooldown(supabase: any, phone: string, ruleId: string, hours: number): Promise<boolean> {
   if (!hours || hours <= 0) return false;
   const { data } = await supabase
-    .from('contact_cooldowns')
-    .select('last_sent_at')
-    .eq('contact_phone', phone)
-    .eq('rule_id', ruleId)
-    .maybeSingle();
+    .from('contact_cooldowns').select('last_sent_at')
+    .eq('contact_phone', phone).eq('rule_id', ruleId).maybeSingle();
   if (!data?.last_sent_at) return false;
   const elapsed = (Date.now() - new Date(data.last_sent_at).getTime()) / (1000 * 60 * 60);
   return elapsed < hours;
 }
 
+// ─── Action handlers ──────────────────────────────────────────────────
+
+async function actionWhatsapp(supabase: any, rule: any, event: any) {
+  const cfg = rule.action_config || {};
+  const phoneField = cfg.phone_field || 'billing.phone';
+  const phone = normalizePhone(getByPath(event.payload, phoneField));
+  if (!phone) return { status: 'failed', result: { reason: 'no_phone', phone_field: phoneField } };
+
+  if (await isInCooldown(supabase, phone, rule.id, rule.cooldown_hours || 0)) {
+    return { status: 'skipped', result: { reason: 'cooldown', phone } };
+  }
+
+  const { data: tpl } = await supabase
+    .from('whatsapp_templates').select('id, name, language, components, status')
+    .eq('id', cfg.template_id).maybeSingle();
+  if (!tpl) return { status: 'failed', result: { reason: 'template_not_found', template_id: cfg.template_id } };
+  if (tpl.status !== 'APPROVED') return { status: 'failed', result: { reason: 'template_not_approved', status: tpl.status } };
+
+  const variablePaths: string[] = Array.isArray(cfg.variables) ? cfg.variables : [];
+  const vars: Record<string, string> = {};
+  variablePaths.forEach((p, i) => { const v = getByPath(event.payload, p); vars[String(i + 1)] = v == null ? '' : String(v); });
+
+  const contact = await findOrCreateContact(supabase, phone, event.payload);
+  const conversation = await findOrCreateConversation(supabase, contact.id);
+
+  const previewBody = (tpl.components || []).find((c: any) => (c.type || '').toUpperCase() === 'BODY')?.text || tpl.name;
+  const previewText = String(previewBody).replace(/\{\{(\d+)\}\}/g, (_m, n) => vars[String(n)] ?? '');
+
+  const { error: queueErr } = await supabase.from('send_queue').insert({
+    conversation_id: conversation.id, contact_id: contact.id,
+    from_type: 'nina', message_type: 'text', content: previewText, priority: 5,
+    metadata: {
+      source: 'automation', rule_id: rule.id, event_id: event.id,
+      template: { name: tpl.name, language: tpl.language || 'pt_BR', components: tpl.components, variables: vars },
+    },
+  });
+  if (queueErr) return { status: 'failed', result: { reason: 'send_queue_insert_failed', error: queueErr.message } };
+
+  await supabase.from('contact_cooldowns').upsert(
+    { contact_phone: phone, rule_id: rule.id, last_sent_at: new Date().toISOString() },
+    { onConflict: 'contact_phone,rule_id' }
+  );
+
+  return { status: 'success', result: { phone, template: tpl.name, conversation_id: conversation.id } };
+}
+
+async function actionCrmUpdate(supabase: any, rule: any, event: any) {
+  const cfg = rule.action_config || {};
+  const phoneField = cfg.phone_field || 'billing.phone';
+  const phone = normalizePhone(getByPath(event.payload, phoneField));
+  if (!phone) return { status: 'failed', result: { reason: 'no_phone' } };
+
+  const { data: contact } = await supabase
+    .from('contacts').select('id, tags').eq('phone_number', phone).maybeSingle();
+  if (!contact) return { status: 'skipped', result: { reason: 'contact_not_found', phone } };
+
+  const result: any = { phone, contact_id: contact.id };
+
+  // 1) Add tags to contact
+  if (Array.isArray(cfg.add_tags) && cfg.add_tags.length > 0) {
+    const merged = Array.from(new Set([...(contact.tags || []), ...cfg.add_tags]));
+    const { error } = await supabase.from('contacts').update({ tags: merged }).eq('id', contact.id);
+    if (error) return { status: 'failed', result: { reason: 'tag_update_failed', error: error.message } };
+    result.tags_added = cfg.add_tags;
+  }
+
+  // 2) Move deal to stage
+  if (cfg.move_deal_stage_id) {
+    const { data: deal } = await supabase
+      .from('deals').select('id').eq('contact_id', contact.id)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (!deal) {
+      result.deal_move = 'skipped_no_deal';
+    } else {
+      const { error } = await supabase.from('deals')
+        .update({ stage_id: cfg.move_deal_stage_id, updated_at: new Date().toISOString() })
+        .eq('id', deal.id);
+      if (error) return { status: 'failed', result: { reason: 'deal_update_failed', error: error.message } };
+      result.deal_id = deal.id;
+      result.moved_to_stage = cfg.move_deal_stage_id;
+    }
+  }
+
+  return { status: 'success', result };
+}
+
+async function actionInternalNotification(supabase: any, rule: any, event: any) {
+  const cfg = rule.action_config || {};
+  const title = renderTemplate(cfg.title || `Automação: ${rule.name}`, event.payload).slice(0, 200);
+  const body = renderTemplate(cfg.body || '', event.payload).slice(0, 1000);
+
+  let contactId: string | null = null;
+  if (cfg.phone_field) {
+    const phone = normalizePhone(getByPath(event.payload, cfg.phone_field));
+    if (phone) {
+      const { data } = await supabase.from('contacts').select('id').eq('phone_number', phone).maybeSingle();
+      contactId = data?.id ?? null;
+    }
+  }
+
+  const { error } = await supabase.from('notifications').insert({
+    type: cfg.type || 'automation',
+    title, body: body || null,
+    contact_id: contactId,
+    metadata: { rule_id: rule.id, event_id: event.id, topic: event.topic },
+  });
+  if (error) return { status: 'failed', result: { reason: 'notification_insert_failed', error: error.message } };
+  return { status: 'success', result: { title, contact_id: contactId } };
+}
+
+async function actionOutboundWebhook(rule: any, event: any) {
+  const cfg = rule.action_config || {};
+  const url = cfg.url;
+  if (!url) return { status: 'failed', result: { reason: 'no_url' } };
+
+  const method = (cfg.method || 'POST').toUpperCase();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(cfg.headers || {}) };
+  const bodyTpl = cfg.body_template;
+  let body: string;
+  if (typeof bodyTpl === 'string' && bodyTpl.trim()) {
+    body = renderTemplate(bodyTpl, event.payload);
+  } else {
+    body = JSON.stringify({
+      rule: rule.name, topic: event.topic, event_id: event.id, payload: event.payload,
+    });
+  }
+
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const res = await fetch(url, { method, headers, body, signal: ctrl.signal });
+    clearTimeout(timer);
+    const text = await res.text().catch(() => '');
+    if (!res.ok) {
+      return { status: 'failed', result: { reason: 'http_error', status: res.status, body: text.slice(0, 500) } };
+    }
+    return { status: 'success', result: { url, http_status: res.status, response_preview: text.slice(0, 200) } };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'unknown';
+    return { status: 'failed', result: { reason: 'fetch_error', error: msg } };
+  }
+}
+
+// ─── Event processing ─────────────────────────────────────────────────
+
 async function processEvent(supabase: any, event: any) {
   const { data: rules, error: rulesErr } = await supabase
-    .from('automation_rules')
-    .select('*')
-    .eq('active', true)
-    .eq('trigger_topic', event.topic);
-
+    .from('automation_rules').select('*').eq('active', true).eq('trigger_topic', event.topic);
   if (rulesErr) throw rulesErr;
   console.log(`[runner] event=${event.id} topic=${event.topic} matched ${rules?.length || 0} active rule(s)`);
+
+  let queuedWhatsapp = false;
 
   for (const rule of rules || []) {
     try {
@@ -124,111 +254,21 @@ async function processEvent(supabase: any, event: any) {
         continue;
       }
 
-      if (rule.action_type !== 'whatsapp_message') {
-        await supabase.from('automation_logs').insert({
-          rule_id: rule.id, event_id: event.id, status: 'skipped',
-          result: { reason: 'action_not_implemented', action_type: rule.action_type },
-        });
-        continue;
+      let outcome: { status: string; result: any };
+      switch (rule.action_type) {
+        case 'whatsapp_message': outcome = await actionWhatsapp(supabase, rule, event); if (outcome.status === 'success') queuedWhatsapp = true; break;
+        case 'crm_update': outcome = await actionCrmUpdate(supabase, rule, event); break;
+        case 'internal_notification': outcome = await actionInternalNotification(supabase, rule, event); break;
+        case 'outbound_webhook': outcome = await actionOutboundWebhook(rule, event); break;
+        default:
+          outcome = { status: 'skipped', result: { reason: 'unknown_action_type', action_type: rule.action_type } };
       }
-
-      const cfg = rule.action_config || {};
-      const phoneField = cfg.phone_field || 'billing.phone';
-      const phone = normalizePhone(getByPath(event.payload, phoneField));
-
-      if (!phone) {
-        await supabase.from('automation_logs').insert({
-          rule_id: rule.id, event_id: event.id, status: 'failed',
-          result: { reason: 'no_phone', phone_field: phoneField },
-        });
-        continue;
-      }
-
-      if (await isInCooldown(supabase, phone, rule.id, rule.cooldown_hours || 0)) {
-        await supabase.from('automation_logs').insert({
-          rule_id: rule.id, event_id: event.id, status: 'skipped',
-          result: { reason: 'cooldown', phone },
-        });
-        continue;
-      }
-
-      const { data: tpl, error: tplErr } = await supabase
-        .from('whatsapp_templates')
-        .select('id, name, language, components, status')
-        .eq('id', cfg.template_id)
-        .maybeSingle();
-
-      if (tplErr || !tpl) {
-        await supabase.from('automation_logs').insert({
-          rule_id: rule.id, event_id: event.id, status: 'failed',
-          result: { reason: 'template_not_found', template_id: cfg.template_id },
-        });
-        continue;
-      }
-      if (tpl.status !== 'APPROVED') {
-        await supabase.from('automation_logs').insert({
-          rule_id: rule.id, event_id: event.id, status: 'failed',
-          result: { reason: 'template_not_approved', status: tpl.status },
-        });
-        continue;
-      }
-
-      // Resolve variables: each entry is a path on payload → {{1}}, {{2}}, ...
-      const variablePaths: string[] = Array.isArray(cfg.variables) ? cfg.variables : [];
-      const vars: Record<string, string> = {};
-      variablePaths.forEach((path, i) => {
-        const v = getByPath(event.payload, path);
-        vars[String(i + 1)] = v == null ? '' : String(v);
-      });
-
-      const contact = await findOrCreateContact(supabase, phone, event.payload);
-      const conversation = await findOrCreateConversation(supabase, contact.id);
-
-      // Build a readable preview content for the messages table
-      const previewBody = (tpl.components || [])
-        .find((c: any) => (c.type || '').toUpperCase() === 'BODY')?.text || tpl.name;
-      const previewText = String(previewBody).replace(/\{\{(\d+)\}\}/g, (_m, n) => vars[String(n)] ?? '');
-
-      const { error: queueErr } = await supabase.from('send_queue').insert({
-        conversation_id: conversation.id,
-        contact_id: contact.id,
-        from_type: 'nina',
-        message_type: 'text',
-        content: previewText,
-        priority: 5,
-        metadata: {
-          source: 'automation',
-          rule_id: rule.id,
-          event_id: event.id,
-          template: {
-            name: tpl.name,
-            language: tpl.language || 'pt_BR',
-            components: tpl.components,
-            variables: vars,
-          },
-        },
-      });
-
-      if (queueErr) {
-        await supabase.from('automation_logs').insert({
-          rule_id: rule.id, event_id: event.id, status: 'failed',
-          result: { reason: 'send_queue_insert_failed', error: queueErr.message },
-        });
-        continue;
-      }
-
-      // Cooldown bookkeeping (upsert)
-      await supabase.from('contact_cooldowns').upsert(
-        { contact_phone: phone, rule_id: rule.id, last_sent_at: new Date().toISOString() },
-        { onConflict: 'contact_phone,rule_id' }
-      );
 
       await supabase.from('automation_logs').insert({
-        rule_id: rule.id, event_id: event.id, status: 'success',
-        result: { phone, template: tpl.name, conversation_id: conversation.id },
+        rule_id: rule.id, event_id: event.id, status: outcome.status, result: outcome.result,
       });
 
-      console.log(`[runner] queued template "${tpl.name}" for ${phone} (rule=${rule.id})`);
+      console.log(`[runner] rule=${rule.id} action=${rule.action_type} → ${outcome.status}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
       console.error(`[runner] rule ${rule.id} failed:`, msg);
@@ -239,7 +279,8 @@ async function processEvent(supabase: any, event: any) {
     }
   }
 
-  await supabase.from('webhook_events').update({ processed: true }).eq('id', event.id);
+  await supabase.from('webhook_events').update({ processed: true, error: null }).eq('id', event.id);
+  return { queuedWhatsapp };
 }
 
 Deno.serve(async (req) => {
@@ -258,29 +299,30 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase
         .from('webhook_events').select('*').eq('id', body.event_id).maybeSingle();
       if (error) throw error;
-      if (data && !data.processed) events = [data];
+      // Allow reprocess even if processed=true when reprocess flag is set
+      if (data && (!data.processed || body.reprocess === true)) events = [data];
     } else {
       const { data, error } = await supabase
-        .from('webhook_events').select('*')
-        .eq('processed', false)
-        .order('received_at', { ascending: true })
-        .limit(50);
+        .from('webhook_events').select('*').eq('processed', false)
+        .order('received_at', { ascending: true }).limit(50);
       if (error) throw error;
       events = data || [];
     }
 
     console.log(`[runner] processing ${events.length} event(s)`);
+    let triggerSender = false;
     for (const ev of events) {
-      try { await processEvent(supabase, ev); }
-      catch (e) {
+      try {
+        const r = await processEvent(supabase, ev);
+        if (r.queuedWhatsapp) triggerSender = true;
+      } catch (e) {
         const msg = e instanceof Error ? e.message : 'unknown';
         console.error(`[runner] event ${ev.id} failed:`, msg);
         await supabase.from('webhook_events').update({ error: msg }).eq('id', ev.id);
       }
     }
 
-    // Trigger whatsapp-sender so queued messages go out promptly
-    if (events.length > 0) {
+    if (triggerSender) {
       fetch(`${supabaseUrl}/functions/v1/whatsapp-sender`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },

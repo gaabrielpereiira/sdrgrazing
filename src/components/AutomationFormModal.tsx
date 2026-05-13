@@ -13,8 +13,8 @@ interface Props {
 }
 
 interface Condition { field: string; operator: string; value: string; }
-
 interface WhatsAppTemplate { id: string; name: string; status: string; components: any; }
+interface PipelineStage { id: string; title: string; }
 
 const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }) => {
   const [name, setName] = useState('');
@@ -22,34 +22,35 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
   const [conditions, setConditions] = useState<Condition[]>([]);
   const [logic, setLogic] = useState<'AND' | 'OR'>('AND');
   const [actionType, setActionType] = useState('whatsapp_message');
-  const [templateId, setTemplateId] = useState('');
-  const [phoneField, setPhoneField] = useState('billing.phone');
-  const [variables, setVariables] = useState<string[]>([]);
+  const [cfg, setCfg] = useState<Record<string, any>>({});
   const [cooldownHours, setCooldownHours] = useState(0);
   const [active, setActive] = useState(true);
   const [showJson, setShowJson] = useState(false);
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [stages, setStages] = useState<PipelineStage[]>([]);
 
   useEffect(() => {
     if (!isOpen) return;
     supabase.from('whatsapp_templates').select('id, name, status, components').eq('status', 'APPROVED')
       .then(({ data }) => setTemplates((data || []) as any));
+    supabase.from('pipeline_stages').select('id, title').eq('is_active', true).order('position')
+      .then(({ data }) => setStages((data || []) as any));
+
     if (rule) {
       setName(rule.name);
       setTrigger(rule.trigger_topic);
       setConditions(rule.filters?.conditions || []);
       setLogic((rule.filters?.logic as any) || 'AND');
       setActionType(rule.action_type);
-      setTemplateId(rule.action_config?.template_id || '');
-      setPhoneField(rule.action_config?.phone_field || 'billing.phone');
-      setVariables(rule.action_config?.variables || []);
+      setCfg(rule.action_config || {});
       setCooldownHours(rule.cooldown_hours || 0);
       setActive(rule.active);
     } else {
       setName(''); setTrigger('order.created'); setConditions([]); setLogic('AND');
-      setActionType('whatsapp_message'); setTemplateId(''); setPhoneField('billing.phone');
-      setVariables([]); setCooldownHours(0); setActive(true);
+      setActionType('whatsapp_message');
+      setCfg({ phone_field: 'billing.phone', variables: [] });
+      setCooldownHours(0); setActive(true);
     }
   }, [isOpen, rule]);
 
@@ -58,34 +59,48 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
   const updateCondition = (i: number, patch: Partial<Condition>) =>
     setConditions(c => c.map((co, idx) => idx === i ? { ...co, ...patch } : co));
 
-  const addVariable = () => setVariables(v => [...v, '']);
-  const removeVariable = (i: number) => setVariables(v => v.filter((_, idx) => idx !== i));
-  const updateVariable = (i: number, val: string) => setVariables(v => v.map((va, idx) => idx === i ? val : va));
+  const setCfgField = (k: string, v: any) => setCfg(prev => ({ ...prev, [k]: v }));
+
+  // Variables (whatsapp)
+  const variables: string[] = Array.isArray(cfg.variables) ? cfg.variables : [];
+  const setVariables = (v: string[]) => setCfgField('variables', v);
+
+  // Tags (crm_update) — comma-separated text input
+  const tagsText = Array.isArray(cfg.add_tags) ? (cfg.add_tags as string[]).join(', ') : '';
+
+  const validate = (): string | null => {
+    if (!name.trim()) return 'Dê um nome à automação';
+    if (actionType === 'whatsapp_message' && !cfg.template_id) return 'Selecione um template';
+    if (actionType === 'crm_update' && !cfg.move_deal_stage_id && !(Array.isArray(cfg.add_tags) && cfg.add_tags.length))
+      return 'Configure ao menos uma alteração (mover deal ou adicionar tag)';
+    if (actionType === 'internal_notification' && !cfg.title?.trim()) return 'Informe o título da notificação';
+    if (actionType === 'outbound_webhook' && !cfg.url?.trim()) return 'Informe a URL do webhook';
+    return null;
+  };
 
   const handleSave = async () => {
-    if (!name.trim()) { toast.error('Dê um nome à automação'); return; }
-    if (actionType === 'whatsapp_message' && !templateId) { toast.error('Selecione um template'); return; }
+    const err = validate();
+    if (err) { toast.error(err); return; }
 
     setSaving(true);
     try {
+      // Trim variables on whatsapp
+      const action_config = actionType === 'whatsapp_message'
+        ? { ...cfg, variables: (variables || []).filter(Boolean) }
+        : cfg;
+
       const payload = {
-        name: name.trim(),
-        trigger_topic: trigger,
+        name: name.trim(), trigger_topic: trigger,
         filters: { conditions: conditions.filter(c => c.field), logic },
-        action_type: actionType,
-        action_config: actionType === 'whatsapp_message'
-          ? { template_id: templateId, phone_field: phoneField, variables: variables.filter(Boolean) }
-          : {},
-        cooldown_hours: cooldownHours,
-        active,
+        action_type: actionType, action_config,
+        cooldown_hours: cooldownHours, active,
       };
       const { error } = rule
         ? await supabase.from('automation_rules').update(payload as any).eq('id', rule.id)
         : await supabase.from('automation_rules').insert(payload as any);
       if (error) throw error;
       toast.success(rule ? 'Automação atualizada' : 'Automação criada');
-      onSaved();
-      onClose();
+      onSaved(); onClose();
     } catch (e) {
       toast.error('Erro ao salvar', { description: e instanceof Error ? e.message : '' });
     } finally {
@@ -111,7 +126,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
               className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 focus:outline-none focus:border-cyan-500" />
           </div>
 
-          {/* Bloco 1 - Quando */}
+          {/* Quando */}
           <div className="border border-slate-800 rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2">
               <span className="px-2 py-0.5 bg-cyan-500/10 text-cyan-400 text-xs rounded font-medium">QUANDO</span>
@@ -123,7 +138,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
             </select>
           </div>
 
-          {/* Bloco 2 - Se */}
+          {/* Se */}
           <div className="border border-slate-800 rounded-lg p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -138,7 +153,6 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
                 </select>
               )}
             </div>
-
             {conditions.map((c, i) => (
               <div key={i} className="flex flex-col md:flex-row gap-2">
                 <input list="field-suggestions" value={c.field} onChange={e => updateCondition(i, { field: e.target.value })}
@@ -159,11 +173,9 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
             <datalist id="field-suggestions">
               {FIELD_SUGGESTIONS.map(f => <option key={f} value={f} />)}
             </datalist>
-
             <Button variant="ghost" size="sm" onClick={addCondition} className="gap-2">
               <Plus className="w-4 h-4" /> Adicionar filtro
             </Button>
-
             {conditions.length > 0 && (
               <div>
                 <button onClick={() => setShowJson(!showJson)}
@@ -179,22 +191,23 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
             )}
           </div>
 
-          {/* Bloco 3 - Então */}
+          {/* Então */}
           <div className="border border-slate-800 rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2">
               <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-xs rounded font-medium">ENTÃO</span>
               <span className="text-sm text-slate-300">execute esta ação</span>
             </div>
-            <select value={actionType} onChange={e => setActionType(e.target.value)}
+            <select value={actionType} onChange={e => { setActionType(e.target.value); setCfg({}); }}
               className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50">
               {ACTION_TYPES.map(a => <option key={a.value} value={a.value} disabled={!a.enabled}>{a.label}</option>)}
             </select>
 
+            {/* WhatsApp config */}
             {actionType === 'whatsapp_message' && (
               <div className="space-y-3 pt-2">
                 <div>
                   <label className="text-xs font-medium text-slate-300 mb-1 block">Template aprovado</label>
-                  <select value={templateId} onChange={e => setTemplateId(e.target.value)}
+                  <select value={cfg.template_id || ''} onChange={e => setCfgField('template_id', e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50">
                     <option value="">Selecione...</option>
                     {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -203,32 +216,108 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
                     <p className="text-xs text-amber-400 mt-1">Nenhum template aprovado. Cadastre em Templates WhatsApp.</p>
                   )}
                 </div>
-
                 <div>
                   <label className="text-xs font-medium text-slate-300 mb-1 block">Campo do telefone (no payload)</label>
-                  <input value={phoneField} onChange={e => setPhoneField(e.target.value)}
+                  <input value={cfg.phone_field || 'billing.phone'} onChange={e => setCfgField('phone_field', e.target.value)}
                     placeholder="billing.phone"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono" />
                 </div>
-
                 <div>
                   <label className="text-xs font-medium text-slate-300 mb-1 block">Variáveis do template (em ordem)</label>
                   <div className="space-y-2">
                     {variables.map((v, i) => (
                       <div key={i} className="flex gap-2">
                         <span className="text-xs text-slate-400 self-center w-8">{`{{${i + 1}}}`}</span>
-                        <input value={v} onChange={e => updateVariable(i, e.target.value)}
+                        <input value={v} onChange={e => setVariables(variables.map((va, idx) => idx === i ? e.target.value : va))}
                           placeholder="caminho no payload (ex: billing.first_name)"
                           className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono" />
-                        <button onClick={() => removeVariable(i)} className="p-2 text-slate-400 hover:text-red-400">
+                        <button onClick={() => setVariables(variables.filter((_, idx) => idx !== i))}
+                          className="p-2 text-slate-400 hover:text-red-400">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     ))}
                   </div>
-                  <Button variant="ghost" size="sm" onClick={addVariable} className="gap-2 mt-2">
+                  <Button variant="ghost" size="sm" onClick={() => setVariables([...variables, ''])} className="gap-2 mt-2">
                     <Plus className="w-4 h-4" /> Adicionar variável
                   </Button>
+                </div>
+              </div>
+            )}
+
+            {/* CRM update config */}
+            {actionType === 'crm_update' && (
+              <div className="space-y-3 pt-2">
+                <div>
+                  <label className="text-xs font-medium text-slate-300 mb-1 block">Campo do telefone (para localizar contato)</label>
+                  <input value={cfg.phone_field || 'billing.phone'} onChange={e => setCfgField('phone_field', e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-300 mb-1 block">Mover deal mais recente para o estágio</label>
+                  <select value={cfg.move_deal_stage_id || ''} onChange={e => setCfgField('move_deal_stage_id', e.target.value || null)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50">
+                    <option value="">— Não mover —</option>
+                    {stages.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-300 mb-1 block">Adicionar tags ao contato (separe por vírgula)</label>
+                  <input value={tagsText}
+                    onChange={e => setCfgField('add_tags', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                    placeholder="cliente, comprou_curso"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50" />
+                </div>
+              </div>
+            )}
+
+            {/* Internal notification config */}
+            {actionType === 'internal_notification' && (
+              <div className="space-y-3 pt-2">
+                <p className="text-xs text-slate-500">Use {'{{ campo.do.payload }}'} para interpolar dados.</p>
+                <div>
+                  <label className="text-xs font-medium text-slate-300 mb-1 block">Título</label>
+                  <input value={cfg.title || ''} onChange={e => setCfgField('title', e.target.value)}
+                    placeholder="Novo pedido de {{ billing.first_name }}"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-300 mb-1 block">Mensagem (opcional)</label>
+                  <textarea value={cfg.body || ''} onChange={e => setCfgField('body', e.target.value)} rows={2}
+                    placeholder="Total: R$ {{ total }}"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-300 mb-1 block">Vincular contato pelo telefone (opcional)</label>
+                  <input value={cfg.phone_field || ''} onChange={e => setCfgField('phone_field', e.target.value)}
+                    placeholder="billing.phone"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono" />
+                </div>
+              </div>
+            )}
+
+            {/* Outbound webhook config */}
+            {actionType === 'outbound_webhook' && (
+              <div className="space-y-3 pt-2">
+                <div>
+                  <label className="text-xs font-medium text-slate-300 mb-1 block">URL</label>
+                  <input value={cfg.url || ''} onChange={e => setCfgField('url', e.target.value)}
+                    placeholder="https://exemplo.com/webhook"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-300 mb-1 block">Método</label>
+                  <select value={cfg.method || 'POST'} onChange={e => setCfgField('method', e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50">
+                    <option>POST</option><option>PUT</option><option>PATCH</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-300 mb-1 block">Body (JSON, opcional — use {'{{ campo }}'})</label>
+                  <textarea value={cfg.body_template || ''} onChange={e => setCfgField('body_template', e.target.value)}
+                    rows={4} placeholder='{"order_id": "{{ id }}", "total": "{{ total }}"}'
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-50 font-mono" />
+                  <p className="text-xs text-slate-500 mt-1">Em branco envia o evento completo.</p>
                 </div>
               </div>
             )}
@@ -240,10 +329,12 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
               <input type="number" min={0} value={cooldownHours}
                 onChange={e => setCooldownHours(Math.max(0, parseInt(e.target.value) || 0))}
                 className="w-32 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50" />
+              {actionType !== 'whatsapp_message' && (
+                <p className="text-xs text-slate-500 mt-1">Cooldown só se aplica a mensagens WhatsApp.</p>
+              )}
             </div>
           </div>
 
-          {/* Ativo */}
           <div className="flex items-center gap-2">
             <input type="checkbox" id="active" checked={active} onChange={e => setActive(e.target.checked)}
               className="w-4 h-4 rounded border-slate-700 bg-slate-950" />

@@ -1462,6 +1462,13 @@ export type Database = {
       }
       cleanup_processed_message_queue: { Args: never; Returns: undefined }
       cleanup_processed_queues: { Args: never; Returns: undefined }
+      cleanup_webhook_data: {
+        Args: never
+        Returns: {
+          events_deleted: number
+          logs_deleted: number
+        }[]
+      }
       get_auth_user_id: { Args: never; Returns: string }
       get_or_create_conversation_state: {
         Args: { p_conversation_id: string }
