@@ -86,6 +86,7 @@ const App: React.FC = () => {
               <Route path="/team" element={<ProtectedRoute allowedRoles={['admin']}><Team /></ProtectedRoute>} />
               <Route path="/templates" element={<ProtectedRoute allowedRoles={['admin','sdr','user']}><WhatsAppTemplates /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin']}><Settings /></ProtectedRoute>} />
+              <Route path="/automations" element={<ProtectedRoute allowedRoles={['admin']}><Automations /></ProtectedRoute>} />
             </Route>
             
             {/* Catch all */}
