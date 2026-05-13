@@ -28,11 +28,24 @@ import { useQueueUnreadCounts } from '@/hooks/useQueueUnreadCounts';
 import { useConversationTabCounts } from '@/hooks/useConversationTabCounts';
 
 const ChatInterface: React.FC = () => {
-  const [chatTab, setChatTab] = useState<'active' | 'finished'>('active');
   const { role, isAdmin } = useAuth();
-  const [queueTab, setQueueTab] = useState<'sales' | 'support'>(queueForRole(role) === 'support' ? 'support' : 'sales');
-  const effectiveQueue: 'sales' | 'support' = isAdmin ? queueTab : (queueForRole(role) ?? 'sales');
-  const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: effectiveQueue });
+  // Admins see a single 3-tab row: Atendimento | Suporte | Finalizadas
+  const [mainTab, setMainTab] = useState<'atendimento' | 'suporte' | 'finalizadas'>(
+    queueForRole(role) === 'support' ? 'suporte' : 'atendimento'
+  );
+  // Non-admins keep the simpler Ativas | Finalizadas toggle on their own queue
+  const [nonAdminChatTab, setNonAdminChatTab] = useState<'active' | 'finished'>('active');
+  const chatTab: 'active' | 'finished' = isAdmin
+    ? (mainTab === 'finalizadas' ? 'finished' : 'active')
+    : nonAdminChatTab;
+  const setChatTab = setNonAdminChatTab;
+  const queueForFetch: 'sales' | 'support' | 'all' = isAdmin
+    ? (mainTab === 'atendimento' ? 'sales' : mainTab === 'suporte' ? 'support' : 'all')
+    : (queueForRole(role) ?? 'sales');
+  const effectiveQueue: 'sales' | 'support' = isAdmin
+    ? (mainTab === 'suporte' ? 'support' : 'sales')
+    : (queueForRole(role) ?? 'sales');
+  const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: queueForFetch });
   const { sdrName, companyName } = useCompanySettings();
   const queueUnread = useQueueUnreadCounts();
   const tabCounts = useConversationTabCounts();
