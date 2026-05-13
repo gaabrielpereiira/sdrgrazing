@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.webhook-cleanup]
 verify_jwt = false
+
+[functions.simulate-wc-webhook]
+verify_jwt = false

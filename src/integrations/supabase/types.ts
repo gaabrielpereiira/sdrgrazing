@@ -1279,27 +1279,36 @@ export type Database = {
         Row: {
           error: string | null
           id: string
+          last_error_at: string | null
+          next_retry_at: string | null
           payload: Json
           processed: boolean
           received_at: string
+          retry_count: number
           source: string
           topic: string
         }
         Insert: {
           error?: string | null
           id?: string
+          last_error_at?: string | null
+          next_retry_at?: string | null
           payload?: Json
           processed?: boolean
           received_at?: string
+          retry_count?: number
           source?: string
           topic: string
         }
         Update: {
           error?: string | null
           id?: string
+          last_error_at?: string | null
+          next_retry_at?: string | null
           payload?: Json
           processed?: boolean
           received_at?: string
+          retry_count?: number
           source?: string
           topic?: string
         }

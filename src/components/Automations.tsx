@@ -1,14 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { Zap, Plus, Search, Pencil, Trash2, Loader2, Activity, FileClock, Inbox } from 'lucide-react';
+import { Zap, Plus, Search, Pencil, Trash2, Loader2, Activity, FileClock, Inbox, BarChart3, FlaskConical } from 'lucide-react';
 import { Button } from './Button';
 import { useAutomations, AutomationRule, TRIGGER_TOPICS, ACTION_TYPES } from '@/hooks/useAutomations';
 import AutomationFormModal from './AutomationFormModal';
 import AutomationLogsModal from './AutomationLogsModal';
 import WebhookEventsMonitor from './WebhookEventsMonitor';
+import AutomationsDashboard from './AutomationsDashboard';
+import SimulateWebhookModal from './SimulateWebhookModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-type Tab = 'rules' | 'events';
+type Tab = 'rules' | 'events' | 'dashboard';
 
 const Automations: React.FC = () => {
   const { rules, loading, pendingEvents, refresh } = useAutomations();
@@ -17,6 +19,7 @@ const Automations: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AutomationRule | null>(null);
   const [logsRule, setLogsRule] = useState<AutomationRule | null>(null);
+  const [simulateOpen, setSimulateOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -51,12 +54,16 @@ const Automations: React.FC = () => {
             Regras que disparam ações quando eventos do WooCommerce chegam.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs">
             <Activity className="w-4 h-4 text-amber-400" />
             <span className="text-slate-300">{pendingEvents}</span>
-            <span className="text-slate-500">eventos pendentes</span>
+            <span className="text-slate-500">pendentes</span>
           </div>
+          <Button variant="ghost" onClick={() => setSimulateOpen(true)} className="gap-2">
+            <FlaskConical className="w-4 h-4" />
+            <span className="hidden sm:inline">Simular evento</span>
+          </Button>
           {tab === 'rules' && (
             <Button variant="primary" onClick={() => { setEditing(null); setModalOpen(true); }} className="gap-2">
               <Plus className="w-4 h-4" />
@@ -68,22 +75,30 @@ const Automations: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-slate-800">
+      <div className="flex gap-1 mb-6 border-b border-slate-800 overflow-x-auto">
         <button onClick={() => setTab('rules')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
             tab === 'rules' ? 'border-cyan-400 text-cyan-300' : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}>
           <Zap className="w-4 h-4" /> Regras
         </button>
+        <button onClick={() => setTab('dashboard')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
+            tab === 'dashboard' ? 'border-cyan-400 text-cyan-300' : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}>
+          <BarChart3 className="w-4 h-4" /> Painel
+        </button>
         <button onClick={() => setTab('events')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
             tab === 'events' ? 'border-cyan-400 text-cyan-300' : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}>
           <Inbox className="w-4 h-4" /> Eventos recebidos
         </button>
       </div>
 
-      {tab === 'events' ? (
+      {tab === 'dashboard' ? (
+        <AutomationsDashboard />
+      ) : tab === 'events' ? (
         <WebhookEventsMonitor />
       ) : (
         <>
@@ -202,6 +217,7 @@ const Automations: React.FC = () => {
         onClose={() => setLogsRule(null)}
         rule={logsRule}
       />
+      <SimulateWebhookModal isOpen={simulateOpen} onClose={() => setSimulateOpen(false)} />
     </div>
   );
 };

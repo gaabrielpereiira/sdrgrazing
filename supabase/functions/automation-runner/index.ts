@@ -6,6 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+// Exponential backoff in minutes per attempt
+const RETRY_BACKOFF_MIN = [1, 5, 30, 120, 720];
+const MAX_RETRIES = RETRY_BACKOFF_MIN.length;
+
 function getByPath(obj: any, path: string): any {
   if (!obj || !path) return undefined;
   return path
@@ -34,15 +38,11 @@ function matchesFilters(payload: any, filters: any): boolean {
   const conditions = filters?.conditions || [];
   if (conditions.length === 0) return true;
   const logic = (filters?.logic || 'AND').toUpperCase();
-
   const results = conditions.map((c: any) => {
     const val = getByPath(payload, c.field);
-    if (c.operator === 'is_first_order') {
-      return Boolean(payload?._is_first_order ?? false);
-    }
+    if (c.operator === 'is_first_order') return Boolean(payload?._is_first_order ?? false);
     return compareValues(val, c.operator, c.value);
   });
-
   return logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
 }
 
@@ -149,7 +149,6 @@ async function actionCrmUpdate(supabase: any, rule: any, event: any) {
 
   const result: any = { phone, contact_id: contact.id };
 
-  // 1) Add tags to contact
   if (Array.isArray(cfg.add_tags) && cfg.add_tags.length > 0) {
     const merged = Array.from(new Set([...(contact.tags || []), ...cfg.add_tags]));
     const { error } = await supabase.from('contacts').update({ tags: merged }).eq('id', contact.id);
@@ -157,7 +156,6 @@ async function actionCrmUpdate(supabase: any, rule: any, event: any) {
     result.tags_added = cfg.add_tags;
   }
 
-  // 2) Move deal to stage
   if (cfg.move_deal_stage_id) {
     const { data: deal } = await supabase
       .from('deals').select('id').eq('contact_id', contact.id)
@@ -213,9 +211,7 @@ async function actionOutboundWebhook(rule: any, event: any) {
   if (typeof bodyTpl === 'string' && bodyTpl.trim()) {
     body = renderTemplate(bodyTpl, event.payload);
   } else {
-    body = JSON.stringify({
-      rule: rule.name, topic: event.topic, event_id: event.id, payload: event.payload,
-    });
+    body = JSON.stringify({ rule: rule.name, topic: event.topic, event_id: event.id, payload: event.payload });
   }
 
   try {
@@ -267,7 +263,6 @@ async function processEvent(supabase: any, event: any) {
       await supabase.from('automation_logs').insert({
         rule_id: rule.id, event_id: event.id, status: outcome.status, result: outcome.result,
       });
-
       console.log(`[runner] rule=${rule.id} action=${rule.action_type} → ${outcome.status}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
@@ -279,8 +274,36 @@ async function processEvent(supabase: any, event: any) {
     }
   }
 
-  await supabase.from('webhook_events').update({ processed: true, error: null }).eq('id', event.id);
+  await supabase.from('webhook_events')
+    .update({ processed: true, error: null, next_retry_at: null }).eq('id', event.id);
   return { queuedWhatsapp };
+}
+
+async function scheduleRetry(supabase: any, event: any, errorMsg: string) {
+  const attempt = (event.retry_count ?? 0) + 1;
+  if (attempt > MAX_RETRIES) {
+    await supabase.from('webhook_events').update({
+      processed: true, // give up
+      error: `[max_retries] ${errorMsg}`,
+      retry_count: attempt,
+      last_error_at: new Date().toISOString(),
+      next_retry_at: null,
+    }).eq('id', event.id);
+    await supabase.from('automation_logs').insert({
+      rule_id: null, event_id: event.id, status: 'failed',
+      result: { reason: 'max_retries_exceeded', attempts: attempt, error: errorMsg },
+    });
+    console.warn(`[runner] event ${event.id} exhausted retries`);
+    return;
+  }
+  const minutes = RETRY_BACKOFF_MIN[attempt - 1];
+  const next = new Date(Date.now() + minutes * 60_000).toISOString();
+  await supabase.from('webhook_events').update({
+    error: errorMsg, retry_count: attempt,
+    last_error_at: new Date().toISOString(),
+    next_retry_at: next,
+  }).eq('id', event.id);
+  console.log(`[runner] event ${event.id} retry ${attempt}/${MAX_RETRIES} scheduled at ${next}`);
 }
 
 Deno.serve(async (req) => {
@@ -299,11 +322,21 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase
         .from('webhook_events').select('*').eq('id', body.event_id).maybeSingle();
       if (error) throw error;
-      // Allow reprocess even if processed=true when reprocess flag is set
-      if (data && (!data.processed || body.reprocess === true)) events = [data];
+      if (data && (!data.processed || body.reprocess === true)) {
+        // Manual reprocess resets retry counter
+        if (body.reprocess === true && data.processed) {
+          await supabase.from('webhook_events').update({
+            processed: false, error: null, retry_count: 0, next_retry_at: null,
+          }).eq('id', data.id);
+          data.processed = false; data.retry_count = 0; data.next_retry_at = null;
+        }
+        events = [data];
+      }
     } else {
+      const nowIso = new Date().toISOString();
       const { data, error } = await supabase
         .from('webhook_events').select('*').eq('processed', false)
+        .or(`next_retry_at.is.null,next_retry_at.lte.${nowIso}`)
         .order('received_at', { ascending: true }).limit(50);
       if (error) throw error;
       events = data || [];
@@ -318,7 +351,7 @@ Deno.serve(async (req) => {
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'unknown';
         console.error(`[runner] event ${ev.id} failed:`, msg);
-        await supabase.from('webhook_events').update({ error: msg }).eq('id', ev.id);
+        await scheduleRetry(supabase, ev, msg);
       }
     }
 
