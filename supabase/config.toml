@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.automation-runner]
 verify_jwt = false
+
+[functions.webhook-cleanup]
+verify_jwt = false
