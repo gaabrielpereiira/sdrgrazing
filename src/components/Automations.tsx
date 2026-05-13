@@ -19,6 +19,7 @@ const Automations: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AutomationRule | null>(null);
   const [logsRule, setLogsRule] = useState<AutomationRule | null>(null);
+  const [simulateOpen, setSimulateOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
