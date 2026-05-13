@@ -80,8 +80,8 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
         active,
       };
       const { error } = rule
-        ? await supabase.from('automation_rules').update(payload).eq('id', rule.id)
-        : await supabase.from('automation_rules').insert(payload);
+        ? await supabase.from('automation_rules').update(payload as any).eq('id', rule.id)
+        : await supabase.from('automation_rules').insert(payload as any);
       if (error) throw error;
       toast.success(rule ? 'Automação atualizada' : 'Automação criada');
       onSaved();
