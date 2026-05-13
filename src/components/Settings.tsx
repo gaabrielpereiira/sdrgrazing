@@ -3,6 +3,7 @@ import { Shield, Bot, Plug, Loader2, Save, RotateCcw, BookOpen, Lock } from 'luc
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import AgentSettings, { AgentSettingsRef } from './settings/AgentSettings';
 import ApiSettings, { ApiSettingsRef } from './settings/ApiSettings';
+import WooWebhookSettings from './settings/WooWebhookSettings';
 import SystemRoadmap from './SystemRoadmap';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { Button } from './Button';
