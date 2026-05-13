@@ -83,6 +83,113 @@ export type Database = {
           },
         ]
       }
+      automation_logs: {
+        Row: {
+          event_id: string | null
+          executed_at: string
+          id: string
+          result: Json
+          rule_id: string | null
+          status: string
+        }
+        Insert: {
+          event_id?: string | null
+          executed_at?: string
+          id?: string
+          result?: Json
+          rule_id?: string | null
+          status: string
+        }
+        Update: {
+          event_id?: string | null
+          executed_at?: string
+          id?: string
+          result?: Json
+          rule_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_logs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "webhook_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_logs_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "automation_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_rules: {
+        Row: {
+          action_config: Json
+          action_type: string
+          active: boolean
+          cooldown_hours: number
+          created_at: string
+          filters: Json
+          id: string
+          name: string
+          trigger_topic: string
+          updated_at: string
+        }
+        Insert: {
+          action_config?: Json
+          action_type: string
+          active?: boolean
+          cooldown_hours?: number
+          created_at?: string
+          filters?: Json
+          id?: string
+          name: string
+          trigger_topic: string
+          updated_at?: string
+        }
+        Update: {
+          action_config?: Json
+          action_type?: string
+          active?: boolean
+          cooldown_hours?: number
+          created_at?: string
+          filters?: Json
+          id?: string
+          name?: string
+          trigger_topic?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      contact_cooldowns: {
+        Row: {
+          contact_phone: string
+          last_sent_at: string
+          rule_id: string
+        }
+        Insert: {
+          contact_phone: string
+          last_sent_at?: string
+          rule_id: string
+        }
+        Update: {
+          contact_phone?: string
+          last_sent_at?: string
+          rule_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_cooldowns_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "automation_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           blocked_at: string | null
@@ -705,6 +812,7 @@ export type Database = {
           timezone: string
           updated_at: string
           user_id: string | null
+          wc_webhook_secret: string | null
           whatsapp_access_token: string | null
           whatsapp_business_account_id: string | null
           whatsapp_phone_number_id: string | null
@@ -743,6 +851,7 @@ export type Database = {
           timezone?: string
           updated_at?: string
           user_id?: string | null
+          wc_webhook_secret?: string | null
           whatsapp_access_token?: string | null
           whatsapp_business_account_id?: string | null
           whatsapp_phone_number_id?: string | null
@@ -781,6 +890,7 @@ export type Database = {
           timezone?: string
           updated_at?: string
           user_id?: string | null
+          wc_webhook_secret?: string | null
           whatsapp_access_token?: string | null
           whatsapp_business_account_id?: string | null
           whatsapp_phone_number_id?: string | null
@@ -1162,6 +1272,36 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      webhook_events: {
+        Row: {
+          error: string | null
+          id: string
+          payload: Json
+          processed: boolean
+          received_at: string
+          source: string
+          topic: string
+        }
+        Insert: {
+          error?: string | null
+          id?: string
+          payload?: Json
+          processed?: boolean
+          received_at?: string
+          source?: string
+          topic: string
+        }
+        Update: {
+          error?: string | null
+          id?: string
+          payload?: Json
+          processed?: boolean
+          received_at?: string
+          source?: string
+          topic?: string
         }
         Relationships: []
       }

@@ -1,35 +1,95 @@
-## Reestruturar abas do Chat
+## Webhook WooCommerce — Fase 1
 
-Hoje há **dois níveis de abas** na coluna de conversas:
-1. Topo: `Atendimento | Suporte` (escolhe a fila)
-2. Abaixo: `Ativas | Finalizadas` (escolhe o status)
+Recebe eventos do WooCommerce, armazena no banco e deixa o usuário criar regras pela UI. Runner e logs detalhados ficam para a Fase 2 — nesta entrega o `wc-receiver` já chama o runner em modo "stub" (apenas marca `processed`) para a estrutura ficar pronta.
 
-Vou colapsar para **um único nível com 3 abas**:
+---
 
-```
-Atendimento  |  Suporte  |  Finalizadas
-```
+### 1. Banco de dados (1 migration)
 
-### Mudanças em `src/components/ChatInterface.tsx`
+**`webhook_events`** — fila de eventos brutos
+- `topic` (text), `payload` (jsonb), `source` (text default `woocommerce`)
+- `received_at`, `processed` (bool), `error` (text)
+- Índices: `topic`, `processed`, `received_at desc`
 
-- Remover o segundo bloco de `<Tabs>` (linhas ~1012–1027) que tinha `Ativas | Finalizadas`.
-- Transformar o `<Tabs>` superior em 3 colunas (`grid-cols-3`):
-  - **Atendimento** → fila `sales` + apenas `is_active = true`. Contador = `tabCounts.activeSales`.
-  - **Suporte** → fila `support` + apenas `is_active = true`. Contador = `tabCounts.activeSupport`.
-  - **Finalizadas** → todas as conversas `is_active = false` (sales **e** support juntos). Contador = `tabCounts.finishedSales + tabCounts.finishedSupport`.
-- Substituir o estado atual `queueTab` (`'sales' | 'support'`) e `chatTab` (`'active' | 'finished'`) por **um único estado** `mainTab: 'atendimento' | 'suporte' | 'finalizadas'`.
-- Ajustar `effectiveQueue` e a lógica de filtragem das conversas:
-  - `atendimento` → queue=sales, isActive=true
-  - `suporte` → queue=support, isActive=true
-  - `finalizadas` → isActive=false (sem filtro de fila)
-- Manter os badges de não lidas (`queueUnread.sales`/`.support`) nas abas Atendimento e Suporte.
-- O badge de fila no header ("Atendimento"/"Suporte") passa a refletir a aba atual; em "Finalizadas" mostro um rótulo neutro tipo "Finalizadas".
-- A aba só aparece para `isAdmin` hoje; manter o mesmo gate (não-admin continua vendo só sua fila — nesse caso mostro `Ativas | Finalizadas` daquela fila, ou removo de vez? Vou **manter o mesmo comportamento atual** para não-admin: a versão de 3 abas só vale para admin; não-admin continua com `Ativas | Finalizadas` da sua fila).
+**`automation_rules`** — regras criadas pelo usuário
+- `name`, `trigger_topic`, `filters` (jsonb default `{}`), `action_type`, `action_config` (jsonb), `active` (bool), `cooldown_hours` (int default 0)
+- `created_at`, `updated_at`
 
-### Fora de escopo
-- Hooks de contagem (`useConversationTabCounts`) — já retornam tudo que preciso.
-- Lógica de envio/recebimento de mensagem.
-- Layout mobile (já feito na Leva 1).
+**`automation_logs`** — execuções (estrutura criada agora, populada na Fase 2)
+- `rule_id`, `event_id`, `status` (`success|failed|skipped`), `result` (jsonb), `executed_at`
 
-### Pergunta única antes de implementar
-A aba **Finalizadas** deve juntar conversas finalizadas de **Atendimento + Suporte** num só lugar (interpretação direta do seu desenho), correto? Se preferir que continue separado por fila, me avise — caso contrário sigo com a versão unificada.
+**`contact_cooldowns`** — controle anti-spam
+- PK composta `(contact_phone, rule_id)`, `last_sent_at`
+
+**RLS** — todas as 4 tabelas: política permissiva para `authenticated` (padrão single-tenant do projeto). `webhook_events` também aceita insert via service role da edge function.
+
+**`nina_settings`** — adicionar coluna `wc_webhook_secret text` (nullable). Credencial fica no banco como o resto do projeto.
+
+**Realtime** — adicionar `webhook_events` e `automation_rules` à publicação `supabase_realtime`.
+
+---
+
+### 2. Edge Function `wc-receiver`
+
+`supabase/functions/wc-receiver/index.ts` + entrada em `supabase/config.toml` com `verify_jwt = false`.
+
+Fluxo:
+1. `OPTIONS` → CORS.
+2. Lê body cru (necessário para HMAC) e header `x-wc-webhook-signature`.
+3. Lê `wc_webhook_secret` de `nina_settings` (fallback triplo: user_id → global → any, padrão do projeto).
+4. Calcula HMAC-SHA256 base64 e compara em tempo constante. Se falhar → `401`.
+5. Lê header `x-wc-webhook-topic` para o `topic`.
+6. `INSERT` em `webhook_events` com `processed=false`.
+7. Responde `200` imediato.
+8. Em background (sem aguardar): chama `automation-runner` via `fetch` com `SERVICE_ROLE_KEY` passando o evento. **Nesta fase o runner ainda não existe** — deixo a chamada comentada/atrás de uma flag para ativar na Fase 2 sem novo deploy.
+
+URL pública para colar no WooCommerce:
+`https://ggwqkyftxhgahqyevsac.supabase.co/functions/v1/wc-receiver`
+
+---
+
+### 3. UI — nova página `Automações`
+
+Arquivos:
+- `src/components/Automations.tsx` — listagem
+- `src/components/AutomationFormModal.tsx` — criar/editar
+- Item novo no `Sidebar.tsx` (ícone Zap), rota nova em `App.tsx`
+- `src/hooks/useAutomations.ts` — fetch + realtime
+
+**Listagem**
+- Tabela (desktop) / cards (mobile, seguindo padrão do Contacts) com: nome, trigger, status, cooldown, criada em, ações (toggle ativo, editar, excluir).
+- Botão "Nova automação" no topo, busca por nome.
+- Badge de "X eventos pendentes" lendo `webhook_events.processed=false` (read-only nesta fase).
+
+**Modal de criação (3 blocos)**
+- **Quando**: select de `trigger_topic` com os 6 topics do doc (`order.created`, `order.updated`, `order.deleted`, `customer.created`, `customer.updated`, `product.updated`).
+- **Se** (filtros, opcional): builder de filtros — linha com `field` (texto livre, com sugestões `total`, `status`, `billing.phone`, `billing.first_name`, `customer_id`, `line_items[0].product_id`), operador (`eq`, `neq`, `gte`, `lte`, `contains`, `is_first_order`), valor. Toggle AND/OR. Preview JSON colapsável.
+- **Então**: select de `action_type`, por enquanto apenas `whatsapp_message` totalmente funcional (os outros aparecem como "em breve"). Para WhatsApp:
+  - Select de template puxando de `whatsapp_templates` onde `status='APPROVED'`
+  - Campo `phone_field` (default `billing.phone`)
+  - Variáveis: lista dinâmica conforme placeholders do template
+  - Campo `cooldown_hours`
+
+Salva em `automation_rules`. Validação com Zod no submit.
+
+**Configuração do secret**
+- Em `Settings → APIs`, adicionar campo "WooCommerce Webhook Secret" + texto explicativo com a URL do `wc-receiver` para colar no admin do Woo. Salva em `nina_settings.wc_webhook_secret`.
+
+---
+
+### Fora desta fase (deixar pronto para Fase 2)
+
+- `automation-runner` (avaliação de filtros, cooldown, execução).
+- Integração com `send_queue` / `whatsapp-sender` (já decidida: reusar).
+- Tela de logs por regra e monitor de eventos brutos.
+- Política de retenção de `webhook_events` (>90d).
+- Demais `action_type` (`crm_update`, `internal_notification`, `outbound_webhook`).
+
+---
+
+### Detalhes técnicos (resumo)
+
+- Tudo segue o padrão do projeto: RLS permissiva, secret em `nina_settings`, edge function com `verify_jwt = false`, chamadas via `fetch` + `SERVICE_ROLE_KEY` (sem `pg_net`/cron).
+- HMAC: `crypto.subtle.importKey` + `sign('HMAC', ...)` no Deno, comparação em tempo constante.
+- `webhook_events.payload` indexável depois com GIN se necessário (não nesta fase).
+- Sem alteração em fluxos existentes (chat, deals, send_queue).
