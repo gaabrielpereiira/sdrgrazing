@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.delete-whatsapp-template]
 verify_jwt = false
+
+[functions.wc-receiver]
+verify_jwt = false

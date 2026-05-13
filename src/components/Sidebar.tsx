@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, MessageSquare, Users, Settings as SettingsIcon, LogOut, ShieldCheck, Calendar, Kanban, FileText } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Users, Settings as SettingsIcon, LogOut, ShieldCheck, Calendar, Kanban, FileText, Zap } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,6 +21,7 @@ const menuItems: { id: string; label: string; icon: any; roles: MenuRole[] }[] =
   { id: 'scheduling', label: 'Agendamentos', icon: Calendar, roles: ['admin','sdr','user'] },
   { id: 'templates', label: 'Templates WhatsApp', icon: FileText, roles: ['admin','sdr','user'] },
   { id: 'team', label: 'Equipe', icon: ShieldCheck, roles: ['admin'] },
+  { id: 'automations', label: 'Automações', icon: Zap, roles: ['admin'] },
   { id: 'settings', label: 'Configurações', icon: SettingsIcon, roles: ['admin'] },
 ];
 
