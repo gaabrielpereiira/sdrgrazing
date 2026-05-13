@@ -151,7 +151,10 @@ const Settings: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="apis">
-          <ApiSettings ref={apiRef} />
+          <div className="space-y-6">
+            <ApiSettings ref={apiRef} />
+            <WooWebhookSettings />
+          </div>
         </TabsContent>
 
         <TabsContent value="docs">
