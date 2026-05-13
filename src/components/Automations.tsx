@@ -217,6 +217,7 @@ const Automations: React.FC = () => {
         onClose={() => setLogsRule(null)}
         rule={logsRule}
       />
+      <SimulateWebhookModal isOpen={simulateOpen} onClose={() => setSimulateOpen(false)} />
     </div>
   );
 };
