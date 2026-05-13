@@ -89,8 +89,12 @@ Deno.serve(async (req) => {
 
     console.log(`[wc-receiver] Stored event ${ev.id} topic=${topic}`);
 
-    // Phase 2: trigger automation-runner here via fetch (left out by design)
-    // fetch(`${supabaseUrl}/functions/v1/automation-runner`, { method: 'POST', headers: { Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ event_id: ev.id }) }).catch(() => {});
+    // Phase 2: fire-and-forget trigger of the automation runner
+    fetch(`${supabaseUrl}/functions/v1/automation-runner`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: ev.id }),
+    }).catch((e) => console.warn('[wc-receiver] runner trigger failed:', e));
 
     return new Response(JSON.stringify({ success: true, event_id: ev.id }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
