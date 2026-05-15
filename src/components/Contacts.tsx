@@ -64,16 +64,19 @@ const Contacts: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.phone.trim()) {
-      toast.error('Telefone é obrigatório');
+    const country = getCountry(form.countryCode);
+    const localDigits = form.phone.replace(/\D/g, '');
+    if (localDigits.length < 6) {
+      toast.error('Telefone inválido. Informe ao menos 6 dígitos.');
       return;
     }
+    const fullPhone = `${country.dial}${localDigits}`;
     setCreating(true);
     try {
-      const newContact = await api.createContact(form);
+      const newContact = await api.createContact({ name: form.name, email: form.email, phone: fullPhone });
       setContacts(prev => [newContact, ...prev]);
       toast.success('Contato criado com sucesso');
-      setForm({ name: '', phone: '', email: '' });
+      setForm({ name: '', phone: '', email: '', countryCode: DEFAULT_COUNTRY_CODE });
       setShowCreate(false);
     } catch (err: any) {
       console.error(err);
