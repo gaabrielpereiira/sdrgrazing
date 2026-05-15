@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Search, Filter, MoreHorizontal, UserPlus, MessageSquare, Loader2, Mail, Phone, Users, X, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Search, Filter, MoreHorizontal, UserPlus, MessageSquare, Loader2, Mail, Phone, Users, X, Pencil, Trash2, AlertTriangle, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from './Button';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { api } from '../services/api';
 import { Contact } from '../types';
+import { COUNTRIES, DEFAULT_COUNTRY_CODE, getCountry } from '../lib/countries';
 
 const Contacts: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -12,7 +14,9 @@ const Contacts: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', email: '' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', countryCode: DEFAULT_COUNTRY_CODE });
+  const [countrySearch, setCountrySearch] = useState('');
+  const [countryOpen, setCountryOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [editForm, setEditForm] = useState({ name: '', email: '' });
   const [savingEdit, setSavingEdit] = useState(false);
@@ -60,16 +64,19 @@ const Contacts: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.phone.trim()) {
-      toast.error('Telefone é obrigatório');
+    const country = getCountry(form.countryCode);
+    const localDigits = form.phone.replace(/\D/g, '');
+    if (localDigits.length < 6) {
+      toast.error('Telefone inválido. Informe ao menos 6 dígitos.');
       return;
     }
+    const fullPhone = `${country.dial}${localDigits}`;
     setCreating(true);
     try {
-      const newContact = await api.createContact(form);
+      const newContact = await api.createContact({ name: form.name, email: form.email, phone: fullPhone });
       setContacts(prev => [newContact, ...prev]);
       toast.success('Contato criado com sucesso');
-      setForm({ name: '', phone: '', email: '' });
+      setForm({ name: '', phone: '', email: '', countryCode: DEFAULT_COUNTRY_CODE });
       setShowCreate(false);
     } catch (err: any) {
       console.error(err);
@@ -344,16 +351,72 @@ const Contacts: React.FC = () => {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                  Telefone (com DDD/país) <span className="text-rose-400">*</span>
+                  Telefone <span className="text-rose-400">*</span>
                 </label>
-                <input
-                  type="tel"
-                  required
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  placeholder="Ex: 5511999998888"
-                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
-                />
+                <div className="flex gap-2">
+                  <Popover open={countryOpen} onOpenChange={setCountryOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex items-center gap-1.5 px-2.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 hover:border-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 shrink-0"
+                      >
+                        <span className="text-base leading-none">{getCountry(form.countryCode).flag}</span>
+                        <span className="text-slate-300">+{getCountry(form.countryCode).dial}</span>
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-72 p-0 bg-slate-950 border-slate-800">
+                      <div className="p-2 border-b border-slate-800">
+                        <input
+                          autoFocus
+                          value={countrySearch}
+                          onChange={(e) => setCountrySearch(e.target.value)}
+                          placeholder="Buscar país ou código…"
+                          className="w-full px-2.5 py-2 rounded-md bg-slate-900 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 placeholder:text-slate-600"
+                        />
+                      </div>
+                      <div className="max-h-64 overflow-y-auto py-1">
+                        {COUNTRIES.filter((c) => {
+                          const q = countrySearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            c.name.toLowerCase().includes(q) ||
+                            c.dial.includes(q.replace('+', '')) ||
+                            c.code.toLowerCase().includes(q)
+                          );
+                        }).map((c) => (
+                          <button
+                            key={c.code}
+                            type="button"
+                            onClick={() => {
+                              setForm({ ...form, countryCode: c.code });
+                              setCountryOpen(false);
+                              setCountrySearch('');
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-900 ${
+                              form.countryCode === c.code ? 'bg-slate-900 text-cyan-300' : 'text-slate-200'
+                            }`}
+                          >
+                            <span className="text-base leading-none">{c.flag}</span>
+                            <span className="flex-1 truncate">{c.name}</span>
+                            <span className="text-slate-500 text-xs">+{c.dial}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <input
+                    type="tel"
+                    required
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    placeholder="DDD + número (ex: 11999998888)"
+                    className="flex-1 min-w-0 px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                  />
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-500">
+                  Será salvo como +{getCountry(form.countryCode).dial} {form.phone.replace(/\D/g, '') || '…'}
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Email</label>

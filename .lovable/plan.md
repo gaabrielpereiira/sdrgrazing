@@ -1,30 +1,24 @@
-## Excluir contatos
+## Seletor de país no cadastro de contato
 
-Adicionar a opção de excluir um contato a partir da tela de Contatos, com confirmação antes da remoção definitiva.
+Adicionar um seletor de país ao lado do campo de telefone no modal "Novo Contato", para que o DDI seja escolhido visualmente (bandeira + código) e concatenado automaticamente ao número digitado.
 
 ### Comportamento
-- Botão de lixeira (ícone) em cada linha da tabela (desktop) e em cada card (mobile), ao lado dos botões existentes "Conversar" e "Editar".
-- Ao clicar, abre um diálogo de confirmação ("Excluir contato? Essa ação removerá o contato e todas as conversas, mensagens e deals vinculados. Não pode ser desfeita.").
-- Ao confirmar, executa a exclusão em cascata no backend e remove o contato da lista localmente, com toast de sucesso ou erro.
+- Modal "Novo Contato" em `Contacts.tsx`: o campo único de telefone vira um par "País + Número".
+- Padrão: **Brasil (+55)**.
+- Lista de países comuns para vendas/WhatsApp, com busca por nome ou código (Brasil, Portugal, EUA, México, Argentina, Chile, Colômbia, Peru, Uruguai, Paraguai, Espanha, Reino Unido, França, Itália, Alemanha, Canadá, Angola, Moçambique — cobertura ampla mas curada, sem dependência externa).
+- Ao salvar, o telefone enviado para `api.createContact` é `${dialCode}${digitsApenas}` (sem `+`, sem espaços), mantendo compatibilidade com o formato atual (ex: `5511999998888`).
+- Validação: número precisa ter ao menos 6 dígitos depois do DDI; toast de erro caso contrário.
+- Placeholder do campo de número adaptado ao país selecionado quando possível.
 
 ### Detalhes técnicos
-- **`src/services/api.ts`**: novo método `deleteContact(contactId)` que apaga, na ordem:
-  1. `messages` das conversas do contato
-  2. `conversation_activities` do contato
-  3. `conversation_states` das conversas do contato
-  4. `conversations` do contato
-  5. `deal_activities` dos deals do contato
-  6. `deals` do contato
-  7. `contact_cooldowns` pelo `phone_number`
-  8. `contacts` (registro principal)
-  Tudo via `supabase.from(...).delete()` para respeitar RLS de usuário autenticado.
+- **`src/lib/countries.ts`** (novo): array `COUNTRIES = [{ code: 'BR', name: 'Brasil', dial: '55', flag: '🇧🇷' }, ...]` usando emojis de bandeira (sem assets/lib externa).
 - **`src/components/Contacts.tsx`**:
-  - Novo estado `deletingContact` e `deleting`.
-  - Botão `Trash2` (vermelho) na linha desktop e no card mobile.
-  - Modal de confirmação reaproveitando o padrão visual dos outros modais (overlay + card slate).
-  - Após sucesso: `setContacts(prev => prev.filter(c => c.id !== id))` + `toast.success`.
+  - Estado `form` passa a ter `{ name, countryCode: 'BR', phone, email }` (campo `phone` guarda só os dígitos locais).
+  - Novo componente inline (ou popover usando `@/components/ui/popover` já presente no projeto) com botão `🇧🇷 +55 ▾` à esquerda do input e lista filtrável.
+  - `handleCreate` monta `fullPhone = dial + phone.replace(/\D/g,'')` e passa para `api.createContact`.
+- **Sem mudanças em backend** — a coluna `contacts.phone_number` já é text livre e o restante do app continua lendo/escrevendo a string concatenada.
 
 ### Fora do escopo
-- Soft delete / lixeira para restaurar.
-- Exclusão em massa.
-- Permissão por papel (qualquer usuário autenticado pode excluir, conforme RLS atual).
+- Editar país de contato existente (modal "Editar Contato" continua sem telefone editável).
+- Formatação avançada por país (máscara dinâmica) — só validação básica de comprimento.
+- Detecção automática de país a partir do número colado.
