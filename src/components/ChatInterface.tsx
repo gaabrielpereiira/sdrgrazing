@@ -37,6 +37,8 @@ const ChatInterface: React.FC = () => {
   const [mainTab, setMainTab] = useState<'geral' | 'finalizadas'>('geral');
   // Non-admins keep the simpler Ativas | Finalizadas toggle on their own queue
   const [nonAdminChatTab, setNonAdminChatTab] = useState<'active' | 'finished'>('active');
+  const [endDialogOpen, setEndDialogOpen] = useState(false);
+  const [sendClosingMessage, setSendClosingMessage] = useState(true);
   const chatTab: 'active' | 'finished' = isAdmin
     ? (mainTab === 'finalizadas' ? 'finished' : 'active')
     : nonAdminChatTab;
