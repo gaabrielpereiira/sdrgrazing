@@ -16,7 +16,25 @@ const Contacts: React.FC = () => {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [editForm, setEditForm] = useState({ name: '', email: '' });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingContact, setDeletingContact] = useState<Contact | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
+
+  const handleDeleteContact = async () => {
+    if (!deletingContact) return;
+    setDeleting(true);
+    try {
+      await api.deleteContact(deletingContact.id);
+      setContacts(prev => prev.filter(c => c.id !== deletingContact.id));
+      toast.success('Contato excluído');
+      setDeletingContact(null);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Erro ao excluir contato');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const openEdit = (contact: Contact) => {
     setEditingContact(contact);
