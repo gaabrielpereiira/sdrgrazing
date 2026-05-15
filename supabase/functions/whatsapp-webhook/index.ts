@@ -338,6 +338,18 @@ serve(async (req) => {
                 : '👤 Contato compartilhado';
               break;
             }
+            case 'interactive': {
+              const inter = message.interactive || {};
+              if (inter.type === 'button_reply') {
+                messageContent = inter.button_reply?.title || '[botão]';
+              } else if (inter.type === 'list_reply') {
+                messageContent = inter.list_reply?.title || '[item da lista]';
+              } else {
+                messageContent = `[interactive:${inter.type || 'unknown'}]`;
+              }
+              messageType = 'text';
+              break;
+            }
             default:
               messageContent = `[${message.type}]`;
           }
