@@ -3,7 +3,7 @@ import {
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck, 
   Smile, Play, Loader2, MessageSquare, Info, X, Mail, 
   Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon, Bell, AlertTriangle,
-  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate, Mic, Trash2, LifeBuoy, ChevronLeft
+  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate, Mic, Trash2, LifeBuoy, ChevronLeft, Building2
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition, formatRelativeTime } from '../types';
 import { Button } from './Button';
@@ -1094,6 +1094,12 @@ const ChatInterface: React.FC = () => {
                     </h3>
                     <span className="text-[10px] text-slate-500 font-medium">{chat.lastMessageAt ? formatRelativeTime(chat.lastMessageAt) : chat.lastMessageTime}</span>
                   </div>
+                  {chat.isBusiness && chat.companyName && (
+                    <p className="text-[10px] text-cyan-300/70 truncate flex items-center gap-1 -mt-0.5 mb-0.5">
+                      <Building2 className="w-2.5 h-2.5 shrink-0" />
+                      <span className="truncate">{chat.companyName}</span>
+                    </p>
+                  )}
                   <p className="text-xs text-slate-500 truncate">
                     {(() => {
                       const last = chat.messages[chat.messages.length - 1];
@@ -1264,6 +1270,12 @@ const ChatInterface: React.FC = () => {
                       </span>
                     ) : null}
                   </h2>
+                  {activeChat.isBusiness && activeChat.companyName && (
+                    <p className="text-[11px] text-cyan-300/70 font-medium flex items-center gap-1 mt-0.5">
+                      <Building2 className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{activeChat.companyName}</span>
+                    </p>
+                  )}
                   <p className="text-xs text-cyan-500 font-medium">{activeChat.contactPhone}</p>
                 </div>
               </div>

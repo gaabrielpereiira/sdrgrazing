@@ -1,39 +1,24 @@
-## Pessoa Física vs Jurídica + Nome da Empresa nos Contatos
+## Mostrar nome da empresa no chat
 
-Adicionar diferenciação PF/PJ no cadastro/edição de contato e um campo opcional para o nome da empresa quando for pessoa jurídica.
+Quando o contato for Pessoa Jurídica, exibir o nome da empresa no chat — discreto, em fonte menor — sempre acompanhando o nome da pessoa.
 
-### Comportamento
-- **Modal "Novo Contato"** (`Contacts.tsx`): toggle/segmented control no topo com duas opções — **Pessoa Física** (padrão) e **Pessoa Jurídica**.
-  - Quando "Pessoa Jurídica" estiver selecionada, mostrar campo extra **"Nome da empresa"**.
-  - Salva `is_business = true/false` e `company_name`.
-- **Modal "Editar Contato"**: mesmo toggle + campo de empresa, permitindo trocar o tipo a qualquer momento.
-- **Lista de contatos** (desktop e mobile): badge discreta ao lado do nome — `PF` (cinza) ou `PJ` (cyan, ícone `Building2`). No PJ, mostrar o nome da empresa abaixo do nome do contato (ou no lugar do telefone secundário).
-- Sem mudanças na busca por enquanto (mas ela já filtra por nome — o nome da empresa será incluído no índice de busca local).
+### Onde aparece
+1. **Cabeçalho do chat ativo** (`ChatInterface.tsx`): logo abaixo do nome do contato (mesma linha, sub-texto pequeno) com um ícone `Building2`.
+   - Exemplo:
+     ```
+     João Silva  [PJ] [Pendente]…
+     🏢 Acme Ltda.
+     ```
+2. **Item da lista de conversas** (sidebar): pequeno texto cinza/cyan abaixo do nome, antes do preview da última mensagem, somente quando `isBusiness && companyName`.
 
 ### Detalhes técnicos
-
-**1. Banco de dados** (`migration`):
-- A tabela `contacts` já tem a coluna `is_business boolean default false`.
-- Adicionar nova coluna: `company_name text` (nullable). Sem default.
-
-**2. Tipos** (`src/types.ts`):
-- Estender `Contact` com `isBusiness: boolean` e `companyName: string | null`.
-
-**3. API** (`src/services/api.ts`):
-- `createContact`: aceitar `isBusiness?: boolean` e `companyName?: string | null`; gravar `is_business` e `company_name`. Se `isBusiness === false`, gravar `company_name = null`.
-- `fetchContacts`: incluir `is_business` e `company_name` no select e no mapeamento.
-- `updateContact`: aceitar os mesmos campos opcionais e atualizar quando informados.
-- Atualizar o mapeamento de retorno em todos os pontos para popular `isBusiness`/`companyName`.
-
-**4. UI — `src/components/Contacts.tsx`**:
-- Estado `form` ganha `isBusiness: boolean` e `companyName: string`.
-- Estado `editForm` idem.
-- Componente segmented control inline (dois botões com `Building2` / `User` do lucide), seguindo as classes existentes (slate/cyan, sem cores fora do design system).
-- Renderização condicional do input "Nome da empresa".
-- Linhas/cards: pequena badge `PJ` quando `contact.isBusiness`, e exibir `companyName` em texto secundário.
+- **`src/types.ts`**:
+  - Adicionar `isBusiness?: boolean` e `companyName?: string | null` em `UIConversation`.
+  - Em `transformDBToUIConversation`, popular esses campos a partir de `conv.contact?.is_business` e `conv.contact?.company_name` (já vêm via `select('*')` no `contact:contacts(*)`).
+- **`src/components/ChatInterface.tsx`**:
+  - Cabeçalho (área do `<h2>` do contato): manter o nome no `<h2>`. Logo abaixo, renderizar condicionalmente `<div class="text-[11px] text-cyan-300/70 flex items-center gap-1"><Building2 className="w-3 h-3" />{activeChat.companyName}</div>` quando `activeChat.isBusiness && activeChat.companyName`.
+  - Item da lista (sidebar): após `<h3>` do `contactName`, adicionar `<p class="text-[10px] text-cyan-300/70 truncate flex items-center gap-1">…</p>` condicional, mantendo o preview de última mensagem inalterado.
 
 ### Fora do escopo
-- Validação de CNPJ/CPF.
-- Campos fiscais adicionais (razão social, IE).
-- Filtro/segmentação na listagem por tipo (pode vir depois).
-- Sincronização do `company_name` com a coluna `company` da tabela `deals` (continuam independentes).
+- Tornar o nome da empresa editável a partir do chat (já é editável no modal "Editar Contato").
+- Mostrar a empresa em outras telas (CRM, Dashboard, etc.).
