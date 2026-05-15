@@ -643,6 +643,72 @@ const ChatInterface: React.FC = () => {
     }
   };
 
+  // Inline edit for sidebar fields (email / company / name)
+  const startFieldEdit = (field: EditableField, currentValue: string | null | undefined) => {
+    setEditingField(field);
+    setFieldDraft((currentValue ?? '').toString());
+  };
+  const cancelFieldEdit = () => {
+    setEditingField(null);
+    setFieldDraft('');
+  };
+  const saveFieldEdit = async () => {
+    if (!activeChat || !editingField) return;
+    const raw = fieldDraft.trim();
+    const field = editingField;
+
+    // Validation
+    if (field === 'name') {
+      if (!raw) { toast.error('O nome não pode ficar vazio'); return; }
+      if (raw.length > 100) { toast.error('Nome muito longo (máx. 100)'); return; }
+    }
+    if (field === 'email' && raw) {
+      if (raw.length > 255) { toast.error('Email muito longo'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) { toast.error('Email inválido'); return; }
+    }
+    if (field === 'company' && raw.length > 100) {
+      toast.error('Nome da empresa muito longo (máx. 100)'); return;
+    }
+
+    // Skip if unchanged
+    const current =
+      field === 'name' ? activeChat.contactName :
+      field === 'email' ? (activeChat.contactEmail || '') :
+      (activeChat.companyName || '');
+    if (raw === (current || '').trim()) {
+      cancelFieldEdit();
+      return;
+    }
+
+    setSavingField(true);
+    try {
+      const payload: any = {};
+      if (field === 'name') payload.name = raw;
+      if (field === 'email') payload.email = raw || null;
+      if (field === 'company') payload.companyName = raw || null;
+      await api.updateContact(activeChat.contactId, payload);
+      toast.success('Atualizado');
+      cancelFieldEdit();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Erro ao atualizar');
+    } finally {
+      setSavingField(false);
+    }
+  };
+  const toggleIsBusiness = async (next: boolean) => {
+    if (!activeChat) return;
+    setSavingBusinessToggle(true);
+    try {
+      await api.updateContact(activeChat.contactId, { isBusiness: next });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Erro ao atualizar');
+    } finally {
+      setSavingBusinessToggle(false);
+    }
+  };
+
   // Scroll to a specific message (for reply-quote click)
   const scrollToMessage = (messageId: string) => {
     const el = document.querySelector(`[data-msg-id="${messageId}"]`);
