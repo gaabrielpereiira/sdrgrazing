@@ -296,6 +296,8 @@ export interface UIConversation {
   clientMemory: ClientMemory;
   notes: string | null;
   queue: 'sales' | 'support';
+  isBusiness?: boolean;
+  companyName?: string | null;
 }
 
 export interface UIMessage {
