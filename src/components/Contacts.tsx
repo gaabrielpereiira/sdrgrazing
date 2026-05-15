@@ -42,7 +42,12 @@ const Contacts: React.FC = () => {
 
   const openEdit = (contact: Contact) => {
     setEditingContact(contact);
-    setEditForm({ name: contact.name || '', email: contact.email || '' });
+    setEditForm({
+      name: contact.name || '',
+      email: contact.email || '',
+      isBusiness: !!contact.isBusiness,
+      companyName: contact.companyName || '',
+    });
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -50,8 +55,19 @@ const Contacts: React.FC = () => {
     if (!editingContact) return;
     setSavingEdit(true);
     try {
-      await api.updateContact(editingContact.id, { name: editForm.name, email: editForm.email });
-      setContacts(prev => prev.map(c => c.id === editingContact.id ? { ...c, name: editForm.name, email: editForm.email } : c));
+      await api.updateContact(editingContact.id, {
+        name: editForm.name,
+        email: editForm.email,
+        isBusiness: editForm.isBusiness,
+        companyName: editForm.isBusiness ? editForm.companyName : null,
+      });
+      setContacts(prev => prev.map(c => c.id === editingContact.id ? {
+        ...c,
+        name: editForm.name,
+        email: editForm.email,
+        isBusiness: editForm.isBusiness,
+        companyName: editForm.isBusiness ? editForm.companyName : null,
+      } : c));
       toast.success('Contato atualizado');
       setEditingContact(null);
     } catch (err: any) {
