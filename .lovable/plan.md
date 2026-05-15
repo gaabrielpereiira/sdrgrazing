@@ -1,29 +1,49 @@
-## Problema
+## Verificação concluída
 
-Ao excluir um contato, o erro:
+Inspecionei todas as foreign keys do banco e o código atual de `deleteContact` (`src/services/api.ts:2059`). Resultado:
+
+### FKs relevantes (todas seguras)
+| Tabela origem | Coluna | Referencia | ON DELETE |
+|---|---|---|---|
+| `conversations.contact_id` | → `contacts` | CASCADE |
+| `messages.conversation_id` | → `conversations` | CASCADE |
+| `conversation_states.conversation_id` | → `conversations` | CASCADE |
+| `deals.contact_id` | → `contacts` | CASCADE |
+| `deal_activities.deal_id` | → `deals` | CASCADE |
+| `appointments.contact_id` | → `contacts` | SET NULL |
+| `send_queue.message_id` | → `messages` | SET NULL ✅ (corrigido) |
+| `message_grouping_queue.message_id` | → `messages` | SET NULL ✅ |
+| `messages.reply_to_id` | → `messages` | SET NULL ✅ |
+
+`send_queue`, `nina_processing_queue` e `message_processing_queue` **não possuem FK** apontando para `conversations`/`contacts` — são apenas colunas UUID soltas. Portanto não há risco de erro de FK quando o contato é apagado.
+
+### Estado atual do `deleteContact`
+- ✅ Apaga `send_queue` por `conversation_id`
+- ✅ Apaga `nina_processing_queue` por `conversation_id`
+- ✅ Apaga `messages`, `conversation_states`, `conversation_activities`, `conversations`, `deal_activities`, `deals`, `contact_cooldowns`, `notifications`, `contacts`
+- ⚠️ **Não** limpa `message_processing_queue` (tabela só tem `whatsapp_message_id`/`phone_number_id`, sem vínculo direto com contato).
+
+## Plano de melhoria (pequeno)
+
+**1. Limpar `message_processing_queue`** antes de deletar mensagens, usando os `whatsapp_message_id` reais do contato:
+```ts
+if (convIds.length > 0) {
+  const { data: msgs } = await supabase
+    .from('messages')
+    .select('whatsapp_message_id')
+    .in('conversation_id', convIds)
+    .not('whatsapp_message_id', 'is', null);
+  const wamids = (msgs || []).map(m => m.whatsapp_message_id).filter(Boolean);
+  if (wamids.length > 0) {
+    await supabase.from('message_processing_queue').delete().in('whatsapp_message_id', wamids);
+    await supabase.from('message_grouping_queue').delete().in('whatsapp_message_id', wamids);
+  }
+  // ... resto do fluxo atual
+}
 ```
-update or delete on table "messages" violates foreign key constraint "send_queue_message_id_fkey" on table "send_queue"
-```
-acontece porque `send_queue.message_id` referencia `messages.id` sem `ON DELETE`. Quando `deleteContact` apaga as mensagens da conversa, qualquer linha de `send_queue` apontando para elas bloqueia a operação.
 
-## Plano
+**2. Não há mudança de schema necessária** — todas as FKs já estão corretas.
 
-**1. Migration no banco** (`supabase--migration`)
-- Alterar a FK `send_queue_message_id_fkey` para `ON DELETE SET NULL` (preserva histórico do envio, apenas perde o link).
-- Pelo mesmo motivo, garantir o mesmo comportamento em outras FKs que apontam para `messages` se existirem (ex.: `messages.reply_to_id` self-ref → `ON DELETE SET NULL`).
+## Conclusão
 
-**2. Reforço no `deleteContact` (`src/services/api.ts`)**
-Antes de deletar `messages`, limpar/desvincular filas relacionadas à conversa:
-- `send_queue`: deletar linhas onde `conversation_id IN (convIds)` (filas de envio do contato perdem sentido).
-- `nina_processing_queue`: deletar onde `conversation_id IN (convIds)`.
-- `message_processing_queue` e `message_grouping_queue`: deletar por `message_id IN (msgIds)` ou onde possível.
-
-Isso evita futuros erros de FK e remove resíduos de processamento ligados ao contato.
-
-**3. Validação**
-- Após a migration, repetir a exclusão pelo modal "Excluir contato" e confirmar sucesso (sem erro de FK).
-- Conferir no console que nenhuma das tabelas de fila retém linhas órfãs do contato.
-
-## Fora do escopo
-- Mudanças no fluxo de envio de mensagens.
-- Soft delete de contatos.
+Nenhum erro de FK ocorrerá no fluxo atual. A melhoria acima é apenas higiene para evitar lixo em `message_processing_queue`/`message_grouping_queue` órfão do contato apagado. Se você quiser, aplico essa limpeza extra.
