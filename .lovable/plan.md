@@ -1,23 +1,30 @@
-# Links clicáveis nas mensagens do chat
+## Excluir contatos
 
-## Problema
-O conteúdo de texto das mensagens (`msg.content`) é renderizado como string pura, então URLs (`https://...`, `www....`) aparecem sem ser clicáveis.
+Adicionar a opção de excluir um contato a partir da tela de Contatos, com confirmação antes da remoção definitiva.
 
-## Solução
-Criar um helper `renderTextWithLinks(text)` que quebra o texto em pedaços e transforma URLs em `<a>` clicáveis, preservando `whitespace-pre-wrap`.
+### Comportamento
+- Botão de lixeira (ícone) em cada linha da tabela (desktop) e em cada card (mobile), ao lado dos botões existentes "Conversar" e "Editar".
+- Ao clicar, abre um diálogo de confirmação ("Excluir contato? Essa ação removerá o contato e todas as conversas, mensagens e deals vinculados. Não pode ser desfeita.").
+- Ao confirmar, executa a exclusão em cascata no backend e remove o contato da lista localmente, com toast de sucesso ou erro.
 
-### Arquivos
-- **Novo** `src/lib/linkify.tsx` — função `renderTextWithLinks(text: string): ReactNode[]`:
-  - Regex: `/(\bhttps?:\/\/[^\s<]+|\bwww\.[^\s<]+\.[^\s<]+)/gi`
-  - Para cada match: `<a href={normalizedUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 break-all hover:opacity-80">{match}</a>`
-  - `www.` recebe `https://` no `href`.
-  - Trim de pontuação final (`.,;:!?)`) deixada fora do link.
+### Detalhes técnicos
+- **`src/services/api.ts`**: novo método `deleteContact(contactId)` que apaga, na ordem:
+  1. `messages` das conversas do contato
+  2. `conversation_activities` do contato
+  3. `conversation_states` das conversas do contato
+  4. `conversations` do contato
+  5. `deal_activities` dos deals do contato
+  6. `deals` do contato
+  7. `contact_cooldowns` pelo `phone_number`
+  8. `contacts` (registro principal)
+  Tudo via `supabase.from(...).delete()` para respeitar RLS de usuário autenticado.
+- **`src/components/Contacts.tsx`**:
+  - Novo estado `deletingContact` e `deleting`.
+  - Botão `Trash2` (vermelho) na linha desktop e no card mobile.
+  - Modal de confirmação reaproveitando o padrão visual dos outros modais (overlay + card slate).
+  - Após sucesso: `setContacts(prev => prev.filter(c => c.id !== id))` + `toast.success`.
 
-- **Editar** `src/components/ChatInterface.tsx`:
-  - Linha 953 (texto puro): `<p className="leading-relaxed whitespace-pre-wrap">{renderTextWithLinks(msg.content || '')}</p>`.
-  - Linha 798 (legenda de imagem): aplicar mesma função.
-
-## Fora de escopo
-- Preview de link (open graph).
-- Detecção de telefones/emails.
-- Mudanças no input ou no envio — só renderização.
+### Fora do escopo
+- Soft delete / lixeira para restaurar.
+- Exclusão em massa.
+- Permissão por papel (qualquer usuário autenticado pode excluir, conforme RLS atual).
