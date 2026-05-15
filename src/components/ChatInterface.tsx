@@ -1094,6 +1094,12 @@ const ChatInterface: React.FC = () => {
                     </h3>
                     <span className="text-[10px] text-slate-500 font-medium">{chat.lastMessageAt ? formatRelativeTime(chat.lastMessageAt) : chat.lastMessageTime}</span>
                   </div>
+                  {chat.isBusiness && chat.companyName && (
+                    <p className="text-[10px] text-cyan-300/70 truncate flex items-center gap-1 -mt-0.5 mb-0.5">
+                      <Building2 className="w-2.5 h-2.5 shrink-0" />
+                      <span className="truncate">{chat.companyName}</span>
+                    </p>
+                  )}
                   <p className="text-xs text-slate-500 truncate">
                     {(() => {
                       const last = chat.messages[chat.messages.length - 1];
