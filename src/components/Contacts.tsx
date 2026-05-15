@@ -291,6 +291,15 @@ const Contacts: React.FC = () => {
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="h-8 w-8 p-0 rounded-lg text-slate-400 hover:text-rose-400"
+                          title="Excluir contato"
+                          onClick={() => setDeletingContact(contact)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
