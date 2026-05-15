@@ -1571,7 +1571,46 @@ const ChatInterface: React.FC = () => {
                                     </p>
                                   </button>
                                 )}
+                                {msg.metadata?.interactive && (
+                                  <div className={`mb-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium border ${isOutgoing ? 'bg-white/10 border-white/20 text-white/80' : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'}`}>
+                                    <CornerDownLeft className="w-3 h-3" />
+                                    {msg.metadata.interactive.kind === 'list_reply' ? 'Resposta de lista' : 'Resposta de botão'}
+                                  </div>
+                                )}
                                 {renderMessageContent(msg)}
+                                {Array.isArray(msg.metadata?.buttons) && msg.metadata.buttons.length > 0 && (
+                                  <div className={`mt-2 -mx-3 -mb-2 border-t ${isOutgoing ? 'border-white/15' : 'border-slate-700/60'} flex flex-col`}>
+                                    {msg.metadata.buttons.map((btn: any, bi: number) => {
+                                      const label = btn.text || '';
+                                      const baseCls = `flex items-center justify-center gap-1.5 px-3 py-2 text-[13px] font-medium ${bi > 0 ? (isOutgoing ? 'border-t border-white/15' : 'border-t border-slate-700/60') : ''}`;
+                                      const linkCls = `${baseCls} ${isOutgoing ? 'text-white hover:bg-white/10' : 'text-cyan-400 hover:bg-slate-800/60'} transition-colors cursor-pointer`;
+                                      const passiveCls = `${baseCls} ${isOutgoing ? 'text-white/90' : 'text-cyan-400'}`;
+                                      if (btn.type === 'URL' && btn.url) {
+                                        return (
+                                          <a key={bi} href={btn.url} target="_blank" rel="noreferrer" className={linkCls}>
+                                            <ExternalLink className="w-3.5 h-3.5" />
+                                            <span className="truncate">{label}</span>
+                                          </a>
+                                        );
+                                      }
+                                      if (btn.type === 'PHONE_NUMBER' && btn.phone_number) {
+                                        return (
+                                          <a key={bi} href={`tel:${btn.phone_number}`} className={linkCls}>
+                                            <Phone className="w-3.5 h-3.5" />
+                                            <span className="truncate">{label}</span>
+                                          </a>
+                                        );
+                                      }
+                                      // QUICK_REPLY (read-only chip)
+                                      return (
+                                        <div key={bi} className={passiveCls} title="Botão de resposta rápida">
+                                          <Reply className="w-3.5 h-3.5" />
+                                          <span className="truncate">{label}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                                 {(() => {
                                   const reactions = msg.metadata?.reactions as Record<string, string> | undefined;
                                   const emojis = reactions ? Object.values(reactions).filter(Boolean) : [];
