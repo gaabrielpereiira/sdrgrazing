@@ -454,6 +454,18 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
   const waMessageStatus = responseData.messages?.[0]?.message_status; // e.g. "accepted"
   console.log('[Sender] Message sent, WA ID:', whatsappMessageId, 'status:', waMessageStatus);
 
+  // Derive button list from template (for chat UI rendering)
+  const _tplComponents = (queueItem.metadata?.template?.components || []) as any[];
+  const _buttonsComp = _tplComponents.find((c: any) => (c.type || '').toUpperCase() === 'BUTTONS');
+  const _buttons = Array.isArray(_buttonsComp?.buttons)
+    ? _buttonsComp.buttons.map((b: any) => ({
+        type: (b.type || '').toUpperCase(), // QUICK_REPLY | URL | PHONE_NUMBER
+        text: b.text || '',
+        url: b.url || null,
+        phone_number: b.phone_number || null,
+      }))
+    : null;
+
   // Update or create message record in database
   if (queueItem.message_id) {
     // UPDATE existing message (for human messages)
@@ -471,6 +483,7 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
         sent_at: new Date().toISOString(),
         metadata: {
           ...(existing?.metadata || {}),
+          ...(_buttons ? { buttons: _buttons } : {}),
           whatsapp_response: {
             http_status: response.status,
             wamid: whatsappMessageId,
@@ -499,7 +512,10 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
         status: 'sent',
         media_url: queueItem.media_url || null,
         sent_at: new Date().toISOString(),
-        metadata: queueItem.metadata || {}
+        metadata: {
+          ...(queueItem.metadata || {}),
+          ...(_buttons ? { buttons: _buttons } : {}),
+        },
       });
 
     if (msgError) {
