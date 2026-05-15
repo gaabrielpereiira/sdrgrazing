@@ -350,7 +350,9 @@ export function transformDBToUIConversation(
     messages: sortedMessages.map(transformDBToUIMessage),
     clientMemory: conv.contact?.client_memory || getDefaultClientMemory(),
     notes: conv.contact?.notes || null,
-    queue: ((conv as any).queue === 'support' ? 'support' : 'sales')
+    queue: ((conv as any).queue === 'support' ? 'support' : 'sales'),
+    isBusiness: !!(conv.contact as any)?.is_business,
+    companyName: (conv.contact as any)?.company_name ?? null
   };
 }
 
