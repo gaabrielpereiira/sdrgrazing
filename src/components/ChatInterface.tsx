@@ -29,10 +29,8 @@ import { useConversationTabCounts } from '@/hooks/useConversationTabCounts';
 
 const ChatInterface: React.FC = () => {
   const { role, isAdmin } = useAuth();
-  // Admins see a single 3-tab row: Atendimento | Suporte | Finalizadas
-  const [mainTab, setMainTab] = useState<'atendimento' | 'suporte' | 'finalizadas'>(
-    queueForRole(role) === 'support' ? 'suporte' : 'atendimento'
-  );
+  // Admins see a 2-tab row: Geral | Finalizadas (Suporte virou tag por conversa)
+  const [mainTab, setMainTab] = useState<'geral' | 'finalizadas'>('geral');
   // Non-admins keep the simpler Ativas | Finalizadas toggle on their own queue
   const [nonAdminChatTab, setNonAdminChatTab] = useState<'active' | 'finished'>('active');
   const chatTab: 'active' | 'finished' = isAdmin
@@ -40,10 +38,10 @@ const ChatInterface: React.FC = () => {
     : nonAdminChatTab;
   const setChatTab = setNonAdminChatTab;
   const queueForFetch: 'sales' | 'support' | 'all' = isAdmin
-    ? (mainTab === 'atendimento' ? 'sales' : mainTab === 'suporte' ? 'support' : 'all')
+    ? 'all'
     : (queueForRole(role) ?? 'sales');
   const effectiveQueue: 'sales' | 'support' = isAdmin
-    ? (mainTab === 'suporte' ? 'support' : 'sales')
+    ? 'sales'
     : (queueForRole(role) ?? 'sales');
   const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: queueForFetch });
   const { sdrName, companyName } = useCompanySettings();
