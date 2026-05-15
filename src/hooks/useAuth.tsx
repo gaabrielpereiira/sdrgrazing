@@ -29,16 +29,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+      (_event, newSession) => {
+        // Always keep session fresh (token rotates), but only update `user`
+        // when the user identity actually changes. This prevents downstream
+        // effects (role load, ProtectedRoute) from re-firing on TOKEN_REFRESHED.
+        setSession(newSession);
+        setUser(prev => {
+          const nextId = newSession?.user?.id ?? null;
+          const prevId = prev?.id ?? null;
+          if (nextId === prevId) return prev;
+          return newSession?.user ?? null;
+        });
         setLoading(false);
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setUser(session?.user ?? null);
+      setUser(prev => {
+        const nextId = session?.user?.id ?? null;
+        const prevId = prev?.id ?? null;
+        if (nextId === prevId) return prev;
+        return session?.user ?? null;
+      });
       setLoading(false);
     });
 
@@ -80,7 +93,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
     loadRole();
     return () => { cancelled = true; };
-  }, [user]);
+    // Depend on user.id only — refreshes that produce a new user object with
+    // the same id should NOT re-trigger role loading (would flicker spinner).
+  }, [user?.id]);
 
   const signUp = async (email: string, password: string, fullName?: string) => {
     const redirectUrl = `${window.location.origin}/`;

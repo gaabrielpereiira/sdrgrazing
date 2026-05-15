@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth, defaultRouteForRole, AppRole } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
@@ -13,7 +13,16 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   const { user, loading, role, roleLoading } = useAuth();
   const location = useLocation();
 
-  if (loading || (user && roleLoading)) {
+  // Track whether we've completed the initial auth load. Once true, we never
+  // show the full-screen spinner again — token refreshes or background role
+  // re-fetches must NOT unmount the app (would lose chat state, etc.).
+  const hasLoadedOnceRef = useRef(false);
+  const stillInitialLoading = loading || (user && roleLoading);
+  useEffect(() => {
+    if (!stillInitialLoading) hasLoadedOnceRef.current = true;
+  }, [stillInitialLoading]);
+
+  if (stillInitialLoading && !hasLoadedOnceRef.current) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
