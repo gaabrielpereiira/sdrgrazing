@@ -279,9 +279,17 @@ const Contacts: React.FC = () => {
                           {(contact.name || contact.phone || '?').substring(0, 2).toUpperCase()}
                         </div>
                         <div>
-                            <div className="font-semibold text-slate-200 group-hover:text-cyan-400 transition-colors">
-                              {contact.name || 'Sem nome'}
+                            <div className="font-semibold text-slate-200 group-hover:text-cyan-400 transition-colors flex items-center gap-1.5">
+                              <span className="truncate">{contact.name || 'Sem nome'}</span>
+                              {contact.isBusiness && (
+                                <span title="Pessoa Jurídica" className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-cyan-500/30 text-cyan-300 bg-cyan-500/10">
+                                  <Building2 className="w-2.5 h-2.5" />PJ
+                                </span>
+                              )}
                             </div>
+                            {contact.isBusiness && contact.companyName && (
+                              <div className="text-xs text-cyan-300/80 flex items-center gap-1.5 truncate"><Building2 className="w-3 h-3" />{contact.companyName}</div>
+                            )}
                             <div className="text-xs text-slate-500">{contact.phone}</div>
                         </div>
                       </div>
