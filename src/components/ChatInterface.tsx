@@ -27,6 +27,8 @@ import { useAttendantNames } from '@/hooks/useAttendantNames';
 import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picker-react';
 import { useAuth, queueForRole } from '@/hooks/useAuth';
 import { useQueueUnreadCounts } from '@/hooks/useQueueUnreadCounts';
+import { Checkbox } from './ui/checkbox';
+import { CLOSING_MESSAGE_TEXT } from '@/constants';
 import { useConversationTabCounts } from '@/hooks/useConversationTabCounts';
 
 const ChatInterface: React.FC = () => {
@@ -35,6 +37,8 @@ const ChatInterface: React.FC = () => {
   const [mainTab, setMainTab] = useState<'geral' | 'finalizadas'>('geral');
   // Non-admins keep the simpler Ativas | Finalizadas toggle on their own queue
   const [nonAdminChatTab, setNonAdminChatTab] = useState<'active' | 'finished'>('active');
+  const [endDialogOpen, setEndDialogOpen] = useState(false);
+  const [sendClosingMessage, setSendClosingMessage] = useState(true);
   const chatTab: 'active' | 'finished' = isAdmin
     ? (mainTab === 'finalizadas' ? 'finished' : 'active')
     : nonAdminChatTab;
@@ -1357,7 +1361,13 @@ const ChatInterface: React.FC = () => {
                   )
                 )}
                 {chatTab === 'active' ? (
-                  <AlertDialog>
+                  <AlertDialog
+                    open={endDialogOpen}
+                    onOpenChange={(open) => {
+                      setEndDialogOpen(open);
+                      if (open) setSendClosingMessage(true);
+                    }}
+                  >
                     <AlertDialogTrigger asChild>
                       <Button
                         variant="ghost"
@@ -1375,12 +1385,27 @@ const ChatInterface: React.FC = () => {
                           A conversa será movida para a aba "Finalizadas". Você ainda poderá consultar todo o histórico e reabrir quando quiser.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
+                      <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3 space-y-2">
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <Checkbox
+                            checked={sendClosingMessage}
+                            onCheckedChange={(v) => setSendClosingMessage(v === true)}
+                            className="mt-0.5 border-slate-600 data-[state=checked]:bg-rose-600 data-[state=checked]:border-rose-600"
+                          />
+                          <span className="text-sm text-slate-200 leading-snug">
+                            Enviar mensagem de finalização ao cliente
+                            <span className="block text-xs text-slate-500 mt-1 italic">
+                              "{CLOSING_MESSAGE_TEXT}"
+                            </span>
+                          </span>
+                        </label>
+                      </div>
                       <AlertDialogFooter>
                         <AlertDialogCancel className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700">Cancelar</AlertDialogCancel>
                         <AlertDialogAction
                           className="bg-rose-600 hover:bg-rose-500 text-white"
                           onClick={() => {
-                            if (activeChat) endConversation(activeChat.id);
+                            if (activeChat) endConversation(activeChat.id, { sendClosingMessage });
                           }}
                         >
                           Finalizar

@@ -1910,16 +1910,22 @@ export const api = {
   /**
    * Finalize a conversation (soft-close, marks as inactive)
    */
-  endConversation: async (conversationId: string): Promise<void> => {
-    // Send a short closing message to the customer before marking the conversation inactive.
-    // We reuse the regular sendMessage pipeline so the message appears in chat history,
-    // is delivered via WhatsApp, and gets the attendant name prefix.
-    try {
-      const { CLOSING_MESSAGE_TEXT } = await import('@/constants');
-      await api.sendMessage(conversationId, CLOSING_MESSAGE_TEXT);
-    } catch (closingErr) {
-      // Don't block the close action if the closing message fails to enqueue.
-      console.error('[API] Failed to send closing message, proceeding to finalize:', closingErr);
+  endConversation: async (
+    conversationId: string,
+    options?: { sendClosingMessage?: boolean },
+  ): Promise<void> => {
+    const sendClosingMessage = options?.sendClosingMessage !== false;
+    if (sendClosingMessage) {
+      // Send a short closing message to the customer before marking the conversation inactive.
+      // We reuse the regular sendMessage pipeline so the message appears in chat history,
+      // is delivered via WhatsApp, and gets the attendant name prefix.
+      try {
+        const { CLOSING_MESSAGE_TEXT } = await import('@/constants');
+        await api.sendMessage(conversationId, CLOSING_MESSAGE_TEXT);
+      } catch (closingErr) {
+        // Don't block the close action if the closing message fails to enqueue.
+        console.error('[API] Failed to send closing message, proceeding to finalize:', closingErr);
+      }
     }
 
     const { error } = await supabase
