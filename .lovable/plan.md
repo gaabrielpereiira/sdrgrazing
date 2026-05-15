@@ -1,24 +1,23 @@
-## Mostrar nome da empresa no chat
+## Ordenar conversas como o WhatsApp + abrir sempre na última mensagem
 
-Quando o contato for Pessoa Jurídica, exibir o nome da empresa no chat — discreto, em fonte menor — sempre acompanhando o nome da pessoa.
+### 1. Ordem da lista de conversas (estilo WhatsApp)
+Arquivo: `src/components/ChatInterface.tsx` (~linha 665-674)
 
-### Onde aparece
-1. **Cabeçalho do chat ativo** (`ChatInterface.tsx`): logo abaixo do nome do contato (mesma linha, sub-texto pequeno) com um ícone `Building2`.
-   - Exemplo:
-     ```
-     João Silva  [PJ] [Pendente]…
-     🏢 Acme Ltda.
-     ```
-2. **Item da lista de conversas** (sidebar): pequeno texto cinza/cyan abaixo do nome, antes do preview da última mensagem, somente quando `isBusiness && companyName`.
+Hoje a lista força conversas "pendentes" para o topo, quebrando a ordem cronológica. Vamos remover esse re-ordenamento e manter apenas a ordem por `last_message_at desc` que já vem de `useConversations` / `api.fetchConversations` (`.order('last_message_at', { ascending: false })`).
 
-### Detalhes técnicos
-- **`src/types.ts`**:
-  - Adicionar `isBusiness?: boolean` e `companyName?: string | null` em `UIConversation`.
-  - Em `transformDBToUIConversation`, popular esses campos a partir de `conv.contact?.is_business` e `conv.contact?.company_name` (já vêm via `select('*')` no `contact:contacts(*)`).
-- **`src/components/ChatInterface.tsx`**:
-  - Cabeçalho (área do `<h2>` do contato): manter o nome no `<h2>`. Logo abaixo, renderizar condicionalmente `<div class="text-[11px] text-cyan-300/70 flex items-center gap-1"><Building2 className="w-3 h-3" />{activeChat.companyName}</div>` quando `activeChat.isBusiness && activeChat.companyName`.
-  - Item da lista (sidebar): após `<h3>` do `contactName`, adicionar `<p class="text-[10px] text-cyan-300/70 truncate flex items-center gap-1">…</p>` condicional, mantendo o preview de última mensagem inalterado.
+- Remover o `.map(...).sort(...).map(...)` que prioriza `isPending`.
+- Manter somente o `.filter(...)` de busca, deixando a ordem natural (mais recente primeiro), igual ao WhatsApp.
+
+### 2. Abrir conversa sempre rolada na última mensagem
+Arquivo: `src/components/ChatInterface.tsx` (~linha 406-418)
+
+Hoje `scrollToBottom()` usa `behavior: 'smooth'`, e ao trocar de conversa isso causa animação (e às vezes não chega ao fim antes do render). Ajustes:
+
+- Criar `scrollToBottom(instant = false)` aceitando comportamento.
+- No `useEffect` disparado por `activeChat?.id` / `selectedChatId` (abrir conversa): chamar `scrollToBottom(true)` com `behavior: 'auto'` e fazer isso dentro de um `requestAnimationFrame` (ou pequeno `setTimeout`) para garantir que o DOM das mensagens já renderizou. Pode rodar 2x (rAF aninhado) para cobrir o caso de mensagens carregadas async.
+- Manter o `useEffect` de novas mensagens (`activeChat?.messages`) com scroll suave (comportamento atual), para que mensagens novas durante a conversa continuem deslizando.
 
 ### Fora do escopo
-- Tornar o nome da empresa editável a partir do chat (já é editável no modal "Editar Contato").
-- Mostrar a empresa em outras telas (CRM, Dashboard, etc.).
+- Mudanças de backend, RLS ou nas queries de `useConversations`.
+- Lógica de "não-lidas" / badges / contadores.
+- Mudança visual da lista além da ordem.
