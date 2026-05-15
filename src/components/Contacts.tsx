@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Search, Filter, MoreHorizontal, UserPlus, MessageSquare, Loader2, Mail, Phone, Users, X, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Search, Filter, MoreHorizontal, UserPlus, MessageSquare, Loader2, Mail, Phone, Users, X, Pencil, Trash2, AlertTriangle, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from './Button';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { api } from '../services/api';
 import { Contact } from '../types';
+import { COUNTRIES, DEFAULT_COUNTRY_CODE, getCountry } from '../lib/countries';
 
 const Contacts: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
