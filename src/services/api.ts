@@ -2079,7 +2079,21 @@ export const api = {
       // Limpa filas vinculadas à conversa antes de apagar mensagens (evita FK errors)
       await supabase.from('send_queue').delete().in('conversation_id', convIds);
       await supabase.from('nina_processing_queue').delete().in('conversation_id', convIds);
-      
+
+      // Limpa filas que referenciam mensagens via whatsapp_message_id (sem FK direto)
+      const { data: msgs } = await supabase
+        .from('messages')
+        .select('whatsapp_message_id')
+        .in('conversation_id', convIds)
+        .not('whatsapp_message_id', 'is', null);
+      const wamids = (msgs || [])
+        .map((m: any) => m.whatsapp_message_id)
+        .filter(Boolean);
+      if (wamids.length > 0) {
+        await supabase.from('message_processing_queue').delete().in('whatsapp_message_id', wamids);
+        await supabase.from('message_grouping_queue').delete().in('whatsapp_message_id', wamids);
+      }
+
       await supabase.from('messages').delete().in('conversation_id', convIds);
       await supabase.from('conversation_states').delete().in('conversation_id', convIds);
     }
