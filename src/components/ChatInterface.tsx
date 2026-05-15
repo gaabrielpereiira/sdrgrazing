@@ -94,6 +94,13 @@ const ChatInterface: React.FC = () => {
   const [nameDraft, setNameDraft] = useState('');
   const [savingName, setSavingName] = useState(false);
 
+  // Inline contact field editing (sidebar panel)
+  type EditableField = 'name' | 'email' | 'company';
+  const [editingField, setEditingField] = useState<EditableField | null>(null);
+  const [fieldDraft, setFieldDraft] = useState('');
+  const [savingField, setSavingField] = useState(false);
+  const [savingBusinessToggle, setSavingBusinessToggle] = useState(false);
+
   // Audio player state
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [audioDurations, setAudioDurations] = useState<Record<string, number>>({});
