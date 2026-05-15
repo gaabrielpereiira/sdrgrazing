@@ -441,7 +441,9 @@ export const api = {
       phone: c.phone_number,
       email: c.email || '',
       status: 'lead' as const, // Map from tags or client_memory in future
-      lastContact: new Date(c.last_activity).toLocaleDateString('pt-BR')
+      lastContact: new Date(c.last_activity).toLocaleDateString('pt-BR'),
+      isBusiness: !!(c as any).is_business,
+      companyName: (c as any).company_name ?? null,
     }));
   },
 
