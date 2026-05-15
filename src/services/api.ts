@@ -2079,7 +2079,7 @@ export const api = {
       // Limpa filas vinculadas à conversa antes de apagar mensagens (evita FK errors)
       await supabase.from('send_queue').delete().in('conversation_id', convIds);
       await supabase.from('nina_processing_queue').delete().in('conversation_id', convIds);
-      await supabase.from('message_processing_queue').delete().in('phone_number_id', ['__noop__']);
+      
       await supabase.from('messages').delete().in('conversation_id', convIds);
       await supabase.from('conversation_states').delete().in('conversation_id', convIds);
     }
