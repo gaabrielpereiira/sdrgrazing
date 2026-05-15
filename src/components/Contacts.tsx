@@ -87,12 +87,22 @@ const Contacts: React.FC = () => {
       return;
     }
     const fullPhone = `${country.dial}${localDigits}`;
+    if (form.isBusiness && !form.companyName.trim()) {
+      toast.error('Informe o nome da empresa');
+      return;
+    }
     setCreating(true);
     try {
-      const newContact = await api.createContact({ name: form.name, email: form.email, phone: fullPhone });
+      const newContact = await api.createContact({
+        name: form.name,
+        email: form.email,
+        phone: fullPhone,
+        isBusiness: form.isBusiness,
+        companyName: form.isBusiness ? form.companyName : null,
+      });
       setContacts(prev => [newContact, ...prev]);
       toast.success('Contato criado com sucesso');
-      setForm({ name: '', phone: '', email: '', countryCode: DEFAULT_COUNTRY_CODE });
+      setForm({ name: '', phone: '', email: '', countryCode: DEFAULT_COUNTRY_CODE, isBusiness: false, companyName: '' });
       setShowCreate(false);
     } catch (err: any) {
       console.error(err);
