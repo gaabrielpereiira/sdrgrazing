@@ -639,11 +639,14 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
   }, [conversations]);
 
   // Finalize a conversation (close)
-  const endConversation = useCallback(async (conversationId: string) => {
+  const endConversation = useCallback(async (
+    conversationId: string,
+    options?: { sendClosingMessage?: boolean },
+  ) => {
     // Optimistic: remove from current view
     setConversationsTracked(prev => prev.filter(c => c.id !== conversationId));
     try {
-      await api.endConversation(conversationId);
+      await api.endConversation(conversationId, options);
       toast.success('Conversa finalizada');
     } catch (err) {
       console.error('[useConversations] Error ending conversation:', err);
