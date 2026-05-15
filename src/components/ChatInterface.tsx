@@ -663,17 +663,8 @@ const ChatInterface: React.FC = () => {
         chat.contactPhone.includes(query) ||
         chat.lastMessage.toLowerCase().includes(query)
       );
-    })
-    // Ordenação estável: pendentes primeiro, demais mantêm a ordem por last_message_at
-    // que já vem do hook useConversations.
-    .map((chat, index) => ({ chat, index }))
-    .sort((a, b) => {
-      const pa = isPending(a.chat) ? 1 : 0;
-      const pb = isPending(b.chat) ? 1 : 0;
-      if (pa !== pb) return pb - pa;
-      return a.index - b.index;
-    })
-    .map(({ chat }) => chat);
+    });
+    // Ordem natural por last_message_at desc (igual WhatsApp), já vinda do hook.
 
   const renderStatusBadge = (status: ConversationStatus) => {
     const config = {
