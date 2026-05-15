@@ -1,24 +1,29 @@
-## Finalizar conversa sem enviar mensagem de finalização
+## Problema
 
-Hoje "Finalizar" sempre dispara a `CLOSING_MESSAGE_TEXT` antes de marcar a conversa como inativa. Adicionar a opção de finalizar **sem** enviar essa mensagem.
+Ao excluir um contato, o erro:
+```
+update or delete on table "messages" violates foreign key constraint "send_queue_message_id_fkey" on table "send_queue"
+```
+acontece porque `send_queue.message_id` referencia `messages.id` sem `ON DELETE`. Quando `deleteContact` apaga as mensagens da conversa, qualquer linha de `send_queue` apontando para elas bloqueia a operação.
 
-### 1. API
-`src/services/api.ts` — `endConversation(conversationId)`:
-- Aceitar segundo parâmetro `options?: { sendClosingMessage?: boolean }` (default `true`, mantém comportamento atual).
-- Só chamar `api.sendMessage(...CLOSING_MESSAGE_TEXT)` quando `sendClosingMessage !== false`.
+## Plano
 
-### 2. Hook
-`src/hooks/useConversations.ts` — `endConversation`:
-- Repassar o mesmo segundo parâmetro `options` para `api.endConversation`.
+**1. Migration no banco** (`supabase--migration`)
+- Alterar a FK `send_queue_message_id_fkey` para `ON DELETE SET NULL` (preserva histórico do envio, apenas perde o link).
+- Pelo mesmo motivo, garantir o mesmo comportamento em outras FKs que apontam para `messages` se existirem (ex.: `messages.reply_to_id` self-ref → `ON DELETE SET NULL`).
 
-### 3. UI (diálogo de finalização)
-`src/components/ChatInterface.tsx` (~linha 1370-1389):
-- No `AlertDialog` de "Finalizar esta conversa?", adicionar um `Checkbox` (`shadcn/ui`) marcado por padrão: **"Enviar mensagem de finalização ao cliente"**.
-- Texto auxiliar discreto: prévia do texto que seria enviado (`CLOSING_MESSAGE_TEXT`, truncada).
-- Ao confirmar, chamar `endConversation(activeChat.id, { sendClosingMessage: checked })`.
-- Manter estado local do checkbox no componente do diálogo (resetar para `true` ao abrir).
+**2. Reforço no `deleteContact` (`src/services/api.ts`)**
+Antes de deletar `messages`, limpar/desvincular filas relacionadas à conversa:
+- `send_queue`: deletar linhas onde `conversation_id IN (convIds)` (filas de envio do contato perdem sentido).
+- `nina_processing_queue`: deletar onde `conversation_id IN (convIds)`.
+- `message_processing_queue` e `message_grouping_queue`: deletar por `message_id IN (msgIds)` ou onde possível.
 
-### Fora do escopo
-- Editar o texto de finalização padrão.
-- Lembrar a preferência do usuário entre conversas (sempre volta marcado).
-- Mudar fluxo de "Reabrir".
+Isso evita futuros erros de FK e remove resíduos de processamento ligados ao contato.
+
+**3. Validação**
+- Após a migration, repetir a exclusão pelo modal "Excluir contato" e confirmar sucesso (sem erro de FK).
+- Conferir no console que nenhuma das tabelas de fila retém linhas órfãs do contato.
+
+## Fora do escopo
+- Mudanças no fluxo de envio de mensagens.
+- Soft delete de contatos.
