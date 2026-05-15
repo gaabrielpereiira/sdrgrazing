@@ -20,27 +20,34 @@ const AutomationsDashboard: React.FC = () => {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [rules, setRules] = useState<RuleRow[]>([]);
 
-  useEffect(() => {
-    let cancel = false;
-    (async () => {
-      setLoading(true);
-      const hours = RANGES.find(r => r.value === range)!.hours;
-      const since = new Date(Date.now() - hours * 3600_000).toISOString();
-      const [logsRes, eventsRes, rulesRes] = await Promise.all([
-        supabase.from('automation_logs').select('status, executed_at, rule_id')
-          .gte('executed_at', since).order('executed_at', { ascending: false }).limit(2000),
-        supabase.from('webhook_events').select('topic, received_at, processed, retry_count')
-          .gte('received_at', since).order('received_at', { ascending: false }).limit(2000),
-        supabase.from('automation_rules').select('id, name, active'),
-      ]);
-      if (cancel) return;
-      setLogs((logsRes.data as any) || []);
-      setEvents((eventsRes.data as any) || []);
-      setRules((rulesRes.data as any) || []);
-      setLoading(false);
-    })();
-    return () => { cancel = true; };
+  const load = React.useCallback(async () => {
+    const hours = RANGES.find(r => r.value === range)!.hours;
+    const since = new Date(Date.now() - hours * 3600_000).toISOString();
+    const [logsRes, eventsRes, rulesRes] = await Promise.all([
+      supabase.from('automation_logs').select('status, executed_at, rule_id')
+        .gte('executed_at', since).order('executed_at', { ascending: false }).limit(2000),
+      supabase.from('webhook_events').select('topic, received_at, processed, retry_count')
+        .gte('received_at', since).order('received_at', { ascending: false }).limit(2000),
+      supabase.from('automation_rules').select('id, name, active'),
+    ]);
+    setLogs((logsRes.data as any) || []);
+    setEvents((eventsRes.data as any) || []);
+    setRules((rulesRes.data as any) || []);
+    setLoading(false);
   }, [range]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Background realtime updates (no spinner)
+  useEffect(() => {
+    const ch = supabase
+      .channel('automations-dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_logs' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'webhook_events' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'automation_rules' }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [load]);
 
   const stats = useMemo(() => {
     const total = logs.length;
