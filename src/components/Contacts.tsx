@@ -131,7 +131,8 @@ const Contacts: React.FC = () => {
     return (
       (c.name?.toLowerCase() || '').includes(term) ||
       (c.phone || '').includes(term) ||
-      (c.email?.toLowerCase() || '').includes(term)
+      (c.email?.toLowerCase() || '').includes(term) ||
+      (c.companyName?.toLowerCase() || '').includes(term)
     );
   });
 
