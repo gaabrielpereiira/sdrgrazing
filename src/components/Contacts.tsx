@@ -236,6 +236,9 @@ const Contacts: React.FC = () => {
                         {contact.status === 'customer' ? 'Cliente' : contact.status === 'lead' ? 'Lead' : 'Churned'}
                       </span>
                     </div>
+                    {contact.isBusiness && contact.companyName && (
+                      <div className="text-xs text-cyan-300/80 mt-0.5 flex items-center gap-1.5 truncate"><Building2 className="w-3 h-3" />{contact.companyName}</div>
+                    )}
                     <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5"><Phone className="w-3 h-3" />{contact.phone}</div>
                     {contact.email && (
                       <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 truncate"><Mail className="w-3 h-3" />{contact.email}</div>
