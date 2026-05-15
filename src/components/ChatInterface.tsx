@@ -796,7 +796,7 @@ const ChatInterface: React.FC = () => {
             />
           </a>
           {msg.content && msg.content !== '[imagem recebida]' && (
-            <p className="text-xs mt-1.5 opacity-90">{msg.content}</p>
+            <p className="text-xs mt-1.5 opacity-90">{renderTextWithLinks(msg.content)}</p>
           )}
         </div>
       );
