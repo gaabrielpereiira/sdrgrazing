@@ -1416,14 +1416,119 @@ export const api = {
   },
 
   /** Move a conversation to a different queue ('sales' | 'support'). */
-  moveConversationQueue: async (conversationId: string, queue: 'sales' | 'support'): Promise<void> => {
+  moveConversationQueue: async (
+    conversationId: string,
+    queue: 'sales' | 'support',
+    opts?: { reasonKey?: string | null }
+  ): Promise<void> => {
+    // Fetch current tags so we can add/remove `motivo:*` tags accordingly
+    const { data: current, error: fetchErr } = await supabase
+      .from('conversations')
+      .select('tags')
+      .eq('id', conversationId)
+      .maybeSingle();
+    if (fetchErr) {
+      console.error('[API] Error reading conversation tags:', fetchErr);
+      throw fetchErr;
+    }
+
+    const currentTags: string[] = Array.isArray(current?.tags) ? current!.tags as string[] : [];
+    // Strip any existing motivo:* tags
+    let nextTags = currentTags.filter((t) => !t.startsWith('motivo:'));
+    if (queue === 'support') {
+      const key = opts?.reasonKey || 'nao_classificado';
+      nextTags = [...nextTags, `motivo:${key}`];
+    }
+
     const { error } = await supabase
       .from('conversations')
-      .update({ queue, updated_at: new Date().toISOString() })
+      .update({ queue, tags: nextTags, updated_at: new Date().toISOString() })
       .eq('id', conversationId);
     if (error) {
       console.error('[API] Error moving conversation queue:', error);
       throw error;
+    }
+  },
+
+  /**
+   * Aggregate support ticket counts and reason breakdown for the dashboard.
+   */
+  fetchSupportSummary: async (
+    days: number = 1
+  ): Promise<{
+    total: number;
+    active: number;
+    finished: number;
+    trend: string;
+    trendUp: boolean;
+    reasons: { key: string; label: string; count: number }[];
+  }> => {
+    const periodStart = new Date();
+    periodStart.setDate(periodStart.getDate() - (days - 1));
+    periodStart.setHours(0, 0, 0, 0);
+    const periodStartStr = periodStart.toISOString();
+
+    const prevPeriodEnd = new Date(periodStart);
+    prevPeriodEnd.setMilliseconds(-1);
+    const prevPeriodStart = new Date(periodStart);
+    prevPeriodStart.setDate(prevPeriodStart.getDate() - days);
+    const prevPeriodStartStr = prevPeriodStart.toISOString();
+    const prevPeriodEndStr = prevPeriodEnd.toISOString();
+
+    try {
+      const { labelForReasonKey } = await import('@/lib/supportReasons');
+
+      const [periodRes, prevRes] = await Promise.all([
+        supabase
+          .from('conversations')
+          .select('id, is_active, tags')
+          .eq('queue', 'support')
+          .gte('started_at', periodStartStr),
+        supabase
+          .from('conversations')
+          .select('id', { count: 'exact', head: true })
+          .eq('queue', 'support')
+          .gte('started_at', prevPeriodStartStr)
+          .lt('started_at', periodStartStr),
+      ]);
+
+      const rows = (periodRes.data || []) as Array<{ id: string; is_active: boolean; tags: string[] | null }>;
+      const total = rows.length;
+      const active = rows.filter((r) => r.is_active).length;
+      const finished = total - active;
+      const prevTotal = prevRes.count || 0;
+
+      // Aggregate motivo:* tags
+      const counts = new Map<string, number>();
+      for (const r of rows) {
+        const tags = Array.isArray(r.tags) ? r.tags : [];
+        const motivos = tags.filter((t) => typeof t === 'string' && t.startsWith('motivo:'));
+        if (motivos.length === 0) {
+          counts.set('nao_classificado', (counts.get('nao_classificado') || 0) + 1);
+        } else {
+          for (const m of motivos) {
+            const key = m.slice('motivo:'.length);
+            counts.set(key, (counts.get(key) || 0) + 1);
+          }
+        }
+      }
+
+      const reasons = Array.from(counts.entries())
+        .map(([key, count]) => ({ key, label: labelForReasonKey(key), count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6);
+
+      return {
+        total,
+        active,
+        finished,
+        trend: calculateTrend(total, prevTotal),
+        trendUp: total >= prevTotal,
+        reasons,
+      };
+    } catch (error) {
+      console.error('[API] Error fetching support summary:', error);
+      return { total: 0, active: 0, finished: 0, trend: '0%', trendUp: true, reasons: [] };
     }
   },
 
