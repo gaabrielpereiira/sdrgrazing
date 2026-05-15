@@ -27,6 +27,8 @@ import { useAttendantNames } from '@/hooks/useAttendantNames';
 import EmojiPicker, { Theme, EmojiStyle, type EmojiClickData } from 'emoji-picker-react';
 import { useAuth, queueForRole } from '@/hooks/useAuth';
 import { useQueueUnreadCounts } from '@/hooks/useQueueUnreadCounts';
+import { Checkbox } from './ui/checkbox';
+import { CLOSING_MESSAGE_TEXT } from '@/constants';
 import { useConversationTabCounts } from '@/hooks/useConversationTabCounts';
 
 const ChatInterface: React.FC = () => {
