@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, DollarSign, MessageSquare, Users, Loader2, TrendingUp, TrendingDown, ArrowUpRight } from 'lucide-react';
+import { Activity, DollarSign, MessageSquare, Users, Loader2, TrendingUp, TrendingDown, ArrowUpRight, LifeBuoy } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { StatMetric } from '../types';
 import { api } from '../services/api';
@@ -29,6 +29,14 @@ const periodDays: Record<PeriodFilter, number> = {
 const Dashboard: React.FC = () => {
   const [metrics, setMetrics] = useState<StatMetric[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
+  const [support, setSupport] = useState<{
+    total: number;
+    active: number;
+    finished: number;
+    trend: string;
+    trendUp: boolean;
+    reasons: { key: string; label: string; count: number }[];
+  }>({ total: 0, active: 0, finished: 0, trend: '0%', trendUp: true, reasons: [] });
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<PeriodFilter>('today');
   const { setShowOnboarding } = useOutletContext<OutletContext>();
@@ -38,12 +46,14 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       try {
         const days = periodDays[period];
-        const [metricsData, chartDataResponse] = await Promise.all([
+        const [metricsData, chartDataResponse, supportData] = await Promise.all([
           api.fetchDashboardMetrics(days),
-          api.fetchChartData(days)
+          api.fetchChartData(days),
+          api.fetchSupportSummary(days),
         ]);
         setMetrics(metricsData);
         setChartData(chartDataResponse);
+        setSupport(supportData);
       } catch (error) {
         console.error("Erro ao carregar dashboard:", error);
       } finally {
@@ -149,6 +159,72 @@ const Dashboard: React.FC = () => {
             <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-white/5 blur-2xl rounded-full group-hover:bg-white/10 transition-all"></div>
           </div>
         ))}
+      </div>
+
+      {/* Support Section */}
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-7">
+        {/* Support KPI */}
+        <div className="md:col-span-3 relative overflow-hidden rounded-2xl border border-rose-500/20 bg-gradient-to-br from-rose-500/10 to-rose-500/5 p-6 shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-sm font-medium text-slate-400">
+              Tickets de suporte ({periodLabels[period]})
+            </div>
+            <div className="p-2 rounded-lg bg-slate-800/50 border border-slate-700/50">
+              <LifeBuoy className="h-5 w-5 text-rose-400" />
+            </div>
+          </div>
+          <div className="flex items-end justify-between mb-4">
+            <div className="text-4xl font-bold text-white tracking-tight">{support.total}</div>
+            <div className={`flex items-center text-xs font-medium px-2 py-1 rounded-full ${support.trendUp ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+              {support.trendUp ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+              {support.trend}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="px-2 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">
+              {support.active} ativos
+            </span>
+            <span className="px-2 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-medium">
+              {support.finished} finalizados
+            </span>
+          </div>
+          <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-rose-500/10 blur-2xl rounded-full"></div>
+        </div>
+
+        {/* Reasons */}
+        <div className="md:col-span-4 rounded-2xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm p-4 sm:p-6 shadow-lg">
+          <div className="mb-5">
+            <h3 className="text-lg font-semibold text-white">Principais motivos de suporte</h3>
+            <p className="text-sm text-slate-400">Top categorias de tickets no período</p>
+          </div>
+          {support.reasons.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <LifeBuoy className="w-8 h-8 text-slate-600 mb-2" />
+              <p className="text-sm text-slate-500">Nenhum ticket de suporte no período</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {support.reasons.map((r) => {
+                const max = Math.max(...support.reasons.map((x) => x.count), 1);
+                const pct = Math.max((r.count / max) * 100, 4);
+                return (
+                  <div key={r.key} className="group">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-medium text-slate-300">{r.label}</span>
+                      <span className="text-sm font-bold text-white">{r.count}</span>
+                    </div>
+                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-rose-600 to-rose-400 rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Charts Section */}

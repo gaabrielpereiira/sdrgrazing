@@ -13,6 +13,7 @@ import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { api } from '@/services/api';
 import { TagSelector } from './TagSelector';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { SUPPORT_REASONS } from '@/lib/supportReasons';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -1296,23 +1297,58 @@ const ChatInterface: React.FC = () => {
                 </Button>
                 <div className="h-6 w-px bg-slate-800 mx-1"></div>
                 {isAdmin && activeChat && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-slate-400 hover:text-cyan-400 text-xs px-2"
-                    title={effectiveQueue === 'sales' ? 'Mover para Suporte' : 'Mover para Atendimento'}
-                    onClick={async () => {
-                      try {
-                        const target: 'sales' | 'support' = effectiveQueue === 'sales' ? 'support' : 'sales';
-                        await api.moveConversationQueue(activeChat.id, target);
-                        toast.success(`Conversa movida para ${target === 'support' ? 'Suporte' : 'Atendimento'}`);
-                      } catch {
-                        toast.error('Não foi possível mover a conversa');
-                      }
-                    }}
-                  >
-                    {effectiveQueue === 'sales' ? '→ Suporte' : '→ Atendimento'}
-                  </Button>
+                  effectiveQueue === 'sales' ? (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-slate-400 hover:text-rose-400 text-xs px-2"
+                          title="Mover para Suporte"
+                        >
+                          → Suporte
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-64 bg-slate-900 border-slate-800 p-3">
+                        <p className="text-xs font-medium text-slate-300 mb-2">Motivo do suporte</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {SUPPORT_REASONS.map((r) => (
+                            <button
+                              key={r.key}
+                              onClick={async () => {
+                                try {
+                                  await api.moveConversationQueue(activeChat.id, 'support', { reasonKey: r.key });
+                                  toast.success(`Movida para Suporte • ${r.label}`);
+                                } catch {
+                                  toast.error('Não foi possível mover a conversa');
+                                }
+                              }}
+                              className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 hover:bg-rose-500/20 hover:text-rose-300 text-slate-300 border border-slate-700 hover:border-rose-500/40 transition-colors"
+                            >
+                              {r.label}
+                            </button>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-slate-400 hover:text-cyan-400 text-xs px-2"
+                      title="Mover para Atendimento"
+                      onClick={async () => {
+                        try {
+                          await api.moveConversationQueue(activeChat.id, 'sales');
+                          toast.success('Conversa movida para Atendimento');
+                        } catch {
+                          toast.error('Não foi possível mover a conversa');
+                        }
+                      }}
+                    >
+                      → Atendimento
+                    </Button>
+                  )
                 )}
                 {chatTab === 'active' ? (
                   <AlertDialog>
