@@ -371,6 +371,16 @@ serve(async (req) => {
                 is_sticker: isSticker,
                 is_contacts: isContacts,
                 contacts: contactsPayload,
+                interactive: message.type === 'interactive' ? (() => {
+                  const inter = message.interactive || {};
+                  if (inter.type === 'button_reply') {
+                    return { kind: 'button_reply', id: inter.button_reply?.id || null, title: inter.button_reply?.title || '' };
+                  }
+                  if (inter.type === 'list_reply') {
+                    return { kind: 'list_reply', id: inter.list_reply?.id || null, title: inter.list_reply?.title || '', description: inter.list_reply?.description || null };
+                  }
+                  return { kind: inter.type || 'unknown' };
+                })() : null,
                 media_id: message.audio?.id || message.image?.id || message.video?.id || message.document?.id || message.sticker?.id || null
               }
             })
