@@ -14,6 +14,7 @@ import { api } from '@/services/api';
 import { TagSelector } from './TagSelector';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { SUPPORT_REASONS } from '@/lib/supportReasons';
+import { renderTextWithLinks } from '@/lib/linkify';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -795,7 +796,7 @@ const ChatInterface: React.FC = () => {
             />
           </a>
           {msg.content && msg.content !== '[imagem recebida]' && (
-            <p className="text-xs mt-1.5 opacity-90">{msg.content}</p>
+            <p className="text-xs mt-1.5 opacity-90">{renderTextWithLinks(msg.content)}</p>
           )}
         </div>
       );
@@ -950,7 +951,7 @@ const ChatInterface: React.FC = () => {
       );
     }
 
-    return <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>;
+    return <p className="leading-relaxed whitespace-pre-wrap">{renderTextWithLinks(msg.content || '')}</p>;
   };
 
   if (loading) {
