@@ -403,15 +403,17 @@ const ChatInterface: React.FC = () => {
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (instant = false) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'auto' : 'smooth' });
   };
 
   useEffect(() => {
-    if (activeChat) {
-      scrollToBottom();
-    }
-  }, [activeChat?.id, selectedChatId]); 
+    if (!activeChat) return;
+    // Garantir que o DOM das mensagens já renderizou antes de rolar
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollToBottom(true));
+    });
+  }, [activeChat?.id, selectedChatId]);
 
   useEffect(() => {
     scrollToBottom();
