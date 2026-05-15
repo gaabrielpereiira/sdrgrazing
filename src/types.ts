@@ -88,6 +88,8 @@ export interface Contact {
   email: string;
   status: 'lead' | 'customer' | 'churned';
   lastContact: string;
+  isBusiness?: boolean;
+  companyName?: string | null;
 }
 
 export interface StatMetric {

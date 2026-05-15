@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, Filter, MoreHorizontal, UserPlus, MessageSquare, Loader2, Mail, Phone, Users, X, Pencil, Trash2, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, UserPlus, MessageSquare, Loader2, Mail, Phone, Users, X, Pencil, Trash2, AlertTriangle, ChevronDown, User, Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from './Button';
@@ -14,11 +14,11 @@ const Contacts: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', countryCode: DEFAULT_COUNTRY_CODE });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', countryCode: DEFAULT_COUNTRY_CODE, isBusiness: false, companyName: '' });
   const [countrySearch, setCountrySearch] = useState('');
   const [countryOpen, setCountryOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', email: '' });
+  const [editForm, setEditForm] = useState({ name: '', email: '', isBusiness: false, companyName: '' });
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingContact, setDeletingContact] = useState<Contact | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -42,7 +42,12 @@ const Contacts: React.FC = () => {
 
   const openEdit = (contact: Contact) => {
     setEditingContact(contact);
-    setEditForm({ name: contact.name || '', email: contact.email || '' });
+    setEditForm({
+      name: contact.name || '',
+      email: contact.email || '',
+      isBusiness: !!contact.isBusiness,
+      companyName: contact.companyName || '',
+    });
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -50,8 +55,19 @@ const Contacts: React.FC = () => {
     if (!editingContact) return;
     setSavingEdit(true);
     try {
-      await api.updateContact(editingContact.id, { name: editForm.name, email: editForm.email });
-      setContacts(prev => prev.map(c => c.id === editingContact.id ? { ...c, name: editForm.name, email: editForm.email } : c));
+      await api.updateContact(editingContact.id, {
+        name: editForm.name,
+        email: editForm.email,
+        isBusiness: editForm.isBusiness,
+        companyName: editForm.isBusiness ? editForm.companyName : null,
+      });
+      setContacts(prev => prev.map(c => c.id === editingContact.id ? {
+        ...c,
+        name: editForm.name,
+        email: editForm.email,
+        isBusiness: editForm.isBusiness,
+        companyName: editForm.isBusiness ? editForm.companyName : null,
+      } : c));
       toast.success('Contato atualizado');
       setEditingContact(null);
     } catch (err: any) {
@@ -71,12 +87,22 @@ const Contacts: React.FC = () => {
       return;
     }
     const fullPhone = `${country.dial}${localDigits}`;
+    if (form.isBusiness && !form.companyName.trim()) {
+      toast.error('Informe o nome da empresa');
+      return;
+    }
     setCreating(true);
     try {
-      const newContact = await api.createContact({ name: form.name, email: form.email, phone: fullPhone });
+      const newContact = await api.createContact({
+        name: form.name,
+        email: form.email,
+        phone: fullPhone,
+        isBusiness: form.isBusiness,
+        companyName: form.isBusiness ? form.companyName : null,
+      });
       setContacts(prev => [newContact, ...prev]);
       toast.success('Contato criado com sucesso');
-      setForm({ name: '', phone: '', email: '', countryCode: DEFAULT_COUNTRY_CODE });
+      setForm({ name: '', phone: '', email: '', countryCode: DEFAULT_COUNTRY_CODE, isBusiness: false, companyName: '' });
       setShowCreate(false);
     } catch (err: any) {
       console.error(err);
@@ -105,7 +131,8 @@ const Contacts: React.FC = () => {
     return (
       (c.name?.toLowerCase() || '').includes(term) ||
       (c.phone || '').includes(term) ||
-      (c.email?.toLowerCase() || '').includes(term)
+      (c.email?.toLowerCase() || '').includes(term) ||
+      (c.companyName?.toLowerCase() || '').includes(term)
     );
   });
 
@@ -198,11 +225,21 @@ const Contacts: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="font-semibold text-slate-200 truncate">{contact.name || 'Sem nome'}</div>
+                      <div className="font-semibold text-slate-200 truncate flex items-center gap-1.5">
+                        <span className="truncate">{contact.name || 'Sem nome'}</span>
+                        {contact.isBusiness && (
+                          <span title="Pessoa Jurídica" className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-cyan-500/30 text-cyan-300 bg-cyan-500/10">
+                            <Building2 className="w-2.5 h-2.5" />PJ
+                          </span>
+                        )}
+                      </div>
                       <span className={`shrink-0 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${getStatusColor(contact.status)}`}>
                         {contact.status === 'customer' ? 'Cliente' : contact.status === 'lead' ? 'Lead' : 'Churned'}
                       </span>
                     </div>
+                    {contact.isBusiness && contact.companyName && (
+                      <div className="text-xs text-cyan-300/80 mt-0.5 flex items-center gap-1.5 truncate"><Building2 className="w-3 h-3" />{contact.companyName}</div>
+                    )}
                     <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5"><Phone className="w-3 h-3" />{contact.phone}</div>
                     {contact.email && (
                       <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 truncate"><Mail className="w-3 h-3" />{contact.email}</div>
@@ -243,9 +280,17 @@ const Contacts: React.FC = () => {
                           {(contact.name || contact.phone || '?').substring(0, 2).toUpperCase()}
                         </div>
                         <div>
-                            <div className="font-semibold text-slate-200 group-hover:text-cyan-400 transition-colors">
-                              {contact.name || 'Sem nome'}
+                            <div className="font-semibold text-slate-200 group-hover:text-cyan-400 transition-colors flex items-center gap-1.5">
+                              <span className="truncate">{contact.name || 'Sem nome'}</span>
+                              {contact.isBusiness && (
+                                <span title="Pessoa Jurídica" className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-cyan-500/30 text-cyan-300 bg-cyan-500/10">
+                                  <Building2 className="w-2.5 h-2.5" />PJ
+                                </span>
+                              )}
                             </div>
+                            {contact.isBusiness && contact.companyName && (
+                              <div className="text-xs text-cyan-300/80 flex items-center gap-1.5 truncate"><Building2 className="w-3 h-3" />{contact.companyName}</div>
+                            )}
                             <div className="text-xs text-slate-500">{contact.phone}</div>
                         </div>
                       </div>
@@ -340,7 +385,32 @@ const Contacts: React.FC = () => {
             </div>
             <form onSubmit={handleCreate} className="px-6 py-5 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Nome</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Tipo de contato</label>
+                <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-slate-950 border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, isBusiness: false })}
+                    className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                      !form.isBusiness ? 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <User className="w-4 h-4" /> Pessoa Física
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, isBusiness: true })}
+                    className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                      form.isBusiness ? 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Building2 className="w-4 h-4" /> Pessoa Jurídica
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  {form.isBusiness ? 'Nome do contato' : 'Nome'}
+                </label>
                 <input
                   type="text"
                   value={form.name}
@@ -349,6 +419,20 @@ const Contacts: React.FC = () => {
                   className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
                 />
               </div>
+              {form.isBusiness && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                    Nome da empresa <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.companyName}
+                    onChange={(e) => setForm({ ...form, companyName: e.target.value })}
+                    placeholder="Ex: Acme Ltda."
+                    className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">
                   Telefone <span className="text-rose-400">*</span>
@@ -475,7 +559,32 @@ const Contacts: React.FC = () => {
             </div>
             <form onSubmit={handleSaveEdit} className="px-6 py-5 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Nome</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Tipo de contato</label>
+                <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-slate-950 border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setEditForm({ ...editForm, isBusiness: false })}
+                    className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                      !editForm.isBusiness ? 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <User className="w-4 h-4" /> Pessoa Física
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditForm({ ...editForm, isBusiness: true })}
+                    className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                      editForm.isBusiness ? 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Building2 className="w-4 h-4" /> Pessoa Jurídica
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  {editForm.isBusiness ? 'Nome do contato' : 'Nome'}
+                </label>
                 <input
                   type="text"
                   value={editForm.name}
@@ -485,6 +594,20 @@ const Contacts: React.FC = () => {
                   autoFocus
                 />
               </div>
+              {editForm.isBusiness && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                    Nome da empresa <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.companyName}
+                    onChange={(e) => setEditForm({ ...editForm, companyName: e.target.value })}
+                    placeholder="Ex: Acme Ltda."
+                    className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Telefone</label>
                 <input
