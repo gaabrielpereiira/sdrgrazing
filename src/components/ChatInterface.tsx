@@ -1270,6 +1270,12 @@ const ChatInterface: React.FC = () => {
                       </span>
                     ) : null}
                   </h2>
+                  {activeChat.isBusiness && activeChat.companyName && (
+                    <p className="text-[11px] text-cyan-300/70 font-medium flex items-center gap-1 mt-0.5">
+                      <Building2 className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{activeChat.companyName}</span>
+                    </p>
+                  )}
                   <p className="text-xs text-cyan-500 font-medium">{activeChat.contactPhone}</p>
                 </div>
               </div>
