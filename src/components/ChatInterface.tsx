@@ -29,10 +29,8 @@ import { useConversationTabCounts } from '@/hooks/useConversationTabCounts';
 
 const ChatInterface: React.FC = () => {
   const { role, isAdmin } = useAuth();
-  // Admins see a single 3-tab row: Atendimento | Suporte | Finalizadas
-  const [mainTab, setMainTab] = useState<'atendimento' | 'suporte' | 'finalizadas'>(
-    queueForRole(role) === 'support' ? 'suporte' : 'atendimento'
-  );
+  // Admins see a 2-tab row: Geral | Finalizadas (Suporte virou tag por conversa)
+  const [mainTab, setMainTab] = useState<'geral' | 'finalizadas'>('geral');
   // Non-admins keep the simpler Ativas | Finalizadas toggle on their own queue
   const [nonAdminChatTab, setNonAdminChatTab] = useState<'active' | 'finished'>('active');
   const chatTab: 'active' | 'finished' = isAdmin
@@ -40,10 +38,10 @@ const ChatInterface: React.FC = () => {
     : nonAdminChatTab;
   const setChatTab = setNonAdminChatTab;
   const queueForFetch: 'sales' | 'support' | 'all' = isAdmin
-    ? (mainTab === 'atendimento' ? 'sales' : mainTab === 'suporte' ? 'support' : 'all')
+    ? 'all'
     : (queueForRole(role) ?? 'sales');
   const effectiveQueue: 'sales' | 'support' = isAdmin
-    ? (mainTab === 'suporte' ? 'support' : 'sales')
+    ? 'sales'
     : (queueForRole(role) ?? 'sales');
   const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: queueForFetch });
   const { sdrName, companyName } = useCompanySettings();
@@ -986,41 +984,28 @@ const ChatInterface: React.FC = () => {
             >
               {isAdmin && mainTab === 'finalizadas'
                 ? <><XCircle className="w-3 h-3" />Finalizadas</>
-                : effectiveQueue === 'support'
-                  ? <><LifeBuoy className="w-3 h-3" />Suporte</>
-                  : <><Bot className="w-3 h-3" />Atendimento</>}
+                : isAdmin
+                  ? <><Bot className="w-3 h-3" />Geral</>
+                  : effectiveQueue === 'support'
+                    ? <><LifeBuoy className="w-3 h-3" />Suporte</>
+                    : <><Bot className="w-3 h-3" />Atendimento</>}
             </span>
           </div>
           {isAdmin ? (
-            <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'atendimento' | 'suporte' | 'finalizadas')} className="mb-3">
-              <TabsList className="grid grid-cols-3 w-full h-10 p-1">
+            <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'geral' | 'finalizadas')} className="mb-3">
+              <TabsList className="grid grid-cols-2 w-full h-10 p-1">
                 <TabsTrigger
-                  value="atendimento"
+                  value="geral"
                   className="text-xs gap-1.5 data-[state=active]:bg-cyan-500/15 data-[state=active]:text-cyan-300 data-[state=active]:shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
                 >
                   <Bot className="w-3.5 h-3.5" />
-                  Atendimento
+                  Geral
                   <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {tabCounts.activeSales}
+                    {tabCounts.activeSales + tabCounts.activeSupport}
                   </span>
-                  {queueUnread.sales > 0 && (
-                    <span className="ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-cyan-500 text-white">
-                      {queueUnread.sales > 99 ? '99+' : queueUnread.sales}
-                    </span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger
-                  value="suporte"
-                  className="text-xs gap-1.5 data-[state=active]:bg-amber-500/15 data-[state=active]:text-amber-300 data-[state=active]:shadow-[inset_0_-2px_0_0_rgb(245_158_11)]"
-                >
-                  <LifeBuoy className="w-3.5 h-3.5" />
-                  Suporte
-                  <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {tabCounts.activeSupport}
-                  </span>
-                  {queueUnread.support > 0 && (
-                    <span className="ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-amber-500 text-white animate-pulse">
-                      {queueUnread.support > 99 ? '99+' : queueUnread.support}
+                  {(queueUnread.sales + queueUnread.support) > 0 && (
+                    <span className={`ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold text-white ${queueUnread.support > 0 ? 'bg-red-500 animate-pulse' : 'bg-cyan-500'}`}>
+                      {(queueUnread.sales + queueUnread.support) > 99 ? '99+' : (queueUnread.sales + queueUnread.support)}
                     </span>
                   )}
                 </TabsTrigger>
@@ -1157,6 +1142,15 @@ const ChatInterface: React.FC = () => {
                         />
                       );
                     })()}
+                    {chat.queue === 'support' && (
+                      <span
+                        title="Necessita suporte"
+                        className="px-1.5 py-0.5 bg-red-500/15 text-red-300 border border-red-500/40 text-[10px] rounded-md font-semibold flex items-center gap-1"
+                      >
+                        <LifeBuoy className="w-2.5 h-2.5" />
+                        Suporte
+                      </span>
+                    )}
                     {chat.tags.slice(0, 1).map(tag => (
                       <span key={tag} className="px-2 py-0.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-[10px] rounded-md font-medium">
                         {tag}

@@ -1,40 +1,29 @@
-# Atualização em segundo plano nas abas de Automações
+# Renomear "Atendimento" → "Geral" e transformar Suporte em tag
 
-## Problema
-Hoje, ao trocar entre **Regras / Painel / Eventos recebidos**, o componente da aba anterior é desmontado e o da nova é montado do zero. Isso dispara:
-- Novo `fetch` em `AutomationsDashboard` (logs + events + rules nos últimos N dias)
-- Novo `fetch` em `WebhookEventsMonitor` (últimos 100 eventos)
-- Novo canal Realtime sendo criado/destruído a cada troca
+## Mudanças (admins, no `ChatInterface.tsx`)
 
-Resultado: o usuário vê spinner e "recarregamento" toda vez que troca de aba, mesmo que os dados já tivessem sido carregados há segundos.
+1. **Tabs**: passa de 3 abas (`Atendimento | Suporte | Finalizadas`) para 2 (`Geral | Finalizadas`).
+   - `mainTab` vira `'geral' | 'finalizadas'`.
+   - `queueForFetch` na aba **Geral** = `'all'` (lista vendas + suporte juntos).
+   - Contador da Geral = `tabCounts.activeSales + tabCounts.activeSupport`.
+   - Badge de não lidas na Geral = `queueUnread.sales + queueUnread.support` (mantém o pulse vermelho se houver suporte pendente).
 
-## Solução
-Manter as três abas **sempre montadas** dentro de `Automations.tsx`, alternando apenas a visibilidade. Os componentes seguem com seus dados em memória + Realtime ativo em background, então trocar de aba passa a ser instantâneo e novas alterações chegam sem precisar reabrir a aba.
+2. **Tag "Suporte" no item da conversa**: para cada conversa com `queue === 'support'` na lista, exibir uma pílula vermelha pequena com ícone `LifeBuoy` + texto `Suporte` ao lado do nome do contato (ou abaixo, junto às outras tags). Conversas com `queue === 'sales'` ficam sem tag.
 
-### Mudanças
+3. **Header/chip do topo** ("Conversas"): substituir o chip dinâmico Atendimento/Suporte/Finalizadas por algo neutro:
+   - Aba Geral → chip cinza "Geral" (ou simplesmente remover o chip nessa aba para reduzir ruído).
+   - Aba Finalizadas → mantém o chip "Finalizadas".
 
-**1. `src/components/Automations.tsx`**
-- Substituir o `tab === 'x' ? <A/> : tab === 'y' ? <B/> : <C/>` por três wrappers irmãos com `hidden={tab !== 'x'}` (ou classe `hidden`).
-- Extrair o conteúdo da aba "Regras" (search + tabela/cards + empty state) num bloco condicionalmente visível, igual aos outros.
-- Os modais (`AutomationFormModal`, `AutomationLogsModal`, `SimulateWebhookModal`) continuam no mesmo lugar.
+4. **Botão "→ Suporte / → Atendimento" no header da conversa**: continua existindo (é como o usuário marca/desmarca um lead como suporte). Mantém o texto atual.
 
-**2. `src/components/AutomationsDashboard.tsx`** (pequeno ajuste de UX)
-- Manter `setLoading(true)` somente no **primeiro** carregamento. Em mudanças de range, fazer fetch em background sem trocar a tela inteira por spinner (usar um `refreshing` discreto ou apenas atualizar os dados).
-- Já existe Realtime indireto via subscriptions do `useAutomations`, mas o dashboard hoje só recarrega quando `range` muda. Adicionar uma subscription leve a `automation_logs` e `webhook_events` para refletir novas execuções sem precisar trocar de aba.
+5. **Não-admins**: comportamento atual preservado (continuam vendo Ativas/Finalizadas da fila do role). Sem mudança visual além de — opcionalmente — mostrar a tag vermelha de Suporte se um SDR estiver vendo a fila `all`. Como hoje não-admins têm fila fixa por role, fica sem efeito prático e nenhuma mudança é necessária.
 
-**3. `src/components/WebhookEventsMonitor.tsx`** (pequeno ajuste de UX)
-- O `load` atual já não seta `loading=true` em recargas subsequentes (bom). Apenas garantir que a primeira chamada use `loading` e as recargas via Realtime sejam silenciosas (já é o comportamento — só confirmar).
-
-### Observações
-- Sem mudanças de schema, edge functions ou lógica de negócio.
-- Sem impacto em outras telas; o padrão "tabs montadas em paralelo" fica restrito a `Automations.tsx`.
-- Custo de manter tudo montado é baixo: cada aba mantém ~100–2000 linhas em memória e um canal Realtime — bem dentro do orçamento.
+## Não muda
+- Schema do banco: coluna `queue` em `conversations` continua sendo a fonte da verdade.
+- Hook `useConversationTabCounts` e `useQueueUnreadCounts` (já contam por queue; só somamos no front).
+- Botão de mover entre filas, lógica de roteamento e RLS.
 
 ## Detalhes técnicos
-```tsx
-// Automations.tsx (resumo)
-<div hidden={tab !== 'rules'}>     {/* bloco de regras */} </div>
-<div hidden={tab !== 'dashboard'}> <AutomationsDashboard /> </div>
-<div hidden={tab !== 'events'}>    <WebhookEventsMonitor /> </div>
-```
-Usar `hidden` (atributo HTML) preserva DOM e estado React, e evita o `display:none` ser sobrescrito por classes Tailwind.
+- Tag visual: `bg-red-500/15 text-red-300 border border-red-500/40 px-1.5 py-0.5 rounded text-[10px] font-semibold inline-flex items-center gap-1`.
+- Onde renderizar a tag: dentro do bloco `filteredConversations.map((chat) => ...)` no item da lista, junto ao nome.
+- `mainTab` default: `'geral'` (sem mais ramificação por role no estado inicial dessa UI admin).
