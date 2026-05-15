@@ -2079,30 +2079,93 @@ const ChatInterface: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Details List */}
-                <div className="space-y-4">
+                {/* Details List - editable */}
+                <div className="space-y-3">
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Dados de Contato</h4>
-                  
-                  <div className="flex items-center gap-3 text-sm">
+
+                  {/* Nome */}
+                  <EditableRow
+                    icon={<User className="w-4 h-4" />}
+                    label="Nome"
+                    value={activeChat.contactName}
+                    isEditing={editingField === 'name'}
+                    isSaving={savingField && editingField === 'name'}
+                    draft={fieldDraft}
+                    onDraftChange={setFieldDraft}
+                    onStart={() => startFieldEdit('name', activeChat.contactName)}
+                    onSave={saveFieldEdit}
+                    onCancel={cancelFieldEdit}
+                    placeholder="Nome do contato"
+                  />
+
+                  {/* Telefone (read-only) */}
+                  <div className="flex items-center gap-3 text-sm group/row">
                     <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-400">
                       <Phone className="w-4 h-4" />
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col min-w-0">
                       <span className="text-xs text-slate-500">Telefone</span>
-                      <span className="text-slate-200 font-medium">{activeChat.contactPhone}</span>
+                      <span className="text-slate-200 font-medium truncate">{activeChat.contactPhone}</span>
                     </div>
                   </div>
 
-                  {activeChat.contactEmail && (
-                    <div className="flex items-center gap-3 text-sm">
+                  {/* Email */}
+                  <EditableRow
+                    icon={<Mail className="w-4 h-4" />}
+                    label="Email"
+                    value={activeChat.contactEmail || ''}
+                    isEditing={editingField === 'email'}
+                    isSaving={savingField && editingField === 'email'}
+                    draft={fieldDraft}
+                    onDraftChange={setFieldDraft}
+                    onStart={() => startFieldEdit('email', activeChat.contactEmail)}
+                    onSave={saveFieldEdit}
+                    onCancel={cancelFieldEdit}
+                    placeholder="Adicionar email"
+                    inputType="email"
+                  />
+
+                  {/* É empresa? */}
+                  <div className="flex items-center justify-between gap-3 text-sm pt-1">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-400">
-                        <Mail className="w-4 h-4" />
+                        <Building2 className="w-4 h-4" />
                       </div>
-                      <div className="flex flex-col">
-                        <span className="text-xs text-slate-500">Email</span>
-                        <span className="text-slate-200 font-medium">{activeChat.contactEmail}</span>
-                      </div>
+                      <span className="text-slate-200 font-medium">É uma empresa</span>
                     </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={!!activeChat.isBusiness}
+                      disabled={savingBusinessToggle}
+                      onClick={() => toggleIsBusiness(!activeChat.isBusiness)}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${
+                        activeChat.isBusiness ? 'bg-cyan-500' : 'bg-slate-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                          activeChat.isBusiness ? 'translate-x-5' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Empresa (condicional) */}
+                  {activeChat.isBusiness && (
+                    <EditableRow
+                      icon={<Building2 className="w-4 h-4" />}
+                      label="Empresa"
+                      value={activeChat.companyName || ''}
+                      isEditing={editingField === 'company'}
+                      isSaving={savingField && editingField === 'company'}
+                      draft={fieldDraft}
+                      onDraftChange={setFieldDraft}
+                      onStart={() => startFieldEdit('company', activeChat.companyName)}
+                      onSave={saveFieldEdit}
+                      onCancel={cancelFieldEdit}
+                      placeholder="Nome da empresa"
+                    />
                   )}
                 </div>
 
