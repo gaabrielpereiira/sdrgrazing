@@ -461,6 +461,56 @@ const Contacts: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Contact Modal */}
+      {deletingContact && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => !deleting && setDeletingContact(null)}
+        >
+          <div
+            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-5">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-rose-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-white">Excluir contato?</h3>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Esta ação removerá <span className="text-slate-200 font-medium">{deletingContact.name || deletingContact.phone}</span> e todas as conversas, mensagens, atividades e deals vinculados. Não pode ser desfeita.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-6">
+                <Button type="button" variant="ghost" onClick={() => setDeletingContact(null)} disabled={deleting}>
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleDeleteContact}
+                  disabled={deleting}
+                  className="bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-500/20"
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Excluindo...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Excluir
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
