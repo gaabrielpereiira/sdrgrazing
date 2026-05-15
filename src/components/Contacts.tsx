@@ -207,6 +207,9 @@ const Contacts: React.FC = () => {
                       <Button size="sm" variant="ghost" className="text-slate-400" onClick={() => openEdit(contact)}>
                         <Pencil className="w-4 h-4" />
                       </Button>
+                      <Button size="sm" variant="ghost" className="text-rose-400 hover:text-rose-300" onClick={() => setDeletingContact(contact)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
                 </div>
