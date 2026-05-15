@@ -14,7 +14,9 @@ const Contacts: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', email: '' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', countryCode: DEFAULT_COUNTRY_CODE });
+  const [countrySearch, setCountrySearch] = useState('');
+  const [countryOpen, setCountryOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [editForm, setEditForm] = useState({ name: '', email: '' });
   const [savingEdit, setSavingEdit] = useState(false);
