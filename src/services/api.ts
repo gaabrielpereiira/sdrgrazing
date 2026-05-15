@@ -2032,6 +2032,57 @@ export const api = {
   },
 
   /**
+   * Delete contact and all related data (cascade)
+   */
+  deleteContact: async (contactId: string): Promise<void> => {
+    const { data: contact } = await supabase
+      .from('contacts')
+      .select('phone_number')
+      .eq('id', contactId)
+      .maybeSingle();
+
+    const { data: convs } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('contact_id', contactId);
+    const convIds = (convs || []).map((c: any) => c.id);
+
+    const { data: deals } = await supabase
+      .from('deals')
+      .select('id')
+      .eq('contact_id', contactId);
+    const dealIds = (deals || []).map((d: any) => d.id);
+
+    if (convIds.length > 0) {
+      await supabase.from('messages').delete().in('conversation_id', convIds);
+      await supabase.from('conversation_states').delete().in('conversation_id', convIds);
+    }
+
+    await supabase.from('conversation_activities').delete().eq('contact_id', contactId);
+
+    if (convIds.length > 0) {
+      await supabase.from('conversations').delete().in('id', convIds);
+    }
+
+    if (dealIds.length > 0) {
+      await supabase.from('deal_activities').delete().in('deal_id', dealIds);
+    }
+    await supabase.from('deals').delete().eq('contact_id', contactId);
+
+    if (contact?.phone_number) {
+      await supabase.from('contact_cooldowns').delete().eq('contact_phone', contact.phone_number);
+    }
+
+    await supabase.from('notifications').delete().eq('contact_id', contactId);
+
+    const { error } = await supabase.from('contacts').delete().eq('id', contactId);
+    if (error) {
+      console.error('[API] Error deleting contact:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Block/unblock contact
    */
   toggleContactBlock: async (contactId: string, blocked: boolean, reason?: string): Promise<void> => {
