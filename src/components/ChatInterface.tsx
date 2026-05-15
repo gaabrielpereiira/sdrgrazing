@@ -1579,7 +1579,7 @@ const ChatInterface: React.FC = () => {
                                 )}
                                 {renderMessageContent(msg)}
                                 {Array.isArray(msg.metadata?.buttons) && msg.metadata.buttons.length > 0 && (
-                                  <div className={`mt-2 -mx-3 -mb-2 border-t ${isOutgoing ? 'border-white/15' : 'border-slate-700/60'} flex flex-col`}>
+                                  <div className={`mt-2 -mx-5 -mb-3 border-t ${isOutgoing ? 'border-white/15' : 'border-slate-700/60'} flex flex-col`}>
                                     {msg.metadata.buttons.map((btn: any, bi: number) => {
                                       const label = btn.text || '';
                                       const baseCls = `flex items-center justify-center gap-1.5 px-3 py-2 text-[13px] font-medium ${bi > 0 ? (isOutgoing ? 'border-t border-white/15' : 'border-t border-slate-700/60') : ''}`;
