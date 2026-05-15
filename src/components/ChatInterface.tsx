@@ -31,6 +31,65 @@ import { Checkbox } from './ui/checkbox';
 import { CLOSING_MESSAGE_TEXT } from '@/constants';
 import { useConversationTabCounts } from '@/hooks/useConversationTabCounts';
 
+// Editable row used inside the chat sidebar "Dados de Contato"
+interface EditableRowProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  isEditing: boolean;
+  isSaving: boolean;
+  draft: string;
+  onDraftChange: (v: string) => void;
+  onStart: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+  placeholder?: string;
+  inputType?: string;
+}
+const EditableRow: React.FC<EditableRowProps> = ({
+  icon, label, value, isEditing, isSaving, draft, onDraftChange,
+  onStart, onSave, onCancel, placeholder, inputType = 'text',
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (isEditing) inputRef.current?.focus(); }, [isEditing]);
+  return (
+    <div className="flex items-center gap-3 text-sm group/row">
+      <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-400">
+        {icon}
+      </div>
+      <div className="flex flex-col flex-1 min-w-0">
+        <span className="text-xs text-slate-500">{label}</span>
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type={inputType}
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            onBlur={onSave}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); onSave(); }
+              if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+            }}
+            disabled={isSaving}
+            placeholder={placeholder}
+            className="bg-slate-950/60 border border-cyan-500/40 rounded px-2 py-1 text-sm text-slate-100 outline-none focus:ring-1 focus:ring-cyan-500/60"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={onStart}
+            className="flex items-center gap-1.5 text-left text-slate-200 font-medium truncate hover:text-cyan-300 transition-colors"
+          >
+            <span className="truncate">{value || <span className="text-slate-500 italic font-normal">{placeholder}</span>}</span>
+            <Pencil className="w-3 h-3 opacity-0 group-hover/row:opacity-60 transition-opacity flex-shrink-0" />
+          </button>
+        )}
+      </div>
+      {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-500" />}
+    </div>
+  );
+};
+
 const ChatInterface: React.FC = () => {
   const { role, isAdmin } = useAuth();
   // Admins see a 2-tab row: Geral | Finalizadas (Suporte virou tag por conversa)
