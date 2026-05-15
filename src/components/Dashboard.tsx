@@ -29,6 +29,14 @@ const periodDays: Record<PeriodFilter, number> = {
 const Dashboard: React.FC = () => {
   const [metrics, setMetrics] = useState<StatMetric[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
+  const [support, setSupport] = useState<{
+    total: number;
+    active: number;
+    finished: number;
+    trend: string;
+    trendUp: boolean;
+    reasons: { key: string; label: string; count: number }[];
+  }>({ total: 0, active: 0, finished: 0, trend: '0%', trendUp: true, reasons: [] });
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<PeriodFilter>('today');
   const { setShowOnboarding } = useOutletContext<OutletContext>();
@@ -38,12 +46,14 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       try {
         const days = periodDays[period];
-        const [metricsData, chartDataResponse] = await Promise.all([
+        const [metricsData, chartDataResponse, supportData] = await Promise.all([
           api.fetchDashboardMetrics(days),
-          api.fetchChartData(days)
+          api.fetchChartData(days),
+          api.fetchSupportSummary(days),
         ]);
         setMetrics(metricsData);
         setChartData(chartDataResponse);
+        setSupport(supportData);
       } catch (error) {
         console.error("Erro ao carregar dashboard:", error);
       } finally {
