@@ -324,10 +324,13 @@ export const api = {
   /**
    * Create a new contact
    */
-  createContact: async (input: { name: string; phone: string; email?: string }): Promise<Contact> => {
+  createContact: async (input: { name: string; phone: string; email?: string; isBusiness?: boolean; companyName?: string | null }): Promise<Contact> => {
     const { data: { user } } = await supabase.auth.getUser();
     const phoneDigits = (input.phone || '').replace(/\D/g, '');
     if (!phoneDigits) throw new Error('Telefone é obrigatório');
+
+    const isBusiness = !!input.isBusiness;
+    const companyName = isBusiness ? (input.companyName?.trim() || null) : null;
 
     const { data, error } = await supabase
       .from('contacts')
@@ -336,6 +339,8 @@ export const api = {
         call_name: input.name?.trim() || null,
         phone_number: phoneDigits,
         email: input.email?.trim() || null,
+        is_business: isBusiness,
+        company_name: companyName,
         user_id: user?.id ?? null,
       })
       .select()
@@ -353,6 +358,8 @@ export const api = {
       email: data.email || '',
       status: 'lead' as const,
       lastContact: new Date(data.last_activity).toLocaleDateString('pt-BR'),
+      isBusiness: !!(data as any).is_business,
+      companyName: (data as any).company_name ?? null,
     };
   },
 
