@@ -31,6 +31,65 @@ import { Checkbox } from './ui/checkbox';
 import { CLOSING_MESSAGE_TEXT } from '@/constants';
 import { useConversationTabCounts } from '@/hooks/useConversationTabCounts';
 
+// Editable row used inside the chat sidebar "Dados de Contato"
+interface EditableRowProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  isEditing: boolean;
+  isSaving: boolean;
+  draft: string;
+  onDraftChange: (v: string) => void;
+  onStart: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+  placeholder?: string;
+  inputType?: string;
+}
+const EditableRow: React.FC<EditableRowProps> = ({
+  icon, label, value, isEditing, isSaving, draft, onDraftChange,
+  onStart, onSave, onCancel, placeholder, inputType = 'text',
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (isEditing) inputRef.current?.focus(); }, [isEditing]);
+  return (
+    <div className="flex items-center gap-3 text-sm group/row">
+      <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-400">
+        {icon}
+      </div>
+      <div className="flex flex-col flex-1 min-w-0">
+        <span className="text-xs text-slate-500">{label}</span>
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type={inputType}
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            onBlur={onSave}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); onSave(); }
+              if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+            }}
+            disabled={isSaving}
+            placeholder={placeholder}
+            className="bg-slate-950/60 border border-cyan-500/40 rounded px-2 py-1 text-sm text-slate-100 outline-none focus:ring-1 focus:ring-cyan-500/60"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={onStart}
+            className="flex items-center gap-1.5 text-left text-slate-200 font-medium truncate hover:text-cyan-300 transition-colors"
+          >
+            <span className="truncate">{value || <span className="text-slate-500 italic font-normal">{placeholder}</span>}</span>
+            <Pencil className="w-3 h-3 opacity-0 group-hover/row:opacity-60 transition-opacity flex-shrink-0" />
+          </button>
+        )}
+      </div>
+      {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-500" />}
+    </div>
+  );
+};
+
 const ChatInterface: React.FC = () => {
   const { role, isAdmin } = useAuth();
   // Admins see a 2-tab row: Geral | Finalizadas (Suporte virou tag por conversa)
@@ -93,6 +152,13 @@ const ChatInterface: React.FC = () => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [savingName, setSavingName] = useState(false);
+
+  // Inline contact field editing (sidebar panel)
+  type EditableField = 'name' | 'email' | 'company';
+  const [editingField, setEditingField] = useState<EditableField | null>(null);
+  const [fieldDraft, setFieldDraft] = useState('');
+  const [savingField, setSavingField] = useState(false);
+  const [savingBusinessToggle, setSavingBusinessToggle] = useState(false);
 
   // Audio player state
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
@@ -633,6 +699,72 @@ const ChatInterface: React.FC = () => {
       toast.error(err?.message || 'Erro ao atualizar nome');
     } finally {
       setSavingName(false);
+    }
+  };
+
+  // Inline edit for sidebar fields (email / company / name)
+  const startFieldEdit = (field: EditableField, currentValue: string | null | undefined) => {
+    setEditingField(field);
+    setFieldDraft((currentValue ?? '').toString());
+  };
+  const cancelFieldEdit = () => {
+    setEditingField(null);
+    setFieldDraft('');
+  };
+  const saveFieldEdit = async () => {
+    if (!activeChat || !editingField) return;
+    const raw = fieldDraft.trim();
+    const field = editingField;
+
+    // Validation
+    if (field === 'name') {
+      if (!raw) { toast.error('O nome não pode ficar vazio'); return; }
+      if (raw.length > 100) { toast.error('Nome muito longo (máx. 100)'); return; }
+    }
+    if (field === 'email' && raw) {
+      if (raw.length > 255) { toast.error('Email muito longo'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) { toast.error('Email inválido'); return; }
+    }
+    if (field === 'company' && raw.length > 100) {
+      toast.error('Nome da empresa muito longo (máx. 100)'); return;
+    }
+
+    // Skip if unchanged
+    const current =
+      field === 'name' ? activeChat.contactName :
+      field === 'email' ? (activeChat.contactEmail || '') :
+      (activeChat.companyName || '');
+    if (raw === (current || '').trim()) {
+      cancelFieldEdit();
+      return;
+    }
+
+    setSavingField(true);
+    try {
+      const payload: any = {};
+      if (field === 'name') payload.name = raw;
+      if (field === 'email') payload.email = raw || null;
+      if (field === 'company') payload.companyName = raw || null;
+      await api.updateContact(activeChat.contactId, payload);
+      toast.success('Atualizado');
+      cancelFieldEdit();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Erro ao atualizar');
+    } finally {
+      setSavingField(false);
+    }
+  };
+  const toggleIsBusiness = async (next: boolean) => {
+    if (!activeChat) return;
+    setSavingBusinessToggle(true);
+    try {
+      await api.updateContact(activeChat.contactId, { isBusiness: next });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Erro ao atualizar');
+    } finally {
+      setSavingBusinessToggle(false);
     }
   };
 
@@ -2006,30 +2138,93 @@ const ChatInterface: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Details List */}
-                <div className="space-y-4">
+                {/* Details List - editable */}
+                <div className="space-y-3">
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Dados de Contato</h4>
-                  
-                  <div className="flex items-center gap-3 text-sm">
+
+                  {/* Nome */}
+                  <EditableRow
+                    icon={<User className="w-4 h-4" />}
+                    label="Nome"
+                    value={activeChat.contactName}
+                    isEditing={editingField === 'name'}
+                    isSaving={savingField && editingField === 'name'}
+                    draft={fieldDraft}
+                    onDraftChange={setFieldDraft}
+                    onStart={() => startFieldEdit('name', activeChat.contactName)}
+                    onSave={saveFieldEdit}
+                    onCancel={cancelFieldEdit}
+                    placeholder="Nome do contato"
+                  />
+
+                  {/* Telefone (read-only) */}
+                  <div className="flex items-center gap-3 text-sm group/row">
                     <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-400">
                       <Phone className="w-4 h-4" />
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col min-w-0">
                       <span className="text-xs text-slate-500">Telefone</span>
-                      <span className="text-slate-200 font-medium">{activeChat.contactPhone}</span>
+                      <span className="text-slate-200 font-medium truncate">{activeChat.contactPhone}</span>
                     </div>
                   </div>
 
-                  {activeChat.contactEmail && (
-                    <div className="flex items-center gap-3 text-sm">
+                  {/* Email */}
+                  <EditableRow
+                    icon={<Mail className="w-4 h-4" />}
+                    label="Email"
+                    value={activeChat.contactEmail || ''}
+                    isEditing={editingField === 'email'}
+                    isSaving={savingField && editingField === 'email'}
+                    draft={fieldDraft}
+                    onDraftChange={setFieldDraft}
+                    onStart={() => startFieldEdit('email', activeChat.contactEmail)}
+                    onSave={saveFieldEdit}
+                    onCancel={cancelFieldEdit}
+                    placeholder="Adicionar email"
+                    inputType="email"
+                  />
+
+                  {/* É empresa? */}
+                  <div className="flex items-center justify-between gap-3 text-sm pt-1">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-400">
-                        <Mail className="w-4 h-4" />
+                        <Building2 className="w-4 h-4" />
                       </div>
-                      <div className="flex flex-col">
-                        <span className="text-xs text-slate-500">Email</span>
-                        <span className="text-slate-200 font-medium">{activeChat.contactEmail}</span>
-                      </div>
+                      <span className="text-slate-200 font-medium">É uma empresa</span>
                     </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={!!activeChat.isBusiness}
+                      disabled={savingBusinessToggle}
+                      onClick={() => toggleIsBusiness(!activeChat.isBusiness)}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${
+                        activeChat.isBusiness ? 'bg-cyan-500' : 'bg-slate-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                          activeChat.isBusiness ? 'translate-x-5' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Empresa (condicional) */}
+                  {activeChat.isBusiness && (
+                    <EditableRow
+                      icon={<Building2 className="w-4 h-4" />}
+                      label="Empresa"
+                      value={activeChat.companyName || ''}
+                      isEditing={editingField === 'company'}
+                      isSaving={savingField && editingField === 'company'}
+                      draft={fieldDraft}
+                      onDraftChange={setFieldDraft}
+                      onStart={() => startFieldEdit('company', activeChat.companyName)}
+                      onSave={saveFieldEdit}
+                      onCancel={cancelFieldEdit}
+                      placeholder="Nome da empresa"
+                    />
                   )}
                 </div>
 

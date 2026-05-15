@@ -1,49 +1,43 @@
-## Verificação concluída
+## Tornar o painel "Informações do Lead" editável
 
-Inspecionei todas as foreign keys do banco e o código atual de `deleteContact` (`src/services/api.ts:2059`). Resultado:
+Hoje o painel lateral direito do chat (`ChatInterface.tsx`, linhas ~1985-2034) mostra **Nome**, **Telefone** e **Email** apenas como leitura. Vou adicionar edição inline para os mesmos campos já suportados por `api.updateContact`:
 
-### FKs relevantes (todas seguras)
-| Tabela origem | Coluna | Referencia | ON DELETE |
-|---|---|---|---|
-| `conversations.contact_id` | → `contacts` | CASCADE |
-| `messages.conversation_id` | → `conversations` | CASCADE |
-| `conversation_states.conversation_id` | → `conversations` | CASCADE |
-| `deals.contact_id` | → `contacts` | CASCADE |
-| `deal_activities.deal_id` | → `deals` | CASCADE |
-| `appointments.contact_id` | → `contacts` | SET NULL |
-| `send_queue.message_id` | → `messages` | SET NULL ✅ (corrigido) |
-| `message_grouping_queue.message_id` | → `messages` | SET NULL ✅ |
-| `messages.reply_to_id` | → `messages` | SET NULL ✅ |
+- Nome do contato (`name`)
+- Email (`email`)
+- É empresa? (`is_business`) — toggle
+- Nome da empresa (`company_name`) — só aparece se "É empresa" estiver ativo
+- *(Telefone permanece read-only — é o ID do WhatsApp e não deve ser editado.)*
 
-`send_queue`, `nina_processing_queue` e `message_processing_queue` **não possuem FK** apontando para `conversations`/`contacts` — são apenas colunas UUID soltas. Portanto não há risco de erro de FK quando o contato é apagado.
+### UX
 
-### Estado atual do `deleteContact`
-- ✅ Apaga `send_queue` por `conversation_id`
-- ✅ Apaga `nina_processing_queue` por `conversation_id`
-- ✅ Apaga `messages`, `conversation_states`, `conversation_activities`, `conversations`, `deal_activities`, `deals`, `contact_cooldowns`, `notifications`, `contacts`
-- ⚠️ **Não** limpa `message_processing_queue` (tabela só tem `whatsapp_message_id`/`phone_number_id`, sem vínculo direto com contato).
+Cada campo vira clicável: ao clicar no valor (ou em um ícone de lápis), ele se transforma em `Input`/`Switch`. Salvamento ocorre no `onBlur` ou ao apertar Enter (Esc cancela). Feedback via toast de sucesso/erro. Validação client-side com Zod:
+- nome: 1–100 chars
+- email: formato válido, ≤255 chars (opcional)
+- empresa: ≤100 chars
 
-## Plano de melhoria (pequeno)
+Estados:
+- `editingField: 'name' | 'email' | 'company' | null`
+- `editValues` temporários
+- `isSavingField` para spinner
 
-**1. Limpar `message_processing_queue`** antes de deletar mensagens, usando os `whatsapp_message_id` reais do contato:
-```ts
-if (convIds.length > 0) {
-  const { data: msgs } = await supabase
-    .from('messages')
-    .select('whatsapp_message_id')
-    .in('conversation_id', convIds)
-    .not('whatsapp_message_id', 'is', null);
-  const wamids = (msgs || []).map(m => m.whatsapp_message_id).filter(Boolean);
-  if (wamids.length > 0) {
-    await supabase.from('message_processing_queue').delete().in('whatsapp_message_id', wamids);
-    await supabase.from('message_grouping_queue').delete().in('whatsapp_message_id', wamids);
-  }
-  // ... resto do fluxo atual
-}
-```
+### Reorganização visual
 
-**2. Não há mudança de schema necessária** — todas as FKs já estão corretas.
+A seção "Dados de Contato" passa a listar:
+1. Nome (editável)
+2. Telefone (read-only)
+3. Email (editável, com placeholder "Adicionar email")
+4. Toggle "É uma empresa"
+5. Empresa (editável, condicional)
 
-## Conclusão
+O nome no topo (`<h3>`) e na conversa também devem refletir a edição — já refletem porque vêm de `activeChat.contactName`, que é derivado de `contacts` pelo realtime/refetch.
 
-Nenhum erro de FK ocorrerá no fluxo atual. A melhoria acima é apenas higiene para evitar lixo em `message_processing_queue`/`message_grouping_queue` órfão do contato apagado. Se você quiser, aplico essa limpeza extra.
+### Integração
+
+- Reutiliza `api.updateContact` (já existe).
+- Após sucesso, chamar `refetch` do hook `useConversations` (ou disparar atualização local) para o painel refletir o novo valor sem esperar o realtime.
+
+### Arquivos
+
+- `src/components/ChatInterface.tsx` — substituir bloco "Dados de Contato" por versão editável; adicionar handler `handleSaveContactField` e estado de edição.
+
+Sem mudanças de schema, RLS ou backend.
