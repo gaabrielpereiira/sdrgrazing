@@ -2021,11 +2021,18 @@ export const api = {
    */
   updateContact: async (
     contactId: string,
-    fields: { name?: string | null; email?: string | null }
+    fields: { name?: string | null; email?: string | null; isBusiness?: boolean; companyName?: string | null }
   ): Promise<void> => {
     const payload: Record<string, any> = {};
     if (fields.name !== undefined) payload.name = fields.name?.trim() || null;
     if (fields.email !== undefined) payload.email = fields.email?.trim() || null;
+    if (fields.isBusiness !== undefined) {
+      payload.is_business = !!fields.isBusiness;
+      if (!fields.isBusiness) payload.company_name = null;
+    }
+    if (fields.companyName !== undefined && fields.isBusiness !== false) {
+      payload.company_name = fields.companyName?.trim() || null;
+    }
 
     if (Object.keys(payload).length === 0) return;
 
