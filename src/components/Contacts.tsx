@@ -366,7 +366,32 @@ const Contacts: React.FC = () => {
             </div>
             <form onSubmit={handleCreate} className="px-6 py-5 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Nome</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Tipo de contato</label>
+                <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-slate-950 border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, isBusiness: false })}
+                    className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                      !form.isBusiness ? 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <User className="w-4 h-4" /> Pessoa Física
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, isBusiness: true })}
+                    className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                      form.isBusiness ? 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Building2 className="w-4 h-4" /> Pessoa Jurídica
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  {form.isBusiness ? 'Nome do contato' : 'Nome'}
+                </label>
                 <input
                   type="text"
                   value={form.name}
@@ -375,6 +400,20 @@ const Contacts: React.FC = () => {
                   className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
                 />
               </div>
+              {form.isBusiness && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                    Nome da empresa <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.companyName}
+                    onChange={(e) => setForm({ ...form, companyName: e.target.value })}
+                    placeholder="Ex: Acme Ltda."
+                    className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">
                   Telefone <span className="text-rose-400">*</span>
