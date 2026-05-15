@@ -951,7 +951,7 @@ const ChatInterface: React.FC = () => {
       );
     }
 
-    return <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>;
+    return <p className="leading-relaxed whitespace-pre-wrap">{renderTextWithLinks(msg.content || '')}</p>;
   };
 
   if (loading) {
