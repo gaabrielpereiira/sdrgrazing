@@ -1075,8 +1075,13 @@ async function processQueueItem(
   }
 
   if (!aiContent) {
-    console.warn('[Nina] Empty AI response received, using fallback');
-    aiContent = 'Olá! Como posso ajudar você hoje? 😊';
+    console.warn('[Nina] Empty AI response received, skipping send (no fallback to avoid duplicates)');
+    // Mark the original message as processed so it doesn't keep retrying.
+    await supabase
+      .from('messages')
+      .update({ processed_by_nina: true })
+      .eq('id', message.id);
+    return;
   }
 
   console.log('[Nina] Final response length:', aiContent.length);
