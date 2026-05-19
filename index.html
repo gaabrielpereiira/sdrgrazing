@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Cache busting: garante que o navegador sempre busque o HTML novo
+         (chunks JS já têm hash). Evita usuários presos em versões antigas. -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Dashboard | Sistema SDR</title>
     <link rel="icon" type="image/png" href="/favicon.png">
     <meta property="og:title" content="Dashboard | Sistema SDR">
