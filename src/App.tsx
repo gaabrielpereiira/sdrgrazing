@@ -18,11 +18,13 @@ import { AuthProvider, useAuth, defaultRouteForRole } from './hooks/useAuth';
 import { Toaster } from 'sonner';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { useOnboardingStatus } from './hooks/useOnboardingStatus';
+import { useVersionCheck } from './hooks/useVersionCheck';
 
 // Componente de Layout que envolve a aplicação principal
 const AppLayout: React.FC = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const { isComplete, hasSeenWizard, loading } = useOnboardingStatus();
+  useVersionCheck();
 
   // Show wizard automatically on first load if not complete and never seen
   useEffect(() => {

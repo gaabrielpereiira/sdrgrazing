@@ -1,90 +1,58 @@
+## Diagnóstico confirmado
 
-## Diagnóstico
+A correção de RLS foi aplicada com sucesso: `conversations` e `messages` já permitem que qualquer usuário autenticado acesse tudo. Então o erro que persiste não é mais o bloqueio do banco.
 
-Investiguei o banco e o código. Encontrei **duas causas** distintas para o que a Tais está vendo:
+Encontrei duas causas restantes:
 
-### 1. Leads sumindo — causa: RLS por papel (role)
+1. **Leads ainda somem para a Tais porque o frontend continua filtrando por papel**
+   - No `ChatInterface`, usuários não-admin ainda usam `queueForRole(role)`.
+   - Como a Tais tem papel `user`, o app busca só `queue = sales`.
+   - No banco existem leads ativos em `support`, então eles continuam ocultos para ela mesmo com RLS corrigido.
 
-O sistema tem 4 usuários: **2 admins** e **2 com papel `user`** (provavelmente a Tais é um deles).
+2. **Versão antiga pode persistir por cache de app carregado em memória / assets antigos**
+   - A versão publicada já está servindo `index.html` com `no-cache`.
+   - Mas se a aba antiga ficou aberta, ou se o navegador reaproveitou JS carregado antes, o app pode continuar rodando código antigo até detectar uma nova versão ou forçar reload.
 
-A RLS de `conversations` filtra por `user_queue_access(auth.uid())`:
+## Plano de correção
 
-- `admin` → vê `['sales','support']` (tudo)
-- `support` → vê só `['support']`
-- `sdr`/`user` → vê só `['sales']`
+### 1. Remover filtro por papel no Chat
+Alterar `src/components/ChatInterface.tsx` para que todos os usuários vejam a fila geral:
 
-Hoje no banco existem **30+ conversas misturadas entre `sales` e `support`**. Resultado: quem tem papel `user` (Tais) **não vê nenhum lead da fila `support`** — exatamente o sintoma de "leads sumidos".
+- `queueForFetch` deve ser sempre `all`.
+- A aba principal deve parar de esconder suporte de usuários `user`.
+- `queue` continua existindo apenas como etiqueta visual e para mover conversas entre Vendas/Suporte, mas não como bloqueio de visibilidade.
 
-Isto contradiz a arquitetura single-tenant do resto do projeto (contatos, deals, appointments já são `auth.role() = 'authenticated'` — compartilhado entre todos).
+Resultado: Tais e qualquer outro usuário verão todas as conversas ativas/finalizadas, independente de `sales` ou `support`.
 
-### 2. "Versão antiga" — causa: cache do navegador
+### 2. Ajustar contadores das abas para refletirem o total real
+Como o chat será compartilhado para todos:
 
-Não existe Service Worker no projeto (verificado). O que acontece é o navegador da Tais segurando bundles JS antigos do Vite/Lovable em cache. Cada deploy gera novos hashes, mas se o `index.html` ficou em cache, o navegador continua puxando os chunks velhos.
+- A aba de ativas deve mostrar `activeTotal`.
+- A aba de finalizadas deve mostrar `finishedTotal`.
+- Evita a situação em que o contador mostra só vendas enquanto há conversas de suporte ocultas.
 
----
+### 3. Adicionar verificação automática de nova versão no app
+Criar um mecanismo leve no frontend para detectar quando o `index.html` publicado mudou:
 
-## Plano
+- Buscar periodicamente o HTML atual com `cache: 'no-store'`.
+- Extrair o arquivo `/assets/index-*.js` atual.
+- Comparar com o script carregado na sessão.
+- Se mudou, mostrar um toast: “Nova versão disponível” com botão “Atualizar”.
 
-### Passo 1 — Migration: igualar RLS de conversas/mensagens ao padrão single-tenant
+Resultado: se Tais estiver com aba antiga aberta, o próprio sistema avisa e permite recarregar para a versão nova.
 
-Substituir as policies de `conversations`, `messages` e `conversation_states` por uma policy única do tipo "qualquer usuário autenticado acessa tudo" — exatamente o que já está em `contacts`, `deals`, `appointments`.
+### 4. Adicionar fallback de recarregamento seguro
+Além do toast, ao voltar para a aba depois de um tempo, o app checa novamente a versão. Isso reduz casos de computador que ficou com o sistema aberto por horas/dias.
 
-```sql
--- conversations
-DROP POLICY IF EXISTS "Users can view conversations in allowed queues"   ON public.conversations;
-DROP POLICY IF EXISTS "Users can insert conversations in allowed queues" ON public.conversations;
-DROP POLICY IF EXISTS "Users can update conversations in allowed queues" ON public.conversations;
-DROP POLICY IF EXISTS "Admins can delete conversations"                  ON public.conversations;
+## Arquivos previstos
 
-CREATE POLICY "Authenticated users can access all conversations"
-  ON public.conversations FOR ALL TO authenticated
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
+- `src/components/ChatInterface.tsx`
+- Novo hook/componente pequeno para version-check, por exemplo `src/hooks/useVersionCheck.ts` ou integração em `src/App.tsx`
 
--- messages
-DROP POLICY IF EXISTS "Users can view messages in allowed conversations"   ON public.messages;
-DROP POLICY IF EXISTS "Users can insert messages in allowed conversations" ON public.messages;
-DROP POLICY IF EXISTS "Users can update messages in allowed conversations" ON public.messages;
+## Validação
 
-CREATE POLICY "Authenticated users can access all messages"
-  ON public.messages FOR ALL TO authenticated
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
+Após implementar:
 
--- conversation_states (hoje filtra por conversations.user_id, que muitas vezes é NULL)
-DROP POLICY IF EXISTS "Users can access states of their conversations" ON public.conversation_states;
-
-CREATE POLICY "Authenticated users can access all conversation_states"
-  ON public.conversation_states FOR ALL TO authenticated
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
-```
-
-Efeito: Tais (e qualquer futuro usuário) passa a ver **todas** as conversas e mensagens, independente da fila ou do papel — alinhado com o resto do app.
-
-### Passo 2 — Forçar cache busting no `index.html`
-
-Adicionar meta tags no `<head>` do `index.html` para impedir que o navegador segure o HTML em cache (os chunks JS já têm hash, só o HTML que precisa):
-
-```html
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-<meta http-equiv="Pragma" content="no-cache" />
-<meta http-equiv="Expires" content="0" />
-```
-
-Isso garante que toda vez que a Tais (ou qualquer usuário) abrir o site, o navegador busca o `index.html` novo, que referencia os bundles JS atualizados.
-
-### Passo 3 — Orientação para a Tais (apenas uma vez)
-
-Depois do deploy, pedir para ela:
-1. Abrir o site
-2. `Ctrl+Shift+R` (Windows) ou `Cmd+Shift+R` (Mac) — hard refresh
-3. Ou: DevTools → Application → Clear storage → Clear site data
-
-A partir desse hard refresh, com o passo 2 aplicado, ela nunca mais vai ficar presa em versão antiga.
-
----
-
-## Fora de escopo
-- Nada de mudanças no frontend além do `index.html` (a função `user_queue_access` continua existindo, mas deixa de ser usada por essas tabelas — pode ser limpa depois se quiser).
-- Não estou removendo o conceito de `queue` das conversas — ele continua útil para filtros visuais por aba (Vendas/Suporte), apenas deixa de bloquear a visibilidade.
+- Conferir que usuários `user` não filtram mais `queue = sales`.
+- Conferir que a consulta de conversas passa `queue: all`.
+- Conferir que a versão publicada já tem headers/metas anti-cache e que o novo aviso cobre abas antigas em memória.

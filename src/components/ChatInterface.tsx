@@ -102,12 +102,9 @@ const ChatInterface: React.FC = () => {
     ? (mainTab === 'finalizadas' ? 'finished' : 'active')
     : nonAdminChatTab;
   const setChatTab = setNonAdminChatTab;
-  const queueForFetch: 'sales' | 'support' | 'all' = isAdmin
-    ? 'all'
-    : (queueForRole(role) ?? 'sales');
-  const effectiveQueue: 'sales' | 'support' = isAdmin
-    ? 'sales'
-    : (queueForRole(role) ?? 'sales');
+  // Single-tenant: all authenticated users see every conversation regardless of queue.
+  const queueForFetch: 'sales' | 'support' | 'all' = 'all';
+  const effectiveQueue: string = 'all';
   const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: queueForFetch });
   const { sdrName, companyName } = useCompanySettings();
   const queueUnread = useQueueUnreadCounts();
@@ -1158,13 +1155,13 @@ const ChatInterface: React.FC = () => {
                 <TabsTrigger value="active" className="text-xs gap-1.5">
                   Ativas
                   <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {effectiveQueue === 'support' ? tabCounts.activeSupport : tabCounts.activeSales}
+                    {tabCounts.activeTotal}
                   </span>
                 </TabsTrigger>
                 <TabsTrigger value="finished" className="text-xs gap-1.5">
                   Finalizadas
                   <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {effectiveQueue === 'support' ? tabCounts.finishedSupport : tabCounts.finishedSales}
+                    {tabCounts.finishedTotal}
                   </span>
                 </TabsTrigger>
               </TabsList>
