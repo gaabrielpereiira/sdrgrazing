@@ -92,20 +92,17 @@ const EditableRow: React.FC<EditableRowProps> = ({
 
 const ChatInterface: React.FC = () => {
   const { role, isAdmin } = useAuth();
-  // Admins see a 2-tab row: Geral | Finalizadas (Suporte virou tag por conversa)
+  // Todos os usuários autenticados veem a mesma UI: Geral | Finalizadas
   const [mainTab, setMainTab] = useState<'geral' | 'finalizadas'>('geral');
-  // Non-admins keep the simpler Ativas | Finalizadas toggle on their own queue
-  const [nonAdminChatTab, setNonAdminChatTab] = useState<'active' | 'finished'>('active');
   const [endDialogOpen, setEndDialogOpen] = useState(false);
   const [sendClosingMessage, setSendClosingMessage] = useState(true);
-  const chatTab: 'active' | 'finished' = isAdmin
-    ? (mainTab === 'finalizadas' ? 'finished' : 'active')
-    : nonAdminChatTab;
-  const setChatTab = setNonAdminChatTab;
+  const chatTab: 'active' | 'finished' = mainTab === 'finalizadas' ? 'finished' : 'active';
+  const setChatTab = (v: 'active' | 'finished') => setMainTab(v === 'finished' ? 'finalizadas' : 'geral');
   // Single-tenant: all authenticated users see every conversation regardless of queue.
   const queueForFetch: 'sales' | 'support' | 'all' = 'all';
   const effectiveQueue: string = 'all';
   const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: queueForFetch });
+
   const { sdrName, companyName } = useCompanySettings();
   const queueUnread = useQueueUnreadCounts();
   const tabCounts = useConversationTabCounts();
