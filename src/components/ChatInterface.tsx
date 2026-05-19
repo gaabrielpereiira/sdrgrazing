@@ -1155,13 +1155,13 @@ const ChatInterface: React.FC = () => {
                 <TabsTrigger value="active" className="text-xs gap-1.5">
                   Ativas
                   <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {effectiveQueue === 'support' ? tabCounts.activeSupport : tabCounts.activeSales}
+                    {tabCounts.activeTotal}
                   </span>
                 </TabsTrigger>
                 <TabsTrigger value="finished" className="text-xs gap-1.5">
                   Finalizadas
                   <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {effectiveQueue === 'support' ? tabCounts.finishedSupport : tabCounts.finishedSales}
+                    {tabCounts.finishedTotal}
                   </span>
                 </TabsTrigger>
               </TabsList>
