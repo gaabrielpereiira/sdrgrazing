@@ -121,6 +121,31 @@ serve(async (req) => {
           continue;
         }
 
+        // If any image/video/document message still has no media_url and the
+        // group is fresh (<25s), defer processing 8s to let download finish.
+        // This prevents Nina from seeing a media placeholder without the real
+        // image and returning empty content (which previously triggered the
+        // duplicated fallback greeting).
+        const needsMedia = dbMessages.some((m: any) =>
+          ['image', 'video', 'document'].includes(m.type) && !m.media_url
+        );
+        const oldestQueuedAt = Math.min(
+          ...messages.map((m: any) => new Date(m.created_at).getTime())
+        );
+        const ageMs = Date.now() - oldestQueuedAt;
+        if (needsMedia && ageMs < 25_000) {
+          const newProcessAfter = new Date(Date.now() + 8_000).toISOString();
+          console.log(
+            `[MessageGrouper] Media not yet downloaded for ${phoneNumber} (age ${ageMs}ms), deferring to ${newProcessAfter}`
+          );
+          await supabase
+            .from('message_grouping_queue')
+            .update({ processed: false, process_after: newProcessAfter })
+            .in('id', messages.map((m: any) => m.id));
+          continue;
+        }
+
+
         // Combine content and handle audio transcription
         const combinedContent = await combineAndTranscribeMessages(
           supabase,
