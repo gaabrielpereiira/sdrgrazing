@@ -762,13 +762,30 @@ async function processQueueItem(
     .order('sent_at', { ascending: false })
     .limit(20);
 
-  // Build conversation history for AI
+  // Build conversation history for AI — include image_url for incoming images
+  // that already have media_url, so Gemini can actually see them instead of
+  // receiving an empty "[imagem recebida]" placeholder.
   const conversationHistory = (recentMessages || [])
     .reverse()
-    .map((msg: any) => ({
-      role: msg.from_type === 'user' ? 'user' : 'assistant',
-      content: msg.content || '[media]'
-    }));
+    .map((msg: any) => {
+      const role = msg.from_type === 'user' ? 'user' : 'assistant';
+      const isIncomingImage =
+        role === 'user' && (msg.type === 'image' || msg.media_type === 'image') && !!msg.media_url;
+      if (isIncomingImage) {
+        const caption = (msg.content && msg.content !== '[imagem recebida]') ? msg.content : '';
+        return {
+          role,
+          content: [
+            { type: 'text', text: caption || 'Imagem enviada pelo cliente.' },
+            { type: 'image_url', image_url: { url: msg.media_url } },
+          ],
+        };
+      }
+      return {
+        role,
+        content: msg.content || '[media]',
+      };
+    });
 
   // Get client memory
   const clientMemory = conversation.contact?.client_memory || {};
