@@ -559,16 +559,18 @@ export const api = {
    * Delete team member
    */
   deleteTeamMember: async (id: string): Promise<void> => {
-    const { error } = await supabase
-      .from('team_members')
-      .delete()
-      .eq('id', id);
-
+    const { data, error } = await supabase.functions.invoke('delete-user', {
+      body: { memberId: id },
+    });
     if (error) {
       console.error('[API] Error deleting team member:', error);
       throw error;
     }
+    if (data && (data as any).error) {
+      throw new Error((data as any).error);
+    }
   },
+
 
   /**
    * Sync team_members with auth.users:
