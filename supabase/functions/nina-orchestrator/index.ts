@@ -762,13 +762,30 @@ async function processQueueItem(
     .order('sent_at', { ascending: false })
     .limit(20);
 
-  // Build conversation history for AI
+  // Build conversation history for AI — include image_url for incoming images
+  // that already have media_url, so Gemini can actually see them instead of
+  // receiving an empty "[imagem recebida]" placeholder.
   const conversationHistory = (recentMessages || [])
     .reverse()
-    .map((msg: any) => ({
-      role: msg.from_type === 'user' ? 'user' : 'assistant',
-      content: msg.content || '[media]'
-    }));
+    .map((msg: any) => {
+      const role = msg.from_type === 'user' ? 'user' : 'assistant';
+      const isIncomingImage =
+        role === 'user' && (msg.type === 'image' || msg.media_type === 'image') && !!msg.media_url;
+      if (isIncomingImage) {
+        const caption = (msg.content && msg.content !== '[imagem recebida]') ? msg.content : '';
+        return {
+          role,
+          content: [
+            { type: 'text', text: caption || 'Imagem enviada pelo cliente.' },
+            { type: 'image_url', image_url: { url: msg.media_url } },
+          ],
+        };
+      }
+      return {
+        role,
+        content: msg.content || '[media]',
+      };
+    });
 
   // Get client memory
   const clientMemory = conversation.contact?.client_memory || {};
@@ -1058,8 +1075,13 @@ async function processQueueItem(
   }
 
   if (!aiContent) {
-    console.warn('[Nina] Empty AI response received, using fallback');
-    aiContent = 'Olá! Como posso ajudar você hoje? 😊';
+    console.warn('[Nina] Empty AI response received, skipping send (no fallback to avoid duplicates)');
+    // Mark the original message as processed so it doesn't keep retrying.
+    await supabase
+      .from('messages')
+      .update({ processed_by_nina: true })
+      .eq('id', message.id);
+    return;
   }
 
   console.log('[Nina] Final response length:', aiContent.length);
@@ -1177,6 +1199,28 @@ async function queueTextResponse(
   delay: number,
   appointmentCreated?: any
 ) {
+  // Dedupe defensivo: se a última mensagem da Nina nesta conversa nos últimos 30s
+  // tem conteúdo idêntico ao que estamos prestes a enviar, abortar para evitar
+  // mensagens duplicadas vistas pelo cliente.
+  try {
+    const since = new Date(Date.now() - 30_000).toISOString();
+    const { data: recentNina } = await supabase
+      .from('messages')
+      .select('content')
+      .eq('conversation_id', conversation.id)
+      .eq('from_type', 'nina')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (recentNina?.content && recentNina.content.trim() === aiContent.trim()) {
+      console.warn('[Nina] Duplicate response detected in last 30s — skipping send_queue insert');
+      return;
+    }
+  } catch (e) {
+    console.warn('[Nina] Dedupe check failed (continuing):', e);
+  }
+
   // Break message into chunks if enabled
   const messageChunks = settings?.message_breaking_enabled 
     ? breakMessageIntoChunks(aiContent)
