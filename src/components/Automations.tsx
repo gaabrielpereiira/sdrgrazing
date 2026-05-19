@@ -104,6 +104,8 @@ const Automations: React.FC = () => {
         <WebhookEventsMonitor />
       </div>
       <div hidden={tab !== 'rules'}>
+        <WebhookEndpointCard onSimulate={() => setSimulateOpen(true)} />
+
         <div className="mb-4 relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..."
