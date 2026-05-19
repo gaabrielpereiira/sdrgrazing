@@ -7,6 +7,7 @@ import AutomationLogsModal from './AutomationLogsModal';
 import WebhookEventsMonitor from './WebhookEventsMonitor';
 import AutomationsDashboard from './AutomationsDashboard';
 import SimulateWebhookModal from './SimulateWebhookModal';
+import WebhookEndpointCard from './automations/WebhookEndpointCard';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
