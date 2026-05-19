@@ -1199,6 +1199,28 @@ async function queueTextResponse(
   delay: number,
   appointmentCreated?: any
 ) {
+  // Dedupe defensivo: se a última mensagem da Nina nesta conversa nos últimos 30s
+  // tem conteúdo idêntico ao que estamos prestes a enviar, abortar para evitar
+  // mensagens duplicadas vistas pelo cliente.
+  try {
+    const since = new Date(Date.now() - 30_000).toISOString();
+    const { data: recentNina } = await supabase
+      .from('messages')
+      .select('content')
+      .eq('conversation_id', conversation.id)
+      .eq('from_type', 'nina')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (recentNina?.content && recentNina.content.trim() === aiContent.trim()) {
+      console.warn('[Nina] Duplicate response detected in last 30s — skipping send_queue insert');
+      return;
+    }
+  } catch (e) {
+    console.warn('[Nina] Dedupe check failed (continuing):', e);
+  }
+
   // Break message into chunks if enabled
   const messageChunks = settings?.message_breaking_enabled 
     ? breakMessageIntoChunks(aiContent)
