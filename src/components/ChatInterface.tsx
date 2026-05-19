@@ -104,7 +104,7 @@ const ChatInterface: React.FC = () => {
   const setChatTab = setNonAdminChatTab;
   // Single-tenant: all authenticated users see every conversation regardless of queue.
   const queueForFetch: 'sales' | 'support' | 'all' = 'all';
-  const effectiveQueue: 'sales' | 'support' = 'sales';
+  const effectiveQueue: 'sales' | 'support' | 'all' = 'all';
   const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: queueForFetch });
   const { sdrName, companyName } = useCompanySettings();
   const queueUnread = useQueueUnreadCounts();
