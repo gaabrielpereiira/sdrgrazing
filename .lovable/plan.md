@@ -1,52 +1,90 @@
-## Objetivo
 
-Expor a URL de entrega e o Secret do webhook WooCommerce diretamente na aba **Automações**, com a aparência de um "endpoint gerado pelo sistema" — sem que o usuário precise abrir Configurações → APIs.
+## Diagnóstico
 
-O backend já existe (`wc-receiver` valida HMAC e grava em `webhook_events`, que dispara o `automation-runner`). Esta mudança é só de UI/UX.
+Investiguei o banco e o código. Encontrei **duas causas** distintas para o que a Tais está vendo:
 
-## O que muda
+### 1. Leads sumindo — causa: RLS por papel (role)
 
-### 1. Novo componente `src/components/automations/WebhookEndpointCard.tsx`
-Card destacado mostrando:
+O sistema tem 4 usuários: **2 admins** e **2 com papel `user`** (provavelmente a Tais é um deles).
 
-- **Status** (Configurado / Aguardando Secret) com bolinha verde/âmbar
-- **URL de entrega** (read-only) com botão "Copiar"
-  - `${VITE_SUPABASE_URL}/functions/v1/wc-receiver`
-- **Secret HMAC** com:
-  - Input password + toggle olho
-  - Botão **Gerar** (random 32 chars, igual ao WooWebhookSettings atual)
-  - Botão **Salvar** (grava em `nina_settings.wc_webhook_secret`, single-tenant fallback `user_id IS NULL`)
-- **Instruções rápidas** (3 passos curtos: WooCommerce → Avançado → Webhooks → colar URL/Secret/tópico)
-- Link discreto "Testar agora" que abre o `SimulateWebhookModal` já existente
+A RLS de `conversations` filtra por `user_queue_access(auth.uid())`:
 
-Reaproveita a lógica do `WooWebhookSettings.tsx` (carregar/salvar via `.maybeSingle()`).
+- `admin` → vê `['sales','support']` (tudo)
+- `support` → vê só `['support']`
+- `sdr`/`user` → vê só `['sales']`
 
-### 2. `src/components/Automations.tsx`
-- Renderizar `<WebhookEndpointCard />` no topo da aba **Regras**, acima da barra de busca.
-- Quando ainda não houver Secret configurado, expandir o card por padrão; quando configurado, render compacto (URL + status, com "Mostrar detalhes" para expandir).
+Hoje no banco existem **30+ conversas misturadas entre `sales` e `support`**. Resultado: quem tem papel `user` (Tais) **não vê nenhum lead da fila `support`** — exatamente o sintoma de "leads sumidos".
 
-### 3. Sem mudanças em backend
-- `wc-receiver`, `automation-runner` e tabela `nina_settings` já fazem o trabalho.
-- Sem migrations, sem novas edge functions, sem novos secrets.
+Isto contradiz a arquitetura single-tenant do resto do projeto (contatos, deals, appointments já são `auth.role() = 'authenticated'` — compartilhado entre todos).
+
+### 2. "Versão antiga" — causa: cache do navegador
+
+Não existe Service Worker no projeto (verificado). O que acontece é o navegador da Tais segurando bundles JS antigos do Vite/Lovable em cache. Cada deploy gera novos hashes, mas se o `index.html` ficou em cache, o navegador continua puxando os chunks velhos.
+
+---
+
+## Plano
+
+### Passo 1 — Migration: igualar RLS de conversas/mensagens ao padrão single-tenant
+
+Substituir as policies de `conversations`, `messages` e `conversation_states` por uma policy única do tipo "qualquer usuário autenticado acessa tudo" — exatamente o que já está em `contacts`, `deals`, `appointments`.
+
+```sql
+-- conversations
+DROP POLICY IF EXISTS "Users can view conversations in allowed queues"   ON public.conversations;
+DROP POLICY IF EXISTS "Users can insert conversations in allowed queues" ON public.conversations;
+DROP POLICY IF EXISTS "Users can update conversations in allowed queues" ON public.conversations;
+DROP POLICY IF EXISTS "Admins can delete conversations"                  ON public.conversations;
+
+CREATE POLICY "Authenticated users can access all conversations"
+  ON public.conversations FOR ALL TO authenticated
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+-- messages
+DROP POLICY IF EXISTS "Users can view messages in allowed conversations"   ON public.messages;
+DROP POLICY IF EXISTS "Users can insert messages in allowed conversations" ON public.messages;
+DROP POLICY IF EXISTS "Users can update messages in allowed conversations" ON public.messages;
+
+CREATE POLICY "Authenticated users can access all messages"
+  ON public.messages FOR ALL TO authenticated
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+-- conversation_states (hoje filtra por conversations.user_id, que muitas vezes é NULL)
+DROP POLICY IF EXISTS "Users can access states of their conversations" ON public.conversation_states;
+
+CREATE POLICY "Authenticated users can access all conversation_states"
+  ON public.conversation_states FOR ALL TO authenticated
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+```
+
+Efeito: Tais (e qualquer futuro usuário) passa a ver **todas** as conversas e mensagens, independente da fila ou do papel — alinhado com o resto do app.
+
+### Passo 2 — Forçar cache busting no `index.html`
+
+Adicionar meta tags no `<head>` do `index.html` para impedir que o navegador segure o HTML em cache (os chunks JS já têm hash, só o HTML que precisa):
+
+```html
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+```
+
+Isso garante que toda vez que a Tais (ou qualquer usuário) abrir o site, o navegador busca o `index.html` novo, que referencia os bundles JS atualizados.
+
+### Passo 3 — Orientação para a Tais (apenas uma vez)
+
+Depois do deploy, pedir para ela:
+1. Abrir o site
+2. `Ctrl+Shift+R` (Windows) ou `Cmd+Shift+R` (Mac) — hard refresh
+3. Ou: DevTools → Application → Clear storage → Clear site data
+
+A partir desse hard refresh, com o passo 2 aplicado, ela nunca mais vai ficar presa em versão antiga.
+
+---
 
 ## Fora de escopo
-- Webhook genérico (não-Woo) — usuário escolheu apenas mostrar o atual.
-- Remover o card de Configurações → APIs (fica como atalho redundante, sem prejuízo).
-
-## Detalhes técnicos
-
-```text
-Automações (aba Regras)
-├── [novo] WebhookEndpointCard      ← URL + Secret + status + instruções
-├── Busca
-└── Tabela/cards de regras
-```
-
-Query single-tenant para ler/gravar o secret (segue padrão do projeto):
-```ts
-supabase.from('nina_settings')
-  .select('id, wc_webhook_secret')
-  .order('created_at', { ascending: true })
-  .limit(1)
-  .maybeSingle();
-```
+- Nada de mudanças no frontend além do `index.html` (a função `user_queue_access` continua existindo, mas deixa de ser usada por essas tabelas — pode ser limpa depois se quiser).
+- Não estou removendo o conceito de `queue` das conversas — ele continua útil para filtros visuais por aba (Vendas/Suporte), apenas deixa de bloquear a visibilidade.
