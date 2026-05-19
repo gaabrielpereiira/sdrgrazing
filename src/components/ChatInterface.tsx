@@ -102,12 +102,9 @@ const ChatInterface: React.FC = () => {
     ? (mainTab === 'finalizadas' ? 'finished' : 'active')
     : nonAdminChatTab;
   const setChatTab = setNonAdminChatTab;
-  const queueForFetch: 'sales' | 'support' | 'all' = isAdmin
-    ? 'all'
-    : (queueForRole(role) ?? 'sales');
-  const effectiveQueue: 'sales' | 'support' = isAdmin
-    ? 'sales'
-    : (queueForRole(role) ?? 'sales');
+  // Single-tenant: all authenticated users see every conversation regardless of queue.
+  const queueForFetch: 'sales' | 'support' | 'all' = 'all';
+  const effectiveQueue: 'sales' | 'support' = 'sales';
   const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: queueForFetch });
   const { sdrName, companyName } = useCompanySettings();
   const queueUnread = useQueueUnreadCounts();
