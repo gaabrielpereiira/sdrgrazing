@@ -92,20 +92,17 @@ const EditableRow: React.FC<EditableRowProps> = ({
 
 const ChatInterface: React.FC = () => {
   const { role, isAdmin } = useAuth();
-  // Admins see a 2-tab row: Geral | Finalizadas (Suporte virou tag por conversa)
+  // Todos os usuários autenticados veem a mesma UI: Geral | Finalizadas
   const [mainTab, setMainTab] = useState<'geral' | 'finalizadas'>('geral');
-  // Non-admins keep the simpler Ativas | Finalizadas toggle on their own queue
-  const [nonAdminChatTab, setNonAdminChatTab] = useState<'active' | 'finished'>('active');
   const [endDialogOpen, setEndDialogOpen] = useState(false);
   const [sendClosingMessage, setSendClosingMessage] = useState(true);
-  const chatTab: 'active' | 'finished' = isAdmin
-    ? (mainTab === 'finalizadas' ? 'finished' : 'active')
-    : nonAdminChatTab;
-  const setChatTab = setNonAdminChatTab;
+  const chatTab: 'active' | 'finished' = mainTab === 'finalizadas' ? 'finished' : 'active';
+  const setChatTab = (v: 'active' | 'finished') => setMainTab(v === 'finished' ? 'finalizadas' : 'geral');
   // Single-tenant: all authenticated users see every conversation regardless of queue.
   const queueForFetch: 'sales' | 'support' | 'all' = 'all';
   const effectiveQueue: string = 'all';
   const { conversations, loading, sendMessage, sendMediaMessage, sendTemplateMessage, updateStatus, markAsRead, assignConversation, endConversation, reopenConversation, reloadConversationMessages } = useConversations({ active: chatTab === 'active', queue: queueForFetch });
+
   const { sdrName, companyName } = useCompanySettings();
   const queueUnread = useQueueUnreadCounts();
   const tabCounts = useConversationTabCounts();
@@ -1103,70 +1100,46 @@ const ChatInterface: React.FC = () => {
             <h2 className="text-lg font-bold text-white">Conversas</h2>
             <span
               className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border flex items-center gap-1 ${
-                isAdmin && mainTab === 'finalizadas'
+                mainTab === 'finalizadas'
                   ? 'bg-slate-500/15 text-slate-300 border-slate-500/40'
-                  : effectiveQueue === 'support'
-                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
-                    : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
+                  : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
               }`}
             >
-              {isAdmin && mainTab === 'finalizadas'
+              {mainTab === 'finalizadas'
                 ? <><XCircle className="w-3 h-3" />Finalizadas</>
-                : isAdmin
-                  ? <><Bot className="w-3 h-3" />Geral</>
-                  : effectiveQueue === 'support'
-                    ? <><LifeBuoy className="w-3 h-3" />Suporte</>
-                    : <><Bot className="w-3 h-3" />Atendimento</>}
+                : <><Bot className="w-3 h-3" />Geral</>}
             </span>
           </div>
-          {isAdmin ? (
-            <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'geral' | 'finalizadas')} className="mb-3">
-              <TabsList className="grid grid-cols-2 w-full h-10 p-1">
-                <TabsTrigger
-                  value="geral"
-                  className="text-xs gap-1.5 data-[state=active]:bg-cyan-500/15 data-[state=active]:text-cyan-300 data-[state=active]:shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
-                >
-                  <Bot className="w-3.5 h-3.5" />
-                  Geral
-                  <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {tabCounts.activeSales + tabCounts.activeSupport}
+          <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'geral' | 'finalizadas')} className="mb-3">
+            <TabsList className="grid grid-cols-2 w-full h-10 p-1">
+              <TabsTrigger
+                value="geral"
+                className="text-xs gap-1.5 data-[state=active]:bg-cyan-500/15 data-[state=active]:text-cyan-300 data-[state=active]:shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
+              >
+                <Bot className="w-3.5 h-3.5" />
+                Geral
+                <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                  {tabCounts.activeSales + tabCounts.activeSupport}
+                </span>
+                {(queueUnread.sales + queueUnread.support) > 0 && (
+                  <span className={`ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold text-white ${queueUnread.support > 0 ? 'bg-red-500 animate-pulse' : 'bg-cyan-500'}`}>
+                    {(queueUnread.sales + queueUnread.support) > 99 ? '99+' : (queueUnread.sales + queueUnread.support)}
                   </span>
-                  {(queueUnread.sales + queueUnread.support) > 0 && (
-                    <span className={`ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold text-white ${queueUnread.support > 0 ? 'bg-red-500 animate-pulse' : 'bg-cyan-500'}`}>
-                      {(queueUnread.sales + queueUnread.support) > 99 ? '99+' : (queueUnread.sales + queueUnread.support)}
-                    </span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger
-                  value="finalizadas"
-                  className="text-xs gap-1.5 data-[state=active]:bg-slate-500/15 data-[state=active]:text-slate-200 data-[state=active]:shadow-[inset_0_-2px_0_0_rgb(148_163_184)]"
-                >
-                  <XCircle className="w-3.5 h-3.5" />
-                  Finalizadas
-                  <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {tabCounts.finishedSales + tabCounts.finishedSupport}
-                  </span>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          ) : (
-            <Tabs value={chatTab} onValueChange={(v) => setChatTab(v as 'active' | 'finished')} className="mb-3">
-              <TabsList className="grid grid-cols-2 w-full h-9">
-                <TabsTrigger value="active" className="text-xs gap-1.5">
-                  Ativas
-                  <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {tabCounts.activeTotal}
-                  </span>
-                </TabsTrigger>
-                <TabsTrigger value="finished" className="text-xs gap-1.5">
-                  Finalizadas
-                  <span className="min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {tabCounts.finishedTotal}
-                  </span>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          )}
+                )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="finalizadas"
+                className="text-xs gap-1.5 data-[state=active]:bg-slate-500/15 data-[state=active]:text-slate-200 data-[state=active]:shadow-[inset_0_-2px_0_0_rgb(148_163_184)]"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Finalizadas
+                <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                  {tabCounts.finishedSales + tabCounts.finishedSupport}
+                </span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
             <input 

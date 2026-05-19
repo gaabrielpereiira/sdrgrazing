@@ -1,58 +1,30 @@
-## Diagnóstico confirmado
+## Problema
 
-A correção de RLS foi aplicada com sucesso: `conversations` e `messages` já permitem que qualquer usuário autenticado acesse tudo. Então o erro que persiste não é mais o bloqueio do banco.
+Usuários não-admin (ex.: Tais) ainda veem a UI antiga do chat:
+- Abas **"Ativas | Finalizadas"** em vez de **"Geral | Finalizadas"**
+- Chip de fila no topo mostrando **"Atendimento"** (ou "Suporte") em vez de **"Geral"**
+- Conversas da fila de **Suporte** não aparecem visualmente diferenciadas
 
-Encontrei duas causas restantes:
+A busca de dados já está correta (`queueForFetch = 'all'`), então as conversas de suporte JÁ vêm do banco — o problema é só visual: o componente ainda tem dois ramos de UI (admin vs não-admin) e o ramo não-admin é o "antigo".
 
-1. **Leads ainda somem para a Tais porque o frontend continua filtrando por papel**
-   - No `ChatInterface`, usuários não-admin ainda usam `queueForRole(role)`.
-   - Como a Tais tem papel `user`, o app busca só `queue = sales`.
-   - No banco existem leads ativos em `support`, então eles continuam ocultos para ela mesmo com RLS corrigido.
+## O que mudar
 
-2. **Versão antiga pode persistir por cache de app carregado em memória / assets antigos**
-   - A versão publicada já está servindo `index.html` com `no-cache`.
-   - Mas se a aba antiga ficou aberta, ou se o navegador reaproveitou JS carregado antes, o app pode continuar rodando código antigo até detectar uma nova versão ou forçar reload.
+Arquivo único: `src/components/ChatInterface.tsx`
 
-## Plano de correção
+1. **Remover a ramificação admin/não-admin nas abas.** Todos os usuários autenticados passam a usar o mesmo bloco `Tabs` de admin: **Geral | Finalizadas**, controlado por `mainTab` (`'geral' | 'finalizadas'`).
+   - Apagar o estado `nonAdminChatTab` e o bloco `else` que renderiza "Ativas | Finalizadas" (linhas ~1152–1168).
+   - `chatTab` deriva sempre de `mainTab`.
 
-### 1. Remover filtro por papel no Chat
-Alterar `src/components/ChatInterface.tsx` para que todos os usuários vejam a fila geral:
+2. **Atualizar o chip de fila no header** (linhas ~1104–1120): remover os ramos `effectiveQueue === 'support'` e o fallback "Atendimento". O chip vira só dois estados:
+   - `mainTab === 'finalizadas'` → "Finalizadas" (cinza)
+   - caso contrário → "Geral" (ciano) com ícone `Bot`
 
-- `queueForFetch` deve ser sempre `all`.
-- A aba principal deve parar de esconder suporte de usuários `user`.
-- `queue` continua existindo apenas como etiqueta visual e para mover conversas entre Vendas/Suporte, mas não como bloqueio de visibilidade.
+3. **Limpeza de variáveis órfãs:** após o passo 2, `effectiveQueue` só é usado em outros pontos do arquivo (botões "Mover para Atendimento" etc.). Manter `effectiveQueue = 'all'` para não quebrar essas branches — elas já caem no fallback correto.
 
-Resultado: Tais e qualquer outro usuário verão todas as conversas ativas/finalizadas, independente de `sales` ou `support`.
+4. **Contadores das abas:** manter `tabCounts.activeSales + tabCounts.activeSupport` (Geral) e `tabCounts.finishedSales + tabCounts.finishedSupport` (Finalizadas) — soma de ambas as filas, como já está no ramo admin.
 
-### 2. Ajustar contadores das abas para refletirem o total real
-Como o chat será compartilhado para todos:
+5. **Não mudar lógica de fetch:** `queueForFetch` continua `'all'`, `useConversations` já retorna tudo, `useConversationTabCounts` já calcula totais. Nenhuma mudança em hooks ou backend.
 
-- A aba de ativas deve mostrar `activeTotal`.
-- A aba de finalizadas deve mostrar `finishedTotal`.
-- Evita a situação em que o contador mostra só vendas enquanto há conversas de suporte ocultas.
+## Resultado esperado
 
-### 3. Adicionar verificação automática de nova versão no app
-Criar um mecanismo leve no frontend para detectar quando o `index.html` publicado mudou:
-
-- Buscar periodicamente o HTML atual com `cache: 'no-store'`.
-- Extrair o arquivo `/assets/index-*.js` atual.
-- Comparar com o script carregado na sessão.
-- Se mudou, mostrar um toast: “Nova versão disponível” com botão “Atualizar”.
-
-Resultado: se Tais estiver com aba antiga aberta, o próprio sistema avisa e permite recarregar para a versão nova.
-
-### 4. Adicionar fallback de recarregamento seguro
-Além do toast, ao voltar para a aba depois de um tempo, o app checa novamente a versão. Isso reduz casos de computador que ficou com o sistema aberto por horas/dias.
-
-## Arquivos previstos
-
-- `src/components/ChatInterface.tsx`
-- Novo hook/componente pequeno para version-check, por exemplo `src/hooks/useVersionCheck.ts` ou integração em `src/App.tsx`
-
-## Validação
-
-Após implementar:
-
-- Conferir que usuários `user` não filtram mais `queue = sales`.
-- Conferir que a consulta de conversas passa `queue: all`.
-- Conferir que a versão publicada já tem headers/metas anti-cache e que o novo aviso cobre abas antigas em memória.
+Tais (e qualquer outro usuário não-admin) verá exatamente a mesma UI do admin: abas **Geral | Finalizadas**, chip **"Geral"**, e as conversas de suporte aparecerão misturadas na aba Geral (identificadas pela tag de fila já existente em cada card de conversa).
