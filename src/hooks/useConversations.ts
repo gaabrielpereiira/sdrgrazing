@@ -434,12 +434,54 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
         }
       });
 
+    // Subscribe to contact changes (name, phone, tags, avatar, etc.)
+    const contactsChannel = supabase
+      .channel('contacts-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'contacts' },
+        (payload) => {
+          const updated = payload.new as any;
+          console.log('[Realtime] 👤 Contact updated:', updated.id, updated.name);
+          setConversationsTracked(prev => prev.map(conv => {
+            if (conv.contactId !== updated.id) return conv;
+            const name = updated.name || updated.call_name || updated.phone_number || 'Desconhecido';
+            return {
+              ...conv,
+              contactName: name,
+              contactPhone: updated.phone_number ?? conv.contactPhone,
+              contactEmail: updated.email ?? conv.contactEmail,
+              contactAvatar: updated.profile_picture_url
+                || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0ea5e9&color=fff`,
+              tags: [...(conv.tags?.filter((t: string) => !(conv as any)._contactTags?.includes(t)) || []), ...((updated.tags as string[]) || [])],
+              notes: updated.notes ?? conv.notes,
+              clientMemory: updated.client_memory ?? conv.clientMemory,
+              isBusiness: !!updated.is_business,
+              companyName: updated.company_name ?? conv.companyName,
+            } as any;
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'contacts' },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (!deletedId) return;
+          setConversationsTracked(prev => prev.filter(c => c.contactId !== deletedId));
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Contacts channel status:', status);
+      });
+
     // Cleanup
     return () => {
       console.log('[Realtime] Cleaning up subscriptions');
       stopPolling();
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
+      supabase.removeChannel(contactsChannel);
     };
   }, [fetchConversations, fetchAndAddConversation, startPolling, stopPolling]);
 
