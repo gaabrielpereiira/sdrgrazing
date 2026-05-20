@@ -200,23 +200,26 @@ const Team: React.FC = () => {
     e.preventDefault();
     if (!editingMember) return;
 
+    const updates = {
+      name: editFormData.name,
+      email: editFormData.email,
+      role: editFormData.role as 'admin' | 'manager' | 'agent',
+      status: editFormData.status,
+      team_id: editFormData.team_id || null,
+      function_id: editFormData.function_id || null,
+      weight: editFormData.weight,
+    };
+    const snapshot = members;
+    setMembers(prev => prev.map(m => m.id === editingMember.id ? { ...m, ...updates } as any : m));
+    setShowEditModal(false);
+    setEditingMember(null);
     try {
-      await api.updateTeamMember(editingMember.id, {
-        name: editFormData.name,
-        email: editFormData.email,
-        role: editFormData.role as 'admin' | 'manager' | 'agent',
-        status: editFormData.status,
-        team_id: editFormData.team_id || null,
-        function_id: editFormData.function_id || null,
-        weight: editFormData.weight
-      });
+      await api.updateTeamMember(editingMember.id, updates);
       toast.success('Membro atualizado com sucesso!');
-      setShowEditModal(false);
-      setEditingMember(null);
-      await loadAllData();
     } catch (error) {
       console.error('Erro ao editar membro:', error);
       toast.error('Erro ao editar membro');
+      setMembers(snapshot);
     }
   };
 
