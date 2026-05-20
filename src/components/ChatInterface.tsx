@@ -784,6 +784,18 @@ const ChatInterface: React.FC = () => {
     return false;
   };
 
+  // Prioridade de ordenação da lista de conversas:
+  // 0 = Pendentes, 1 = Tarefas vencidas, 2 = Tarefas a vencer, 3 = Demais (por última msg)
+  const bucketOf = (chat: UIConversation): number => {
+    if (isPending(chat)) return 0;
+    const act = pendingActivities[chat.id];
+    if (act) {
+      const ts = new Date(act.nextAt).getTime();
+      return ts <= Date.now() ? 1 : 2;
+    }
+    return 3;
+  };
+
   const filteredConversations = conversations
     .filter(chat => {
       if (!searchQuery) return true;
@@ -793,8 +805,23 @@ const ChatInterface: React.FC = () => {
         chat.contactPhone.includes(query) ||
         chat.lastMessage.toLowerCase().includes(query)
       );
+    })
+    .sort((a, b) => {
+      const ba = bucketOf(a);
+      const bb = bucketOf(b);
+      if (ba !== bb) return ba - bb;
+      // Desempate dentro do mesmo bucket
+      if (ba === 1 || ba === 2) {
+        const ta = new Date(pendingActivities[a.id]!.nextAt).getTime();
+        const tb = new Date(pendingActivities[b.id]!.nextAt).getTime();
+        // Vencidas: mais antiga (mais vencida) no topo. A vencer: mais próxima no topo.
+        return ta - tb;
+      }
+      // Buckets 0 e 3: última mensagem mais recente primeiro
+      const la = new Date(a.lastMessageAt || 0).getTime();
+      const lb = new Date(b.lastMessageAt || 0).getTime();
+      return lb - la;
     });
-    // Ordem natural por last_message_at desc (igual WhatsApp), já vinda do hook.
 
   const renderStatusBadge = (status: ConversationStatus) => {
     const config = {
