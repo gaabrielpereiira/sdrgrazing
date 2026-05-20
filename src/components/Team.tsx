@@ -156,24 +156,29 @@ const Team: React.FC = () => {
   };
 
   const handleUpdateMember = async (id: string, field: string, value: any) => {
+    const snapshot = members;
+    setMembers(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
     try {
       await api.updateTeamMember(id, { [field]: value });
       toast.success('Membro atualizado com sucesso');
     } catch (error) {
       console.error('Erro ao atualizar membro:', error);
       toast.error('Erro ao atualizar membro');
+      setMembers(snapshot);
     }
   };
 
   const handleDeleteMember = async (id: string, name: string) => {
     if (!confirm(`Tem certeza que deseja excluir ${name}?`)) return;
+    const snapshot = members;
+    setMembers(prev => prev.filter(m => m.id !== id));
     try {
       await api.deleteTeamMember(id);
       toast.success('Membro removido com sucesso');
-      await loadAllData();
     } catch (error) {
       console.error('Erro ao remover membro:', error);
       toast.error('Erro ao remover membro');
+      setMembers(snapshot);
     }
   };
 
