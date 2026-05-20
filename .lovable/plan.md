@@ -1,50 +1,43 @@
-# Atualizar nome/dados do contato no chat em tempo real
+## Objetivo
+Ordenar a lista de conversas do chat com a seguinte prioridade fixa (de cima para baixo):
 
-## Causa
-`src/hooks/useConversations.ts` assina realtime de `messages` e `conversations`, mas não de `contacts`. Quando alguém renomeia "Caroline" → "Caroline A" (ou muda telefone, tags, etc.), o estado do hook mantém o objeto `contact` antigo até um refresh.
+1. **Pendentes** — última mensagem do cliente (ou IA encaminhou pra humano e ninguém respondeu)
+2. **Tarefas vencidas** — atividade agendada cujo horário já passou
+3. **Tarefas a vencer** — atividade agendada futura
+4. **Demais conversas** — ordenadas pela data/hora da última mensagem (mais recente primeiro)
 
-A tabela `contacts` já está na publicação `supabase_realtime` e com `REPLICA IDENTITY FULL`, então só falta o subscribe no frontend.
+Dentro de cada grupo, o desempate continua sendo pela última mensagem mais recente.
 
-## Mudanças
+## Onde mudar
+Apenas `src/components/ChatInterface.tsx`, no bloco que constrói `filteredConversations` (≈ linhas 787–797). Nenhuma mudança de banco, hook ou backend — `isPending()` e `useAllPendingActivities()` já existem no arquivo.
 
-### `src/hooks/useConversations.ts`
-Adicionar um terceiro canal realtime para `contacts`:
-- Evento `UPDATE` em `public.contacts` → percorre `conversations` no estado e, para cada conversa cujo `contact.id === payload.new.id`, faz merge dos campos atualizados (`name`, `call_name`, `phone_number`, `email`, `tags`, `profile_picture_url`, `is_blocked`, etc.).
-- Evento `DELETE` → remove conversas órfãs do estado (defensivo).
-- Mesma estrutura dos canais existentes (status + fallback de polling).
+## Lógica de ordenação
 
-Não vou tocar nos transformadores nem na shape da `UIConversation` — só atualizar campos já presentes.
+Para cada conversa calculamos um "bucket" (quanto menor, mais no topo):
 
-### `src/components/Contacts.tsx` (update otimista)
-Quando o usuário salva edição de contato, atualizar o estado local imediatamente (igual fiz no Team) — assim, mesmo se o realtime falhar, a tela do Contatos reflete na hora. O chat segue via realtime do hook.
-
-## Detalhes técnicos
-
-```ts
-const contactsChannel = supabase
-  .channel('contacts-realtime')
-  .on('postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'contacts' },
-      (payload) => {
-        const updated = payload.new as any;
-        setConversationsTracked(prev => prev.map(conv =>
-          conv.contact?.id === updated.id
-            ? { ...conv,
-                contactName: updated.name ?? conv.contactName,
-                contact: { ...conv.contact, ...updated } }
-            : conv
-        ));
-      })
-  .on('postgres_changes',
-      { event: 'DELETE', schema: 'public', table: 'contacts' }, ...)
-  .subscribe(...);
+```text
+0 → Pendente (isPending(chat) === true)
+1 → Tem tarefa vencida   (pendingActivities[chat.id] && nextAt <= now)
+2 → Tem tarefa a vencer  (pendingActivities[chat.id] && nextAt  > now)
+3 → Nenhuma das anteriores
 ```
 
-Cleanup no `return` do `useEffect` remove o novo canal junto com os outros.
+Regra de empate:
+- Bucket 0 (Pendentes): pelas mais recentes primeiro (`lastMessageAt` desc).
+- Bucket 1 (Vencidas): pela tarefa mais antiga primeiro (vencida há mais tempo no topo).
+- Bucket 2 (A vencer): pela tarefa mais próxima de vencer primeiro.
+- Bucket 3: `lastMessageAt` desc (comportamento atual).
 
-## Fora do escopo
-- Não vou mexer em RLS, migrations ou realtime do banco — tabela `contacts` já está habilitada.
-- Não vou refatorar `useConversations` além desse subscribe.
+Uma conversa pode ser Pendente E ter tarefa — Pendente vence (bucket 0), conforme prioridade pedida.
+
+## Implementação (resumo)
+
+Substituir o `.filter(...)` atual por `.filter(...).sort((a, b) => ...)` usando uma função `bucketOf(chat)` baseada em `isPending` e `pendingActivities[chat.id]`. Toda a lógica fica encapsulada dentro do componente, sem alterar tipos nem outros hooks.
+
+## Fora de escopo
+- Não vou criar indicadores visuais novos (os badges de pendente e de tarefa já existem na lista).
+- Não vou mexer em filtros das abas (Geral / Finalizadas / Minhas) — só na ordenação dentro da aba ativa.
+- Sem migrations, sem mudanças de realtime.
 
 ## Resultado
-Editar nome/dados do contato em qualquer tela → a lista do chat e o cabeçalho do chat aberto atualizam **na hora**, sem F5.
+Conversas que precisam de atenção (cliente esperando resposta, tarefas vencidas, tarefas próximas) sobem automaticamente para o topo da lista, e a reordenação acontece em tempo real conforme mensagens chegam ou atividades são criadas/concluídas — já que tanto `conversations` quanto `pendingActivities` atualizam via realtime.
