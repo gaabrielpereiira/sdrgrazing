@@ -156,24 +156,29 @@ const Team: React.FC = () => {
   };
 
   const handleUpdateMember = async (id: string, field: string, value: any) => {
+    const snapshot = members;
+    setMembers(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
     try {
       await api.updateTeamMember(id, { [field]: value });
       toast.success('Membro atualizado com sucesso');
     } catch (error) {
       console.error('Erro ao atualizar membro:', error);
       toast.error('Erro ao atualizar membro');
+      setMembers(snapshot);
     }
   };
 
   const handleDeleteMember = async (id: string, name: string) => {
     if (!confirm(`Tem certeza que deseja excluir ${name}?`)) return;
+    const snapshot = members;
+    setMembers(prev => prev.filter(m => m.id !== id));
     try {
       await api.deleteTeamMember(id);
       toast.success('Membro removido com sucesso');
-      await loadAllData();
     } catch (error) {
       console.error('Erro ao remover membro:', error);
       toast.error('Erro ao remover membro');
+      setMembers(snapshot);
     }
   };
 
@@ -195,23 +200,26 @@ const Team: React.FC = () => {
     e.preventDefault();
     if (!editingMember) return;
 
+    const updates = {
+      name: editFormData.name,
+      email: editFormData.email,
+      role: editFormData.role as 'admin' | 'manager' | 'agent',
+      status: editFormData.status,
+      team_id: editFormData.team_id || null,
+      function_id: editFormData.function_id || null,
+      weight: editFormData.weight,
+    };
+    const snapshot = members;
+    setMembers(prev => prev.map(m => m.id === editingMember.id ? { ...m, ...updates } as any : m));
+    setShowEditModal(false);
+    setEditingMember(null);
     try {
-      await api.updateTeamMember(editingMember.id, {
-        name: editFormData.name,
-        email: editFormData.email,
-        role: editFormData.role as 'admin' | 'manager' | 'agent',
-        status: editFormData.status,
-        team_id: editFormData.team_id || null,
-        function_id: editFormData.function_id || null,
-        weight: editFormData.weight
-      });
+      await api.updateTeamMember(editingMember.id, updates);
       toast.success('Membro atualizado com sucesso!');
-      setShowEditModal(false);
-      setEditingMember(null);
-      await loadAllData();
     } catch (error) {
       console.error('Erro ao editar membro:', error);
       toast.error('Erro ao editar membro');
+      setMembers(snapshot);
     }
   };
 

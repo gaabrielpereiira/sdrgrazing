@@ -94,46 +94,70 @@ export function useConversationActivities(conversationId: string | null) {
   }, [conversationId, fetchActivities]);
 
   const createActivity = useCallback(async (input: CreateActivityInput) => {
+    // Optimistic insert with temp id
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const optimistic: ConversationActivity = {
+      id: tempId,
+      conversation_id: input.conversation_id,
+      contact_id: input.contact_id,
+      title: input.title,
+      description: input.description ?? null,
+      activity_type: input.activity_type,
+      scheduled_at: input.scheduled_at,
+      is_completed: false,
+      completed_at: null,
+      reminder_sent: false,
+      assigned_to: input.assigned_to ?? null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setActivities(prev => [...prev, optimistic].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)));
+
     const { error } = await (supabase as any)
       .from('conversation_activities')
       .insert(input);
     if (error) {
       console.error('[useConversationActivities] create error', error);
       toast.error('Erro ao criar atividade');
+      // Revert
+      setActivities(prev => prev.filter(a => a.id !== tempId));
       throw error;
     }
     const dt = new Date(input.scheduled_at);
     toast.success(`Atividade agendada para ${dt.toLocaleDateString('pt-BR')} às ${dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`);
-    // Kick off reminder checker (fire-and-forget, ensures the self-scheduling loop is alive)
     supabase.functions.invoke('activity-reminder-checker', { body: { trigger: 'create' } }).catch(() => {});
     fetchActivities();
   }, [fetchActivities]);
 
   const completeActivity = useCallback(async (id: string) => {
+    const snapshot = activities;
+    setActivities(prev => prev.map(a => a.id === id ? { ...a, is_completed: true, completed_at: new Date().toISOString() } : a));
     const { error } = await (supabase as any)
       .from('conversation_activities')
       .update({ is_completed: true, completed_at: new Date().toISOString() })
       .eq('id', id);
     if (error) {
+      setActivities(snapshot);
       toast.error('Erro ao concluir atividade');
       throw error;
     }
     toast.success('Atividade concluída');
-    fetchActivities();
-  }, [fetchActivities]);
+  }, [activities]);
 
   const deleteActivity = useCallback(async (id: string) => {
+    const snapshot = activities;
+    setActivities(prev => prev.filter(a => a.id !== id));
     const { error } = await (supabase as any)
       .from('conversation_activities')
       .delete()
       .eq('id', id);
     if (error) {
+      setActivities(snapshot);
       toast.error('Erro ao remover atividade');
       throw error;
     }
     toast.success('Atividade removida');
-    fetchActivities();
-  }, [fetchActivities]);
+  }, [activities]);
 
   return { activities, loading, createActivity, completeActivity, deleteActivity, refetch: fetchActivities };
 }
