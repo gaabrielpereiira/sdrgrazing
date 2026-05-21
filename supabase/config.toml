@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.simulate-wc-webhook]
 verify_jwt = false
+
+[functions.wc-products]
+verify_jwt = false
