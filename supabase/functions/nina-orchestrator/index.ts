@@ -130,6 +130,34 @@ const requestHandoffTool = {
   }
 };
 
+// Tool definition for searching the WooCommerce product catalog.
+// Only registered when settings.wc_products_enabled is true.
+const searchProductsTool = {
+  type: "function",
+  function: {
+    name: "search_products",
+    description: "Consulta o catálogo real da loja WooCommerce. Use SEMPRE que o cliente perguntar sobre produtos, preços, disponibilidade, categorias ou pedir recomendações. Nunca invente produtos: chame esta ferramenta primeiro e responda apenas com base nos resultados.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Termo de busca (nome do produto, palavra-chave). Opcional — se omitido, lista os produtos em destaque."
+        },
+        category: {
+          type: "string",
+          description: "ID da categoria WooCommerce para filtrar (opcional)."
+        },
+        limit: {
+          type: "number",
+          description: "Quantos produtos retornar (padrão 8, máximo 15)."
+        }
+      },
+      required: []
+    }
+  }
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -819,6 +847,12 @@ async function processQueueItem(
   // sem vazar mensagem interna para o cliente.
   tools.push(requestHandoffTool);
 
+  // WooCommerce product search — opt-in via settings.wc_products_enabled
+  if (settings?.wc_products_enabled === true) {
+    tools.push(searchProductsTool);
+    console.log('[Nina] WooCommerce products enabled, adding search_products tool');
+  }
+
   // Build request body
   const requestBody: any = {
     model: aiSettings.model,
@@ -860,11 +894,80 @@ async function processQueueItem(
   }
 
   const aiData = await aiResponse.json();
-  const aiMessage = aiData.choices?.[0]?.message;
+  let aiMessage = aiData.choices?.[0]?.message;
   let aiContent = aiMessage?.content || '';
-  const toolCalls = aiMessage?.tool_calls || [];
+  let toolCalls = aiMessage?.tool_calls || [];
 
   console.log('[Nina] AI response received, content length:', aiContent?.length || 0, ', tool_calls:', toolCalls.length);
+
+  // === WooCommerce product search round-trip ===
+  // If the model called search_products, fetch the catalog, feed it back, and
+  // re-call the AI so it can produce a real reply citing the actual products.
+  const productToolCalls = toolCalls.filter((tc: any) => tc.function?.name === 'search_products');
+  if (productToolCalls.length > 0) {
+    const toolMessages: any[] = [];
+    for (const tc of productToolCalls) {
+      let result: any;
+      try {
+        const args = JSON.parse(tc.function.arguments || '{}');
+        const action = args.query ? 'search' : (args.category ? 'by_category' : 'list');
+        const wcRes = await fetch(`${supabaseUrl}/functions/v1/wc-products`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action,
+            search: args.query,
+            category: args.category,
+            limit: Math.min(Number(args.limit) || 8, 15),
+          }),
+        });
+        result = await wcRes.json();
+      } catch (e) {
+        result = { success: false, error: e instanceof Error ? e.message : 'fetch failed' };
+      }
+      toolMessages.push({
+        role: 'tool',
+        tool_call_id: tc.id,
+        content: JSON.stringify(result).slice(0, 8000),
+      });
+    }
+
+    console.log('[Nina] search_products handled, re-calling AI with tool results');
+
+    const followupBody: any = {
+      model: aiSettings.model,
+      messages: [
+        { role: 'system', content: processedPrompt },
+        ...conversationHistory,
+        aiMessage,
+        ...toolMessages,
+      ],
+      temperature: aiSettings.temperature,
+      max_tokens: 1000,
+      tools,
+      tool_choice: 'auto',
+    };
+
+    const followupRes = await fetch(LOVABLE_AI_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(followupBody),
+    });
+
+    if (followupRes.ok) {
+      const followupData = await followupRes.json();
+      aiMessage = followupData.choices?.[0]?.message;
+      aiContent = aiMessage?.content || aiContent;
+      // Replace tool_calls so downstream handlers see only NEW calls (e.g. handoff/appointment)
+      toolCalls = aiMessage?.tool_calls || [];
+      console.log('[Nina] Follow-up AI reply length:', aiContent?.length || 0, ', new tool_calls:', toolCalls.length);
+    } else {
+      console.warn('[Nina] Follow-up AI call failed:', followupRes.status);
+    }
+  }
 
   // Process tool calls
   let appointmentCreated = null;

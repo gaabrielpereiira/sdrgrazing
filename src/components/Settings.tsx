@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import AgentSettings, { AgentSettingsRef } from './settings/AgentSettings';
 import ApiSettings, { ApiSettingsRef } from './settings/ApiSettings';
 import WooWebhookSettings from './settings/WooWebhookSettings';
+import WooProductsSettings from './settings/WooProductsSettings';
 import SystemRoadmap from './SystemRoadmap';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { Button } from './Button';
@@ -154,6 +155,7 @@ const Settings: React.FC = () => {
           <div className="space-y-6">
             <ApiSettings ref={apiRef} />
             <WooWebhookSettings />
+            <WooProductsSettings />
           </div>
         </TabsContent>
 
