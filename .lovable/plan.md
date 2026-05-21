@@ -1,43 +1,78 @@
 ## Objetivo
-Ordenar a lista de conversas do chat com a seguinte prioridade fixa (de cima para baixo):
 
-1. **Pendentes** — última mensagem do cliente (ou IA encaminhou pra humano e ninguém respondeu)
-2. **Tarefas vencidas** — atividade agendada cujo horário já passou
-3. **Tarefas a vencer** — atividade agendada futura
-4. **Demais conversas** — ordenadas pela data/hora da última mensagem (mais recente primeiro)
+Dar à Nina acesso ao catálogo do WooCommerce em tempo real (produtos, busca, categorias) para recomendar itens reais durante a conversa, mantendo as credenciais protegidas.
 
-Dentro de cada grupo, o desempate continua sendo pela última mensagem mais recente.
+A proposta segue o seu plano enviado, mas **adaptada à arquitetura atual do projeto**:
 
-## Onde mudar
-Apenas `src/components/ChatInterface.tsx`, no bloco que constrói `filteredConversations` (≈ linhas 787–797). Nenhuma mudança de banco, hook ou backend — `isPending()` e `useAllPendingActivities()` já existem no arquivo.
+- Single-tenant: credenciais vivem em `nina_settings` (como já fazemos com `wc_webhook_secret`, ElevenLabs, etc.), **não em env vars** — assim continua funcionando após remix.
+- Em vez de "injetar produtos no system prompt com regex de intenção", expor um **tool/function-call** que a própria Nina decide quando chamar. Mais preciso, mais barato e segue o padrão dos tools que já existem (`createAppointmentTool`, `requestHandoffTool` etc.).
 
-## Lógica de ordenação
+---
 
-Para cada conversa calculamos um "bucket" (quanto menor, mais no topo):
+## Mudanças
 
-```text
-0 → Pendente (isPending(chat) === true)
-1 → Tem tarefa vencida   (pendingActivities[chat.id] && nextAt <= now)
-2 → Tem tarefa a vencer  (pendingActivities[chat.id] && nextAt  > now)
-3 → Nenhuma das anteriores
-```
+### 1. Banco — credenciais WooCommerce em `nina_settings`
 
-Regra de empate:
-- Bucket 0 (Pendentes): pelas mais recentes primeiro (`lastMessageAt` desc).
-- Bucket 1 (Vencidas): pela tarefa mais antiga primeiro (vencida há mais tempo no topo).
-- Bucket 2 (A vencer): pela tarefa mais próxima de vencer primeiro.
-- Bucket 3: `lastMessageAt` desc (comportamento atual).
+Nova migration adicionando 3 colunas (todas opcionais):
 
-Uma conversa pode ser Pendente E ter tarefa — Pendente vence (bucket 0), conforme prioridade pedida.
+- `wc_site_url text`
+- `wc_consumer_key text`
+- `wc_consumer_secret text`
 
-## Implementação (resumo)
+Sem alterar RLS nem triggers. Reaproveita o registro global (`user_id IS NULL`) que já existe.
 
-Substituir o `.filter(...)` atual por `.filter(...).sort((a, b) => ...)` usando uma função `bucketOf(chat)` baseada em `isPending` e `pendingActivities[chat.id]`. Toda a lógica fica encapsulada dentro do componente, sem alterar tipos nem outros hooks.
+### 2. Edge function `wc-products` (nova)
 
-## Fora de escopo
-- Não vou criar indicadores visuais novos (os badges de pendente e de tarefa já existem na lista).
-- Não vou mexer em filtros das abas (Geral / Finalizadas / Minhas) — só na ordenação dentro da aba ativa.
-- Sem migrations, sem mudanças de realtime.
+`supabase/functions/wc-products/index.ts` + entrada `[functions.wc-products] verify_jwt = false` em `supabase/config.toml`.
 
-## Resultado
-Conversas que precisam de atenção (cliente esperando resposta, tarefas vencidas, tarefas próximas) sobem automaticamente para o topo da lista, e a reordenação acontece em tempo real conforme mensagens chegam ou atividades são criadas/concluídas — já que tanto `conversations` quanto `pendingActivities` atualizam via realtime.
+Comportamento:
+
+- Lê as credenciais de `nina_settings` (triple fallback igual ao `wc-receiver`: `user_id = null` → qualquer linha com chave preenchida).
+- Aceita `{ action, search?, category?, limit? }` com as 4 ações do seu plano: `list`, `search`, `by_category`, `categories`.
+- Faz `fetch` ao WooCommerce com `Authorization: Basic base64(key:secret)`.
+- Retorna **payload formatado e enxuto** (id, name, price, on_sale, stock, categories, tags, short_desc, url) — exatamente como no seu plano.
+- Erros padronizados: 503 quando não há credenciais, 502 quando o Woo responde erro, 400 para ação inválida.
+
+### 3. Tool de produtos na Nina (`nina-orchestrator`)
+
+Em `supabase/functions/nina-orchestrator/index.ts`:
+
+- Adicionar `searchProductsTool` (function declaration) com parâmetros `query` (string opcional) e `category` (string opcional).
+- Registrar o tool no array `tools` (já existente em ~linha 811), **gated por flag** `settings?.wc_products_enabled` para poder desligar.
+- Implementar o handler: invoca `wc-products` (`action: "search"` se houver `query`, senão `list`), formata o resultado como texto curto e devolve para o modelo continuar a conversa.
+- Nada de heurística de intenção (`/compr|quero|.../`). A Nina decide quando chamar — é o que tools são para.
+
+### 4. UI — card de configuração
+
+Novo `src/components/settings/WooProductsSettings.tsx`, renderizado em `ApiSettings.tsx` logo abaixo do `WooWebhookSettings`. Campos:
+
+- URL do site (`https://seusite.com.br`)
+- Consumer Key (`ck_...`)
+- Consumer Secret (`cs_...`, com toggle mostrar/esconder)
+- Toggle "Permitir que a Nina consulte produtos" → grava `wc_products_enabled` em `nina_settings`.
+- Botão **Testar conexão** → chama `wc-products` com `action: "list", limit: 1` e mostra "OK — N produtos encontrados" ou o erro.
+
+Salva tudo em `nina_settings` via `update()`, mesmo padrão do `WooWebhookSettings`.
+
+### 5. (Opcional, fora do escopo desta etapa)
+
+Os passos 4 e 5 do seu doc (`src/lib/woocommerce.ts` + `buildSystemPrompt` no front) **não serão implementados** porque a Nina roda 100% no backend (`nina-orchestrator`). Quem precisa do catálogo é a edge function, não o front.
+
+Os "próximos passos" do seu doc (sync local, embeddings/RAG, webhook de produto) ficam para uma segunda fase.
+
+---
+
+## Detalhes técnicos
+
+- `WooWebhookSettings.tsx` já faz `.maybeSingle()` sem `user_id` filter — o novo card segue o mesmo padrão, mantendo o comportamento single-tenant pós-remix.
+- O tool da Nina retorna no máximo ~10 produtos por chamada, com `short_desc` cortado em ~200 chars, para não estourar contexto.
+- Sem mudanças em realtime, deals, conversas ou no fluxo do WhatsApp.
+
+## Arquivos
+
+- novo: `supabase/migrations/<timestamp>_wc_products_credentials.sql`
+- novo: `supabase/functions/wc-products/index.ts`
+- editado: `supabase/config.toml` (entrada da função)
+- editado: `supabase/functions/nina-orchestrator/index.ts` (tool + handler)
+- novo: `src/components/settings/WooProductsSettings.tsx`
+- editado: `src/components/settings/ApiSettings.tsx` (mount do card)
