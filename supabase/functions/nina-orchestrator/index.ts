@@ -130,6 +130,34 @@ const requestHandoffTool = {
   }
 };
 
+// Tool definition for searching the WooCommerce product catalog.
+// Only registered when settings.wc_products_enabled is true.
+const searchProductsTool = {
+  type: "function",
+  function: {
+    name: "search_products",
+    description: "Consulta o catálogo real da loja WooCommerce. Use SEMPRE que o cliente perguntar sobre produtos, preços, disponibilidade, categorias ou pedir recomendações. Nunca invente produtos: chame esta ferramenta primeiro e responda apenas com base nos resultados.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Termo de busca (nome do produto, palavra-chave). Opcional — se omitido, lista os produtos em destaque."
+        },
+        category: {
+          type: "string",
+          description: "ID da categoria WooCommerce para filtrar (opcional)."
+        },
+        limit: {
+          type: "number",
+          description: "Quantos produtos retornar (padrão 8, máximo 15)."
+        }
+      },
+      required: []
+    }
+  }
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
