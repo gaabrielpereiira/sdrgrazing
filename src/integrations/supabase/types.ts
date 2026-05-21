@@ -815,6 +815,10 @@ export type Database = {
           timezone: string
           updated_at: string
           user_id: string | null
+          wc_consumer_key: string | null
+          wc_consumer_secret: string | null
+          wc_products_enabled: boolean
+          wc_site_url: string | null
           wc_webhook_secret: string | null
           whatsapp_access_token: string | null
           whatsapp_business_account_id: string | null
@@ -854,6 +858,10 @@ export type Database = {
           timezone?: string
           updated_at?: string
           user_id?: string | null
+          wc_consumer_key?: string | null
+          wc_consumer_secret?: string | null
+          wc_products_enabled?: boolean
+          wc_site_url?: string | null
           wc_webhook_secret?: string | null
           whatsapp_access_token?: string | null
           whatsapp_business_account_id?: string | null
@@ -893,6 +901,10 @@ export type Database = {
           timezone?: string
           updated_at?: string
           user_id?: string | null
+          wc_consumer_key?: string | null
+          wc_consumer_secret?: string | null
+          wc_products_enabled?: boolean
+          wc_site_url?: string | null
           wc_webhook_secret?: string | null
           whatsapp_access_token?: string | null
           whatsapp_business_account_id?: string | null
