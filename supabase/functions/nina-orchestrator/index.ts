@@ -847,6 +847,12 @@ async function processQueueItem(
   // sem vazar mensagem interna para o cliente.
   tools.push(requestHandoffTool);
 
+  // WooCommerce product search — opt-in via settings.wc_products_enabled
+  if (settings?.wc_products_enabled === true) {
+    tools.push(searchProductsTool);
+    console.log('[Nina] WooCommerce products enabled, adding search_products tool');
+  }
+
   // Build request body
   const requestBody: any = {
     model: aiSettings.model,
