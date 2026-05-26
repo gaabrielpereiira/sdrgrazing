@@ -822,7 +822,8 @@ async function processQueueItem(
   const enhancedSystemPrompt = buildEnhancedPrompt(
     systemPrompt, 
     conversation.contact, 
-    clientMemory
+    clientMemory,
+    settings
   );
 
   // Process template variables ({{ data_hora }}, {{ dia_semana }}, etc.)
