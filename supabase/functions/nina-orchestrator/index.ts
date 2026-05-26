@@ -1157,7 +1157,8 @@ async function processQueueItem(
         ...toolMessages,
       ],
       temperature: aiSettings.temperature,
-      max_tokens: 1000,
+      // Same reasoning-token budget concern as the main call above.
+      max_tokens: 4000,
     };
 
     const followupRes = await fetch(LOVABLE_AI_URL, {
@@ -1169,15 +1170,23 @@ async function processQueueItem(
     if (followupRes.ok) {
       const followupData = await followupRes.json();
       aiMessage = followupData.choices?.[0]?.message;
-      const followupContent = aiMessage?.content || '';
+      let followupContent = aiMessage?.content || '';
+      const followupFinish = followupData.choices?.[0]?.finish_reason;
       // Replace tool_calls so downstream handlers see only NEW calls (e.g. handoff/appointment)
       toolCalls = aiMessage?.tool_calls || [];
-      console.log('[Nina] Follow-up AI reply length:', followupContent.length, ', new tool_calls:', toolCalls.length);
+      console.log('[Nina] Follow-up AI reply length:', followupContent.length, ', new tool_calls:', toolCalls.length, ', finish_reason:', followupFinish);
+
+      if (followupFinish === 'length' && followupContent) {
+        const trimmed = trimToLastCompleteChunk(followupContent);
+        if (trimmed !== followupContent) {
+          console.warn('[Nina] Follow-up reply truncated by max_tokens. Original length:', followupContent.length, 'trimmed to:', trimmed.length);
+          followupContent = trimmed;
+        }
+      }
+
       if (followupContent) {
         aiContent = followupContent;
       } else {
-        // Followup returned empty: clear original tool_calls so we don't trip the
-        // generic fallback below — fall through to the "skip send" branch instead.
         aiContent = '';
         toolCalls = [];
         console.warn('[Nina] Follow-up returned empty content — will skip send.');
