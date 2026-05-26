@@ -1,78 +1,67 @@
-## Objetivo
+# Por que a Nina fica repetindo "Entendi! Como posso ajudar?"
 
-Dar à Nina acesso ao catálogo do WooCommerce em tempo real (produtos, busca, categorias) para recomendar itens reais durante a conversa, mantendo as credenciais protegidas.
+## Diagnóstico
 
-A proposta segue o seu plano enviado, mas **adaptada à arquitetura atual do projeto**:
+Confirmei no banco que a mensagem repetida no print é literalmente `"Entendi! Como posso ajudar?"`, enviada 4 vezes para a Paty entre 01:13 e 01:19 de 25/05. Essa string só existe **uma vez** no código, em `supabase/functions/nina-orchestrator/index.ts:1137`:
 
-- Single-tenant: credenciais vivem em `nina_settings` (como já fazemos com `wc_webhook_secret`, ElevenLabs, etc.), **não em env vars** — assim continua funcionando após remix.
-- Em vez de "injetar produtos no system prompt com regex de intenção", expor um **tool/function-call** que a própria Nina decide quando chamar. Mais preciso, mais barato e segue o padrão dos tools que já existem (`createAppointmentTool`, `requestHandoffTool` etc.).
+```ts
+// Linhas 1128–1139
+if (!aiContent && toolCalls.length > 0) {
+  if (appointmentCreated && !appointmentCreated.error) { ... }
+  else if (appointmentRescheduled && ...) { ... }
+  else if (appointmentCancelled && ...) { ... }
+  else {
+    aiContent = 'Entendi! Como posso ajudar?';   // <-- aqui
+  }
+}
+```
 
----
+Ou seja: esse fallback dispara **toda vez que a IA devolve conteúdo vazio mas com `tool_calls` que não são de agendamento**. Os culpados possíveis hoje são:
 
-## Mudanças
+1. **`search_products` (WooCommerce)** — fluxo de re-chamada (linhas 906–970):
+   - A IA chama `search_products`, retorna `content=""`.
+   - O orquestrador chama `wc-products`, monta `toolMessages`, e refaz a chamada à IA.
+   - Se essa segunda chamada falhar (`followupRes.ok === false`, ex.: 429/402/timeout) ou voltar `content=""` novamente, `aiContent` continua vazio e os `tool_calls` originais continuam contando — cai no fallback.
+   - Pior: a segunda chamada ainda envia `tools` + `tool_choice: 'auto'`, então o modelo pode pedir **mais** tool calls em vez de responder texto.
 
-### 1. Banco — credenciais WooCommerce em `nina_settings`
+2. **`request_human_handoff` com argumentos inválidos** (linhas 1063–1125): se o `JSON.parse(toolCall.function.arguments)` lança, o `catch` só loga, `handoffRequested` fica `null`, `aiContent` continua vazio → fallback.
 
-Nova migration adicionando 3 colunas (todas opcionais):
+3. **`create_appointment` / `reschedule` / `cancel` com erro de parse**: mesmo padrão, cai no fallback.
 
-- `wc_site_url text`
-- `wc_consumer_key text`
-- `wc_consumer_secret text`
+Em todos os casos o **cliente recebe a mesma frase genérica repetidas vezes**, exatamente o sintoma reportado. Hoje, com WC já configurado, a re-chamada está funcionando (vi `Follow-up AI reply length: 341` nos logs de 26/05), mas em 25/05 a configuração ainda não estava completa / a chamada falhou silenciosamente.
 
-Sem alterar RLS nem triggers. Reaproveita o registro global (`user_id IS NULL`) que já existe.
+## Correções propostas
 
-### 2. Edge function `wc-products` (nova)
+### 1. Endurecer o re-call de `search_products` (linhas 940–969)
+- Remover `tools` e `tool_choice` no `followupBody` (forçar a IA a redigir texto, sem pedir mais ferramentas).
+- Se `wc-products` voltar `success: false` ou status != 200, **incluir o erro dentro do `tool` message** (já é feito, mas hoje o JSON cru tem chave `error` — adicionar um campo `instructions_for_assistant` claro tipo: "A busca falhou, peça desculpa e ofereça ajuda manual").
+- Se `followupRes.ok` for false **ou** o conteúdo voltar vazio, logar `aiMessage` cru para diagnóstico e tratar como "skip send" (mesma rota de linha 1180) — não enviar fallback genérico.
 
-`supabase/functions/wc-products/index.ts` + entrada `[functions.wc-products] verify_jwt = false` em `supabase/config.toml`.
+### 2. Substituir o fallback genérico (linha 1137)
+- Em vez de `"Entendi! Como posso ajudar?"`, **não enviar mensagem** (mesma estratégia da linha 1181 para resposta vazia: marcar `processed_by_nina = true` e retornar).
+- Motivo: enviar uma resposta genérica é pior que silêncio porque polui a conversa e mascara o bug.
+- Para o operador entender, inserir um registro em `notifications` (`type: 'ai_empty_response'`) com o nome da tool, args e razão (parse error / followup falhou / etc.), igual ao safety-net de handoff (linhas 1145–1178).
 
-Comportamento:
+### 3. Tornar visíveis os erros de `JSON.parse` em tool calls
+Nos três blocos de `request_human_handoff`, `create_appointment`, `reschedule_appointment`, `cancel_appointment`, quando o `catch` for acionado:
+- Logar `toolCall.function.arguments` cru (truncado).
+- Criar `notification` `ai_tool_parse_error` para a equipe inspecionar.
 
-- Lê as credenciais de `nina_settings` (triple fallback igual ao `wc-receiver`: `user_id = null` → qualquer linha com chave preenchida).
-- Aceita `{ action, search?, category?, limit? }` com as 4 ações do seu plano: `list`, `search`, `by_category`, `categories`.
-- Faz `fetch` ao WooCommerce com `Authorization: Basic base64(key:secret)`.
-- Retorna **payload formatado e enxuto** (id, name, price, on_sale, stock, categories, tags, short_desc, url) — exatamente como no seu plano.
-- Erros padronizados: 503 quando não há credenciais, 502 quando o Woo responde erro, 400 para ação inválida.
+### 4. Adicionar logs de telemetria no orquestrador
+- Logar `toolCalls.map(tc => tc.function?.name)` toda vez que `aiContent` for vazio, para identificar o padrão exato no Edge Function Logs.
 
-### 3. Tool de produtos na Nina (`nina-orchestrator`)
+## Arquivos a alterar
 
-Em `supabase/functions/nina-orchestrator/index.ts`:
+- `supabase/functions/nina-orchestrator/index.ts` — todas as mudanças acima ficam neste arquivo. Sem migrações nem mudanças de UI.
 
-- Adicionar `searchProductsTool` (function declaration) com parâmetros `query` (string opcional) e `category` (string opcional).
-- Registrar o tool no array `tools` (já existente em ~linha 811), **gated por flag** `settings?.wc_products_enabled` para poder desligar.
-- Implementar o handler: invoca `wc-products` (`action: "search"` se houver `query`, senão `list`), formata o resultado como texto curto e devolve para o modelo continuar a conversa.
-- Nada de heurística de intenção (`/compr|quero|.../`). A Nina decide quando chamar — é o que tools são para.
+## O que NÃO vai mudar
 
-### 4. UI — card de configuração
+- Tabela `messages`, RLS, prompt da Nina, configuração de WC.
+- Comportamento de agendamento / handoff bem-sucedidos.
+- Não cria nenhum endpoint novo.
 
-Novo `src/components/settings/WooProductsSettings.tsx`, renderizado em `ApiSettings.tsx` logo abaixo do `WooWebhookSettings`. Campos:
+## Como validar depois do fix
 
-- URL do site (`https://seusite.com.br`)
-- Consumer Key (`ck_...`)
-- Consumer Secret (`cs_...`, com toggle mostrar/esconder)
-- Toggle "Permitir que a Nina consulte produtos" → grava `wc_products_enabled` em `nina_settings`.
-- Botão **Testar conexão** → chama `wc-products` com `action: "list", limit: 1` e mostra "OK — N produtos encontrados" ou o erro.
-
-Salva tudo em `nina_settings` via `update()`, mesmo padrão do `WooWebhookSettings`.
-
-### 5. (Opcional, fora do escopo desta etapa)
-
-Os passos 4 e 5 do seu doc (`src/lib/woocommerce.ts` + `buildSystemPrompt` no front) **não serão implementados** porque a Nina roda 100% no backend (`nina-orchestrator`). Quem precisa do catálogo é a edge function, não o front.
-
-Os "próximos passos" do seu doc (sync local, embeddings/RAG, webhook de produto) ficam para uma segunda fase.
-
----
-
-## Detalhes técnicos
-
-- `WooWebhookSettings.tsx` já faz `.maybeSingle()` sem `user_id` filter — o novo card segue o mesmo padrão, mantendo o comportamento single-tenant pós-remix.
-- O tool da Nina retorna no máximo ~10 produtos por chamada, com `short_desc` cortado em ~200 chars, para não estourar contexto.
-- Sem mudanças em realtime, deals, conversas ou no fluxo do WhatsApp.
-
-## Arquivos
-
-- novo: `supabase/migrations/<timestamp>_wc_products_credentials.sql`
-- novo: `supabase/functions/wc-products/index.ts`
-- editado: `supabase/config.toml` (entrada da função)
-- editado: `supabase/functions/nina-orchestrator/index.ts` (tool + handler)
-- novo: `src/components/settings/WooProductsSettings.tsx`
-- editado: `src/components/settings/ApiSettings.tsx` (mount do card)
+1. Forçar erro: desabilitar `wc_products_enabled` temporariamente, pedir cardápio → Nina deve ficar em silêncio (não repetir "Entendi! Como posso ajudar?") e gerar `notification` `ai_empty_response`.
+2. Reativar WC, pedir cardápio → Nina responde com produtos reais via follow-up.
+3. Verificar nos Edge Function Logs as novas linhas `[Nina] Empty content with tool_calls: [search_products]` para confirmar a telemetria.
