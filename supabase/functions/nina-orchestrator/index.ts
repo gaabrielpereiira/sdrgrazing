@@ -136,7 +136,7 @@ const searchProductsTool = {
   type: "function",
   function: {
     name: "search_products",
-    description: "Consulta o catálogo real da loja WooCommerce. Use SEMPRE que o cliente perguntar sobre produtos, preços, disponibilidade, categorias ou pedir recomendações. Nunca invente produtos: chame esta ferramenta primeiro e responda apenas com base nos resultados.",
+    description: "Consulta o catálogo real da loja WooCommerce. Chame PROATIVAMENTE sempre que o cliente: (a) mencionar interesse em algum produto/categoria, (b) pedir sugestão/recomendação, (c) perguntar sobre preço, disponibilidade ou estoque, (d) comparar opções, (e) demonstrar dúvida sobre o que comprar. NUNCA invente produtos, preços ou URLs — chame esta ferramenta primeiro e responda apenas com base no que ela retornar. Sempre inclua o link (campo `url`) de cada produto sugerido na resposta ao cliente.",
     parameters: {
       type: "object",
       properties: {
