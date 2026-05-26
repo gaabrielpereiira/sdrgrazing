@@ -315,8 +315,16 @@ const Contacts: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                       <span className="text-slate-400">{new Date(contact.lastContact).toLocaleDateString('pt-BR')}</span>
-                       <div className="text-[10px] text-slate-600">via WhatsApp</div>
+                       {(() => {
+                         const d = contact.lastContact ? new Date(contact.lastContact) : null;
+                         const valid = d && !isNaN(d.getTime());
+                         return (
+                           <>
+                             <span className="text-slate-400">{valid ? d!.toLocaleDateString('pt-BR') : '—'}</span>
+                             {valid && <div className="text-[10px] text-slate-600">via WhatsApp</div>}
+                           </>
+                         );
+                       })()}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">

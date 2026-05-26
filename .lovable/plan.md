@@ -1,66 +1,47 @@
-# Modelo de IA — Multi-provedor com API Key
+## Problemas identificados
 
-Apenas mudanças de UI/estado dentro do bloco "Modelo de IA" em `src/components/settings/AgentSettings.tsx`. Nada fora dessa seção será tocado.
+### 1. Histórico do chat parando em 16/05 (apesar do badge "299")
 
-## 1. Migration (campos novos em `nina_settings`)
+Em `src/services/api.ts` → `fetchConversations` (linha 1372), a query tem `.limit(50)`. Como ordena por `last_message_at DESC`, só carregamos as **50 conversas mais recentes** de cada aba.
 
-Adicionar 3 colunas para persistir provedor e chaves:
+- O contador "299" em `useConversationTabCounts` faz outra query (`limit(5000)`) só com `id, queue, is_active` — por isso o número bate certo.
+- A lista só vê 50, então em "Finalizadas" o corte cai por volta de 16/05.
 
-- `ai_provider text default 'google'` — valores: `google` | `openai` | `anthropic`
-- `ai_model text` — id do modelo selecionado dentro do provedor (ex: `gpt-4o-mini`, `claude-sonnet-4-5`). Para Google continua mapeando para os ids atuais (`flash`/`pro`/`pro3`/`adaptive`) para não quebrar o backend existente.
-- `ai_api_keys jsonb default '{}'::jsonb` — `{ google: string, openai: string, anthropic: string }`
+### 2. "Última Interação" não aparece em Contatos
 
-`ai_model_mode` continua existindo (não removo nada) para compatibilidade com `nina-orchestrator`.
-
-## 2. UI dentro da seção "Modelo de IA"
-
-Ordem dos elementos no card "Comportamento":
-
-```
-[Modelo de IA]
- ├─ Pill selector de provedor: Google | OpenAI | Anthropic  (novo)
- ├─ Grid de 4 cards de modelo (muda conforme provedor)       (existente, dinâmico)
- ├─ Texto descritivo dinâmico do modelo                       (existente)
- └─ Campo API Key — [Provedor]                                (novo)
-```
-
-### Pill selector
-3 botões estilo pill no topo. Selecionado = fundo violeta translúcido + borda violeta (mesmo padrão dos cards). Ícones: `G` (Google), logo OpenAI, `A` (Anthropic) — usando letras estilizadas + `lucide-react` quando aplicável.
-
-### Cards dinâmicos
-Catálogo por provedor (id armazenado em `ai_model`):
-
-- **Google**: `flash` Flash/Rápido ⚡, `pro` Pro 2.5/Inteligente 🧠, `pro3` Pro 3/Mais Recente 🚀, `adaptive` Adaptativo/Contexto 🎯
-- **OpenAI**: `gpt-4o-mini` ⚡, `gpt-4o` 🧠, `gpt-4.1` 🚀, `o3` 🎯
-- **Anthropic**: `claude-haiku-3-5-20251001` ⚡, `claude-sonnet-4-5` 🧠, `claude-sonnet-4-5-20251001` 🚀, `claude-opus-4-5` 🎯
-
-Ao trocar provedor, seleciona automaticamente o primeiro modelo do catálogo (se o `ai_model` atual não pertencer ao novo provedor).
-
-### Campo API Key
-- Input `type=password` com toggle olho (lucide `Eye`/`EyeOff`)
-- Label: `API Key — Google` / `OpenAI` / `Anthropic`
-- Placeholder por provedor: `AIza...`, `sk-...`, `sk-ant-...`
-- Validação no `onBlur` (regex simples por prefixo) — borda verde se válido, vermelha + mensagem se inválido
-- Texto auxiliar cinza: "Sua chave é salva com criptografia e nunca é exposta publicamente."
-- Estado é mantido por provedor em `apiKeys: { google, openai, anthropic }` — trocar provedor não apaga keys dos outros
-
-## 3. Estado e persistência
-
-Estender interface `AgentSettings` local com:
+Em `api.fetchContacts` (linha 444), o campo já é convertido para string formatada:
 ```ts
-ai_provider: 'google' | 'openai' | 'anthropic';
-ai_model: string;
-ai_api_keys: { google: string; openai: string; anthropic: string };
+lastContact: new Date(c.last_activity).toLocaleDateString('pt-BR')
 ```
+Depois, em `Contacts.tsx` (linha 318), o componente faz **outra vez**:
+```ts
+new Date(contact.lastContact).toLocaleDateString('pt-BR')
+```
+`new Date("26/05/2026")` retorna `Invalid Date` → a coluna mostra "Invalid Date". Além disso, `fetchContacts` também tem `.limit(100)`, escondendo a maioria dos contatos.
 
-`loadSettings` lê os novos campos com defaults seguros. `handleSave` envia todos juntos no mesmo `update` em `nina_settings`. Para Google, também sincroniza `ai_model_mode = ai_model` para manter compatibilidade com o orchestrator atual.
+## Correções propostas
 
-## 4. Fora de escopo (não tocar agora)
+### A. `src/services/api.ts` — `fetchConversations`
+- Subir o limite para **500** (suficiente para o volume atual; mantém payload controlado).
+- Continuar ordenando por `last_message_at DESC` para preservar UX.
+- Manter `.limit(300)` por conversa nas mensagens (já está bom).
 
-- `nina-orchestrator` continua usando `ai_model_mode` (Gemini). Suporte real a OpenAI/Anthropic no backend ficaria para uma próxima etapa — agora só salvamos as configurações.
-- Toggles (Agente Ativo, Resposta Automática, Quebrar Mensagens, Agendamento via IA) ficam idênticos.
-- Nenhuma outra tela é alterada.
+### B. `src/services/api.ts` — `fetchContacts`
+- Retornar `lastContact` como **ISO string** (`c.last_activity`) em vez de string formatada — assim o componente consegue formatar corretamente.
+- Subir o limite de `100` para **500**.
 
-## Aviso
+### C. `src/types.ts` (se necessário)
+- Nenhuma mudança de tipo: `Contact.lastContact` continua `string`, só muda o conteúdo (ISO em vez de "dd/mm/yyyy").
 
-Como o backend (`nina-orchestrator`) hoje só fala com Gemini via Lovable AI Gateway, selecionar OpenAI/Anthropic vai salvar a preferência mas a IA continuará respondendo via Google até implementarmos o roteamento por provedor. Quer que eu já inclua esse roteamento no backend nesta mesma rodada, ou prefere só a UI + persistência agora?
+### D. `src/components/Contacts.tsx`
+- Manter `new Date(contact.lastContact).toLocaleDateString('pt-BR')` (agora funciona porque vem ISO).
+- Adicionar fallback `—` se a data for inválida/ausente.
+
+### Fora de escopo
+- Paginação real / scroll infinito da lista de conversas (pode ser feito depois se 500 ficar pouco).
+- Mudanças no contador das abas (`useConversationTabCounts` já está correto).
+- Tabela `orders`, multi-provider IA, ou outras seções.
+
+## Resultado esperado
+- Aba "Finalizadas" passa a mostrar todo o histórico recente (até 500 conversas) em vez de cortar em 50.
+- Coluna "Última Interação" em Contatos exibe a data correta (ex.: `26/05/2026`) em vez de "Invalid Date".
