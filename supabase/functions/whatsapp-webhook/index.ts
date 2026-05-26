@@ -214,13 +214,36 @@ serve(async (req) => {
             .maybeSingle();
 
           if (conversation && !conversation.is_active) {
-            // Reopen previous conversation preserving full message history
+            // Reopen previous conversation preserving full message history.
+            // Reset routing (queue/assignment/nina_context) so a previously
+            // closed support ticket doesn't keep Nina muted, and mark a
+            // resumption checkpoint so the orchestrator can ask the client
+            // whether they want to continue the old topic or start fresh.
+            const nowIso = new Date().toISOString();
+            const prevMetadata = (conversation as any).metadata || {};
             const { data: reopened, error: reopenError } = await supabase
               .from('conversations')
               .update({
                 is_active: true,
                 status: 'nina',
-                last_message_at: new Date().toISOString(),
+                queue: 'sales',
+                assigned_user_id: null,
+                assigned_team: null,
+                nina_context: {},
+                started_at: nowIso,
+                last_message_at: nowIso,
+                metadata: {
+                  ...prevMetadata,
+                  resumption: {
+                    previous_last_message_at: conversation.last_message_at,
+                    previous_status: conversation.status,
+                    previous_queue: (conversation as any).queue,
+                    summary: null,
+                    asked_resume_question: false,
+                    user_confirmed_resume: null,
+                    detected_at: nowIso,
+                  },
+                },
               })
               .eq('id', conversation.id)
               .select()
@@ -231,7 +254,7 @@ serve(async (req) => {
               continue;
             }
             conversation = reopened;
-            console.log('[Webhook] Reopened conversation:', conversation.id);
+            console.log('[Webhook] Reopened conversation with reset routing:', conversation.id);
           } else if (!conversation) {
             // First-ever conversation for this contact
             const { data: newConversation, error: convError } = await supabase
