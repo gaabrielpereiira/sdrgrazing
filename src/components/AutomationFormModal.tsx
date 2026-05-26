@@ -77,7 +77,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
   // Quantidade de placeholders {{n}} no template
   const templatePlaceholderCount = useMemo(() => {
     const matches = selectedTemplateBody.match(/\{\{\s*\d+\s*\}\}/g) || [];
-    const nums = matches.map(m => parseInt(m.replace(/\D/g, ''), 10)).filter(n => !isNaN(n));
+    const nums = matches.map((m: string) => parseInt(m.replace(/\D/g, ''), 10)).filter((n: number) => !isNaN(n));
     return nums.length ? Math.max(...nums) : 0;
   }, [selectedTemplateBody]);
 
