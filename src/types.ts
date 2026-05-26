@@ -139,6 +139,14 @@ export interface Deal {
   lostReason?: string;
   clientMemory?: ClientMemory;
   conversationId?: string;
+  lastOrder?: {
+    wooOrderId: number;
+    status: string;
+    statusLabel: string;
+    total: number;
+    currency: string;
+    createdAt: string | null;
+  };
 }
 
 export interface DealActivity {
