@@ -1164,7 +1164,28 @@ async function processQueueItem(
     } else if (appointmentCancelled && !appointmentCancelled.error) {
       aiContent = `Certo! ✅ Seu agendamento foi cancelado com sucesso. Se precisar de algo mais, estou à disposição!`;
     } else {
-      aiContent = 'Entendi! Como posso ajudar?';
+      // No specific action produced a reply. Sending a generic "Entendi! Como posso ajudar?"
+      // repeatedly is worse than silence — flag for an operator and skip the send.
+      const toolNames = toolCalls.map((tc: any) => tc.function?.name).filter(Boolean);
+      console.warn('[Nina] Empty content with tool_calls but no handler matched:', toolNames);
+      try {
+        await supabase.from('notifications').insert({
+          type: 'ai_empty_response',
+          title: `Nina não conseguiu responder: ${conversation.contact?.name || conversation.contact?.phone_number || 'Cliente'}`,
+          body: [
+            'A IA chamou ferramentas mas não produziu uma resposta em texto.',
+            `Ferramentas chamadas: ${toolNames.join(', ') || '(nenhuma identificada)'}`,
+            message?.content ? `Última mensagem: "${message.content}"` : '',
+          ].filter(Boolean).join('\n\n'),
+          conversation_id: conversation.id,
+          contact_id: conversation.contact_id,
+          metadata: { tool_calls: toolNames, triggered_by: 'empty_ai_response' },
+        });
+      } catch (e) {
+        console.error('[Nina] Failed to insert ai_empty_response notification:', e);
+      }
+      await supabase.from('messages').update({ processed_by_nina: true }).eq('id', message.id);
+      return;
     }
   }
 
