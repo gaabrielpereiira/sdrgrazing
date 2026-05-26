@@ -1029,7 +1029,11 @@ async function processQueueItem(
       ...conversationHistory
     ],
     temperature: aiSettings.temperature,
-    max_tokens: 1000
+    // Reasoning models (e.g. gemini-3-pro-preview) consume tokens for internal
+    // thinking that count against max_tokens. 1000 was too low and produced
+    // mid-word truncations like "Grazing Esp". 4000 leaves room for thinking +
+    // a complete WhatsApp-sized reply.
+    max_tokens: 4000
   };
 
   // Only add tools if we have any
