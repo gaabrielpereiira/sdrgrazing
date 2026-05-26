@@ -138,9 +138,25 @@ serve(async (req) => {
         .select()
         .single();
 
-      if (convError) throw convError;
-      conversationId = newConversation.id;
-      console.log(`[simulate-webhook] Created new conversation: ${conversationId}`);
+      if (convError) {
+        // Race condition: unique partial index on (contact_id) WHERE is_active=true
+        if ((convError as any).code === '23505') {
+          const { data: existing } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('contact_id', contactId)
+            .eq('is_active', true)
+            .maybeSingle();
+          if (!existing) throw convError;
+          conversationId = existing.id;
+          console.log(`[simulate-webhook] Recovered existing conversation after race: ${conversationId}`);
+        } else {
+          throw convError;
+        }
+      } else {
+        conversationId = newConversation.id;
+        console.log(`[simulate-webhook] Created new conversation: ${conversationId}`);
+      }
     }
 
     // Create message

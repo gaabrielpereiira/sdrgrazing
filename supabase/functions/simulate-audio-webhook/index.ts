@@ -236,11 +236,27 @@ serve(async (req) => {
         .single();
 
       if (createConvError) {
-        console.error('Error creating conversation:', createConvError);
-        throw createConvError;
+        if ((createConvError as any).code === '23505') {
+          const { data: existing } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('contact_id', contact.id)
+            .eq('is_active', true)
+            .maybeSingle();
+          if (!existing) {
+            console.error('Error creating conversation:', createConvError);
+            throw createConvError;
+          }
+          conversation = existing;
+          console.log(`[simulate-audio-webhook] Recovered existing conversation after race: ${conversation.id}`);
+        } else {
+          console.error('Error creating conversation:', createConvError);
+          throw createConvError;
+        }
+      } else {
+        conversation = newConv;
+        console.log(`[simulate-audio-webhook] Created new conversation: ${conversation.id}`);
       }
-      conversation = newConv;
-      console.log(`[simulate-audio-webhook] Created new conversation: ${conversation.id}`);
     } else {
       console.log(`[simulate-audio-webhook] Found existing conversation: ${conversation.id}`);
     }

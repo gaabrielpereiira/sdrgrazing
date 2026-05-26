@@ -77,7 +77,14 @@ async function findOrCreateConversation(supabase: any, contactId: string) {
   const { data: created, error } = await supabase
     .from('conversations').insert({ contact_id: contactId, status: 'nina', queue: 'sales', is_active: true })
     .select('id').single();
-  if (error) throw new Error(`conversation insert: ${error.message}`);
+  if (error) {
+    if ((error as any).code === '23505') {
+      const { data: existing2 } = await supabase
+        .from('conversations').select('id').eq('contact_id', contactId).eq('is_active', true).maybeSingle();
+      if (existing2) return existing2;
+    }
+    throw new Error(`conversation insert: ${error.message}`);
+  }
   return created;
 }
 
