@@ -70,12 +70,14 @@ export function useNotifications() {
       )
       .subscribe((status) => {
         console.info('[Notifications] channel status:', status);
-        setRealtimeConnected(status === 'SUBSCRIBED');
+        const connected = status === 'SUBSCRIBED';
+        realtimeConnectedRef.current = connected;
+        setRealtimeConnected(connected);
       });
 
     // Polling fallback every 30s, but only while realtime isn't connected
     const pollInterval = setInterval(() => {
-      if (!realtimeConnected) fetchNotifications();
+      if (!realtimeConnectedRef.current) fetchNotifications();
     }, 30000);
 
     return () => {
