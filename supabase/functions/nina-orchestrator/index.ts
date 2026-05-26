@@ -1846,6 +1846,33 @@ function breakMessageIntoChunks(content: string): string[] {
   return chunks.length > 0 ? chunks : [content];
 }
 
+// When the AI hits max_tokens mid-reply, trim back to the last complete unit
+// so we never send mid-word fragments like "Grazing Esp" to the customer.
+// Prefers the last \n\n boundary; falls back to the last terminal punctuation
+// (. ! ? closing quote/paren). Returns '' if nothing complete remains.
+function trimToLastCompleteChunk(content: string): string {
+  const text = content.trimEnd();
+  if (!text) return '';
+
+  const lastDoubleNewline = text.lastIndexOf('\n\n');
+  if (lastDoubleNewline > 0) {
+    return text.slice(0, lastDoubleNewline).trimEnd();
+  }
+
+  // Find last sentence-ending punctuation, optionally followed by closing
+  // quote/paren/emoji-safe chars. Be conservative: require punctuation in the
+  // first 90% of the text (so we don't accept a stray "." inside a truncated url).
+  const cutoff = Math.floor(text.length * 0.95);
+  const search = text.slice(0, cutoff);
+  const match = search.match(/^[\s\S]*[.!?…][)"'\]\s]*/);
+  if (match && match[0].length >= 20) {
+    return match[0].trimEnd();
+  }
+
+  return '';
+}
+
+
 function getModelSettings(
   settings: any,
   conversationHistory: any[],
