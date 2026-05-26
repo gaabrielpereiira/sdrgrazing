@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { X, Plus, Trash2, Loader2, Code } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { X, Plus, Trash2, Loader2, Code, Wand2 } from 'lucide-react';
 import { Button } from './Button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { TRIGGER_TOPICS, FIELD_SUGGESTIONS, OPERATORS, ACTION_TYPES, ORDER_STATUSES, AutomationRule } from '@/hooks/useAutomations';
+import { TRIGGER_TOPICS, FIELD_SUGGESTIONS, OPERATORS, ACTION_TYPES, ORDER_STATUSES, WEBHOOK_FIELDS, getByPath, AutomationRule } from '@/hooks/useAutomations';
 
 interface Props {
   isOpen: boolean;
