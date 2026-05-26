@@ -1,5 +1,5 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { Bot, Loader2, Calendar, Wand2, Building2, RotateCcw, Info } from 'lucide-react';
+import { Bot, Loader2, Calendar, Wand2, Building2, RotateCcw, Info, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { Button } from '../Button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
