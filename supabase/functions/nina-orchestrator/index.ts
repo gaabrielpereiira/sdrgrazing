@@ -925,8 +925,26 @@ async function processQueueItem(
           }),
         });
         result = await wcRes.json();
+        if (!wcRes.ok || result?.success === false) {
+          console.warn('[Nina] wc-products returned error:', wcRes.status, result?.error);
+          result = {
+            success: false,
+            error: result?.error || `wc-products HTTP ${wcRes.status}`,
+            instructions_for_assistant:
+              'A busca de produtos falhou. Responda ao cliente em texto pedindo desculpas pelo problema técnico e oferecendo ajuda manual (ex.: pedir mais detalhes do que ele procura ou direcionar para um atendente). NÃO chame search_products novamente nesta mensagem.',
+          };
+        } else {
+          result.instructions_for_assistant =
+            'Use estes produtos para redigir uma resposta em texto curto para o cliente. NÃO chame search_products de novo nesta mensagem.';
+        }
       } catch (e) {
-        result = { success: false, error: e instanceof Error ? e.message : 'fetch failed' };
+        console.error('[Nina] wc-products fetch threw:', e);
+        result = {
+          success: false,
+          error: e instanceof Error ? e.message : 'fetch failed',
+          instructions_for_assistant:
+            'A busca de produtos falhou (erro de rede). Responda em texto pedindo desculpas e oferecendo ajuda manual. NÃO chame search_products de novo.',
+        };
       }
       toolMessages.push({
         role: 'tool',
@@ -937,6 +955,8 @@ async function processQueueItem(
 
     console.log('[Nina] search_products handled, re-calling AI with tool results');
 
+    // IMPORTANT: do NOT pass `tools` here — force the model to produce a text reply
+    // instead of looping into another tool call.
     const followupBody: any = {
       model: aiSettings.model,
       messages: [
@@ -947,8 +967,6 @@ async function processQueueItem(
       ],
       temperature: aiSettings.temperature,
       max_tokens: 1000,
-      tools,
-      tool_choice: 'auto',
     };
 
     const followupRes = await fetch(LOVABLE_AI_URL, {
@@ -960,12 +978,24 @@ async function processQueueItem(
     if (followupRes.ok) {
       const followupData = await followupRes.json();
       aiMessage = followupData.choices?.[0]?.message;
-      aiContent = aiMessage?.content || aiContent;
+      const followupContent = aiMessage?.content || '';
       // Replace tool_calls so downstream handlers see only NEW calls (e.g. handoff/appointment)
       toolCalls = aiMessage?.tool_calls || [];
-      console.log('[Nina] Follow-up AI reply length:', aiContent?.length || 0, ', new tool_calls:', toolCalls.length);
+      console.log('[Nina] Follow-up AI reply length:', followupContent.length, ', new tool_calls:', toolCalls.length);
+      if (followupContent) {
+        aiContent = followupContent;
+      } else {
+        // Followup returned empty: clear original tool_calls so we don't trip the
+        // generic fallback below — fall through to the "skip send" branch instead.
+        aiContent = '';
+        toolCalls = [];
+        console.warn('[Nina] Follow-up returned empty content — will skip send.');
+      }
     } else {
       console.warn('[Nina] Follow-up AI call failed:', followupRes.status);
+      // Same idea: don't let the generic "Entendi! Como posso ajudar?" go out.
+      aiContent = '';
+      toolCalls = [];
     }
   }
 
