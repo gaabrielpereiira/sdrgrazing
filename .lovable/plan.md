@@ -1,32 +1,75 @@
-## Diagnóstico
-- DB Lovable Cloud: saudável (notifications tem 410 linhas, conexões em 26/60).
-- Console mostra `Setting up real-time subscriptions` seguido imediatamente de `Cleaning up subscriptions`, depois `TIMED_OUT` em todos os canais e fallback de polling de 10s que nunca para.
-- Causa: o `useEffect` em `src/hooks/useConversations.ts` (linha 486) tem dependências instáveis (`fetchConversations`, `fetchAndAddConversation`, `startPolling`, `stopPolling`) que recriam a cada render, fazendo o efeito desmontar/remontar. Como os canais usam nomes fixos (`messages-realtime`, `conversations-realtime`, `contacts-realtime`), o `.subscribe()` colide com a assinatura anterior antes dela fechar → TIMED_OUT → polling fallback infinito → `Failed to fetch` em cascata (incluindo notifications).
+## Objetivo
 
-## Correções (frontend apenas)
+Tornar o campo "Variáveis do template" amigável: em vez de digitar caminhos como `billing.first_name`, escolher de uma lista nomeada (Nome do cliente, Número do pedido, Total, etc.) com **preview ao vivo** do valor que será enviado, usando o último webhook recebido como exemplo.
 
-### 1. `src/hooks/useConversations.ts` — estabilizar o efeito de Realtime
-- Trocar as dependências do useEffect (linha 486) para `[]` e referenciar os callbacks via `useRef` atualizado a cada render. Padrão:
-  ```ts
-  const fetchRef = useRef(fetchConversations);
-  useEffect(() => { fetchRef.current = fetchConversations; });
-  // dentro do effect: fetchRef.current()
-  ```
-  Aplicar o mesmo para `fetchAndAddConversation`, `startPolling`, `stopPolling`.
-- Usar **nome de canal único por mount** (igual já está em `useNotifications`):
-  ```ts
-  const suffix = Math.random().toString(36).slice(2, 8);
-  supabase.channel(`messages-realtime-${suffix}`)
-  ```
-  Para os três canais. Isso evita colisão se houver remount residual.
-- Manter o polling fallback, mas garantir que `stopPolling()` seja chamado em `SUBSCRIBED` (já é) e na cleanup (já é). Sem o ciclo de remount, ele deixará de disparar.
+## O que muda
 
-### 2. `src/hooks/useNotifications.ts` — reduzir ruído
-- Já usa canal único e polling de 15s. Ajuste pequeno: aumentar polling para 30s e parar de pollar quando `realtimeConnected === true` (poupar requests; cada `Failed to fetch` polui logs).
+### 1. `src/hooks/useAutomations.ts` — Catálogo rico de campos
 
-### 3. Verificação
-- Após salvar, no preview: abrir DevTools → console deve mostrar `Messages channel status: SUBSCRIBED` (não TIMED_OUT) e **não** repetir "Setting up..." em loop.
-- O badge de notificações volta a carregar e o chat para de "sincronizar sem parar".
+Substituir o array simples `FIELD_SUGGESTIONS` por um catálogo agrupado:
 
-## O que NÃO mudar
-- Nenhuma migration, nenhum edge function, nenhuma RLS. O backend está OK; é puramente bug de ciclo de vida do hook no frontend.
+```ts
+export const WEBHOOK_FIELDS = [
+  { group: 'Cliente', items: [
+    { path: 'billing.first_name', label: 'Nome do cliente' },
+    { path: 'billing.last_name',  label: 'Sobrenome do cliente' },
+    { path: 'billing.phone',      label: 'Telefone' },
+    { path: 'billing.email',      label: 'E-mail' },
+    { path: 'billing.company',    label: 'Empresa' },
+    { path: 'billing.city',       label: 'Cidade' },
+  ]},
+  { group: 'Pedido', items: [
+    { path: 'id',                 label: 'Número do pedido' },
+    { path: 'number',             label: 'Número de exibição' },
+    { path: 'total',              label: 'Valor total' },
+    { path: 'currency',           label: 'Moeda' },
+    { path: 'status',             label: 'Status' },
+    { path: 'payment_method_title', label: 'Forma de pagamento' },
+    { path: 'date_created',       label: 'Data do pedido' },
+    { path: 'line_items[0].name', label: 'Nome do 1º produto' },
+    { path: 'line_items[0].quantity', label: 'Qtd. do 1º produto' },
+  ]},
+];
+```
+
+Manter `FIELD_SUGGESTIONS` exportado (achatado a partir de `WEBHOOK_FIELDS`) para compatibilidade com os filtros "SE".
+
+### 2. `src/components/AutomationFormModal.tsx` — Picker + preview
+
+Na seção "Variáveis do template":
+
+- Trocar o `<input>` por um `<select>` agrupado (`<optgroup>`) com os rótulos amigáveis, mais a opção **"Personalizado…"** que abre o input livre atual (mantém poder para usuários técnicos).
+- Ao lado de cada linha `{{n}}`, mostrar o **valor resolvido** consultando o último `webhook_events.payload` cujo `topic` casa com o `trigger` escolhido. Caixa cinza tipo `"João"` ou `(vazio)`.
+- Acima da lista de variáveis, renderizar um **preview do corpo do template** com as variáveis substituídas por `[Nome do cliente]`, `[Total]`, etc. (rótulos), para o usuário visualizar a mensagem antes de salvar.
+- Adicionar botão **"Auto-preencher"**: para cada `{{n}}` do template, sugerir automaticamente um campo (ex.: `{{1}}` → `billing.first_name`) com base em heurística simples sobre o texto ao redor do placeholder (ex.: "Olá {{1}}" → nome). Usuário pode ajustar.
+
+### 3. Buscar payload de exemplo
+
+Adicionar `useEffect` no modal que carrega o último webhook do tópico atual:
+
+```ts
+supabase.from('webhook_events')
+  .select('payload')
+  .eq('topic', trigger)
+  .order('received_at', { ascending: false })
+  .limit(1).maybeSingle()
+  .then(({ data }) => setSamplePayload(data?.payload || null));
+```
+
+E função local `getByPath()` (igual à do edge function) para resolver caminhos com suporte a `line_items[0].name`.
+
+## Fora de escopo
+
+- Backend (`automation-runner`) não muda — ele já resolve `cfg.variables` pelo caminho. O fix do erro `#131008` que você viu antes acontece automaticamente quando o usuário preencher as variáveis pelo novo picker.
+- Sem alteração no schema do banco.
+
+## Resultado
+
+Ao editar a automação "PEDIDO_FEITO", o usuário vê:
+
+```
+{{1}}  [Nome do cliente ▾]   → "João"
+{{2}}  [Número do pedido ▾]  → "131008"
+
+Preview: "Olá [Nome do cliente], Recebemos o seu pedido [Número do pedido]!"
+```
