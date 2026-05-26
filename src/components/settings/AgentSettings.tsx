@@ -190,7 +190,10 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           system_prompt_override: settings.system_prompt_override,
           is_active: settings.is_active,
           auto_response_enabled: settings.auto_response_enabled,
-          ai_model_mode: settings.ai_model_mode,
+          ai_model_mode: settings.ai_provider === 'google' ? settings.ai_model : settings.ai_model_mode,
+          ai_provider: settings.ai_provider,
+          ai_model: settings.ai_model,
+          ai_api_keys: settings.ai_api_keys,
           message_breaking_enabled: settings.message_breaking_enabled,
           business_hours_start: settings.business_hours_start,
           business_hours_end: settings.business_hours_end,
@@ -199,7 +202,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           sdr_name: settings.sdr_name,
           ai_scheduling_enabled: settings.ai_scheduling_enabled,
           updated_at: new Date().toISOString(),
-        })
+        } as any)
         .eq('id', settings.id!);
 
       if (error) throw error;
