@@ -989,7 +989,12 @@ async function processQueueItem(
   );
 
   // Process template variables ({{ data_hora }}, {{ dia_semana }}, etc.)
-  const processedPrompt = processPromptTemplate(enhancedSystemPrompt, conversation.contact);
+  let processedPrompt = processPromptTemplate(enhancedSystemPrompt, conversation.contact);
+
+  // Append resumption directive when contact returned after a long pause
+  if (resumptionSystemNote) {
+    processedPrompt = `${processedPrompt}\n\n${resumptionSystemNote}`;
+  }
 
   console.log('[Nina] Calling Lovable AI...');
 
