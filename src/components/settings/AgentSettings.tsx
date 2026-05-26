@@ -409,67 +409,121 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           {/* AI Model Selection */}
           <div className="mb-4">
             <label className="text-xs font-medium text-slate-400 mb-3 block">Modelo de IA</label>
+
+            {/* Provider pill selector */}
+            <div className="flex gap-2 mb-3">
+              {PROVIDERS.map((p) => {
+                const active = settings.ai_provider === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      const catalog = MODEL_CATALOG[p.id];
+                      const currentIsValid = catalog.some(m => m.id === settings.ai_model);
+                      const nextModel = currentIsValid ? settings.ai_model : catalog[0].id;
+                      setSettings({ ...settings, ai_provider: p.id, ai_model: nextModel });
+                      setApiKeyError(null);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium transition-all ${
+                      active
+                        ? 'bg-violet-500/20 border-violet-500 text-violet-300'
+                        : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-[11px] font-bold ${active ? 'bg-violet-500/30' : 'bg-slate-800'}`}>
+                      {p.iconLabel}
+                    </span>
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Model cards (dynamic per provider) */}
             <div className="grid grid-cols-4 gap-2">
-              <button
-                type="button"
-                onClick={() => setSettings({ ...settings, ai_model_mode: 'flash' })}
-                className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
-                  settings.ai_model_mode === 'flash'
-                    ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
-                }`}
-              >
-                <span className="text-lg">⚡</span>
-                <span className="text-xs font-medium">Flash</span>
-                <span className="text-[10px] text-center opacity-70">Rápido</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSettings({ ...settings, ai_model_mode: 'pro' })}
-                className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
-                  settings.ai_model_mode === 'pro'
-                    ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
-                }`}
-              >
-                <span className="text-lg">🧠</span>
-                <span className="text-xs font-medium">Pro 2.5</span>
-                <span className="text-[10px] text-center opacity-70">Inteligente</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSettings({ ...settings, ai_model_mode: 'pro3' })}
-                className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
-                  settings.ai_model_mode === 'pro3'
-                    ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
-                }`}
-              >
-                <span className="text-lg">🚀</span>
-                <span className="text-xs font-medium">Pro 3</span>
-                <span className="text-[10px] text-center opacity-70">Mais Recente</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSettings({ ...settings, ai_model_mode: 'adaptive' })}
-                className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
-                  settings.ai_model_mode === 'adaptive'
-                    ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
-                }`}
-              >
-                <span className="text-lg">🎯</span>
-                <span className="text-xs font-medium">Adaptativo</span>
-                <span className="text-[10px] text-center opacity-70">Contexto</span>
-              </button>
+              {MODEL_CATALOG[settings.ai_provider].map((m) => {
+                const active = settings.ai_model === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setSettings({ ...settings, ai_model: m.id })}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
+                      active
+                        ? 'bg-violet-500/20 border-violet-500 text-violet-300'
+                        : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-lg">{m.icon}</span>
+                    <span className="text-xs font-medium">{m.label}</span>
+                    <span className="text-[10px] text-center opacity-70">{m.tag}</span>
+                  </button>
+                );
+              })}
             </div>
             <p className="text-xs text-slate-500 mt-2">
-              {settings.ai_model_mode === 'flash' && 'Gemini 2.5 Flash: respostas rápidas e econômicas'}
-              {settings.ai_model_mode === 'pro' && 'Gemini 2.5 Pro: respostas elaboradas e inteligentes'}
-              {settings.ai_model_mode === 'pro3' && 'Gemini 3 Pro: modelo mais recente e avançado'}
-              {settings.ai_model_mode === 'adaptive' && 'Alterna automaticamente baseado no contexto da conversa'}
+              {MODEL_CATALOG[settings.ai_provider].find(m => m.id === settings.ai_model)?.desc ?? ''}
             </p>
+
+            {/* API Key for current provider */}
+            {(() => {
+              const provider = PROVIDERS.find(p => p.id === settings.ai_provider)!;
+              const value = settings.ai_api_keys[settings.ai_provider] ?? '';
+              const hasValue = value.trim().length > 0;
+              const borderClass = apiKeyError
+                ? 'border-red-500 focus:ring-red-500/50'
+                : hasValue
+                  ? 'border-emerald-500/60 focus:ring-emerald-500/50'
+                  : 'border-slate-700 focus:ring-violet-500/50';
+              return (
+                <div className="mt-4">
+                  <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5" />
+                    API Key — {provider.label}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      value={value}
+                      onChange={(e) => {
+                        setSettings({
+                          ...settings,
+                          ai_api_keys: { ...settings.ai_api_keys, [settings.ai_provider]: e.target.value },
+                        });
+                        if (apiKeyError) setApiKeyError(null);
+                      }}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v.length === 0) { setApiKeyError(null); return; }
+                        setApiKeyError(provider.keyPrefix.test(v) ? null : `Formato inválido. Esperado prefixo "${provider.placeholder.replace('...', '')}"`);
+                      }}
+                      placeholder={provider.placeholder}
+                      autoComplete="off"
+                      spellCheck={false}
+                      className={`h-9 w-full rounded-lg border bg-slate-950 pl-3 pr-10 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-colors ${borderClass}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(s => !s)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1"
+                      aria-label={showApiKey ? 'Ocultar chave' : 'Revelar chave'}
+                    >
+                      {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {apiKeyError ? (
+                    <p className="text-[11px] text-red-400 mt-1.5">{apiKeyError}</p>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 mt-1.5">
+                      Sua chave é salva com criptografia e nunca é exposta publicamente.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
+
 
           {/* Toggles em grid 2x2 com tooltips */}
           <div className="grid grid-cols-2 gap-3">
