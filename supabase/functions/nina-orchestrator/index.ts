@@ -136,7 +136,7 @@ const searchProductsTool = {
   type: "function",
   function: {
     name: "search_products",
-    description: "Consulta o catálogo real da loja WooCommerce. Use SEMPRE que o cliente perguntar sobre produtos, preços, disponibilidade, categorias ou pedir recomendações. Nunca invente produtos: chame esta ferramenta primeiro e responda apenas com base nos resultados.",
+    description: "Consulta o catálogo real da loja WooCommerce. Chame PROATIVAMENTE sempre que o cliente: (a) mencionar interesse em algum produto/categoria, (b) pedir sugestão/recomendação, (c) perguntar sobre preço, disponibilidade ou estoque, (d) comparar opções, (e) demonstrar dúvida sobre o que comprar. NUNCA invente produtos, preços ou URLs — chame esta ferramenta primeiro e responda apenas com base no que ela retornar. Sempre inclua o link (campo `url`) de cada produto sugerido na resposta ao cliente.",
     parameters: {
       type: "object",
       properties: {
@@ -822,7 +822,8 @@ async function processQueueItem(
   const enhancedSystemPrompt = buildEnhancedPrompt(
     systemPrompt, 
     conversation.contact, 
-    clientMemory
+    clientMemory,
+    settings
   );
 
   // Process template variables ({{ data_hora }}, {{ dia_semana }}, etc.)
@@ -935,7 +936,12 @@ async function processQueueItem(
           };
         } else {
           result.instructions_for_assistant =
-            'Use estes produtos para redigir uma resposta em texto curto para o cliente. NÃO chame search_products de novo nesta mensagem.';
+            'Use APENAS estes produtos na resposta (nunca invente outros). Escolha 1 a 3 mais relevantes para o que o cliente pediu. Para CADA produto sugerido inclua, em texto puro (sem markdown [](), pois é WhatsApp):\n' +
+            '• Nome do produto\n' +
+            '• Preço em R$ (use `price`; se `on_sale` for true, mencione que está em promoção)\n' +
+            '• Uma linha curta de benefício (baseada em `short_desc`)\n' +
+            '• O link do produto (campo `url`) em linha separada, sem encurtar\n\n' +
+            'Se nenhum produto bater bem com o pedido, diga isso de forma honesta e ofereça alternativas próximas ou peça mais detalhes. Mantenha o tom da persona já definida no prompt do sistema. NÃO chame search_products de novo nesta mensagem.';
         }
       } catch (e) {
         console.error('[Nina] wc-products fetch threw:', e);
@@ -1598,7 +1604,7 @@ function processPromptTemplate(prompt: string, contact: any): string {
   });
 }
 
-function buildEnhancedPrompt(basePrompt: string, contact: any, memory: any): string {
+function buildEnhancedPrompt(basePrompt: string, contact: any, memory: any, settings?: any): string {
   let contextInfo = '';
 
   if (contact) {
@@ -1623,6 +1629,15 @@ function buildEnhancedPrompt(basePrompt: string, contact: any, memory: any): str
       if (si.pain_points?.length) contextInfo += `\n- Dores: ${si.pain_points.join(', ')}`;
       if (si.next_best_action) contextInfo += `\n- Próxima ação sugerida: ${si.next_best_action}`;
     }
+  }
+
+  if (settings?.wc_products_enabled === true) {
+    contextInfo += `\n\nCATÁLOGO DE PRODUTOS:\n` +
+      `Você tem acesso ao catálogo real da loja via a ferramenta \`search_products\`. ` +
+      `Use-a PROATIVAMENTE sempre que o cliente demonstrar interesse em produtos, pedir sugestão, ` +
+      `comparar opções, perguntar preço/disponibilidade ou parecer indeciso sobre o que comprar. ` +
+      `Nunca invente produtos, preços ou links — só fale do que a ferramenta retornar. ` +
+      `Em toda recomendação, inclua o LINK do produto (campo url) em texto puro para o cliente clicar no WhatsApp.`;
   }
 
   return basePrompt + contextInfo;
