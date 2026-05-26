@@ -1,39 +1,75 @@
-## Objetivo
-Fazer a Donatella sugerir produtos do WooCommerce ativamente e **sempre enviar o link** (URL do produto) junto com nome, preço e descrição curta.
+## Sintomas
+1. **Tag de suporte persiste** quando contato antigo volta a falar, mesmo depois do ticket finalizado.
+2. **Nina retoma o assunto antigo** sem perguntar se o cliente quer continuar de onde parou ou tratar outro tema.
 
 ## Diagnóstico
-A infra já está pronta:
-- `wc-products` edge function retorna `url` (permalink), `name`, `price`, `short_desc`, `on_sale`, `stock`.
-- `nina-orchestrator` registra a tool `search_products` quando `nina_settings.wc_products_enabled = true`.
-- A tool é chamada, resultado volta pro modelo, e a IA responde em texto.
 
-O que falta é **instrução clara** pra ela: (a) usar a ferramenta proativamente em qualquer conversa sobre produto e (b) sempre incluir o link na resposta.
+### Causa 1 — Reabertura não limpa contexto de atendimento
+`supabase/functions/whatsapp-webhook/index.ts` (linhas 216-233) reabre a conversa antiga assim:
+```ts
+.update({ is_active: true, status: 'nina', last_message_at: now })
+```
+**Falta:** resetar `queue` (continua `support`), `assigned_user_id`, `assigned_team` e `nina_context`. Consequências:
+- Conversa em `queue='support'` faz a Nina **pular completamente** a mensagem (`nina-orchestrator` linha 229: `Skipped: support queue (human-only)`).
+- Visual do chat continua marcado como suporte mesmo o ticket tendo sido encerrado.
 
-## Mudanças
+### Causa 2 — Nina lê histórico inteiro como contínuo
+`nina-orchestrator/index.ts` linhas 785-791 carrega as últimas 20 mensagens sem nenhum corte temporal nem aviso de retomada. Se o último contato foi há dias/semanas, o modelo recebe o final do assunto velho e simplesmente continua dele.
 
-### 1. `supabase/functions/nina-orchestrator/index.ts` — tool description (linha 139)
-Reforçar comportamento esperado:
-- Usar a tool em qualquer menção a produto/preço/recomendação, mesmo que o cliente não peça link explicitamente.
-- Nunca inventar produtos, preços ou URLs.
+## Comportamento desejado (definido agora)
+Quando o contato volta depois de uma pausa significativa:
+1. Nina **detecta a retomada** (gap de tempo entre a última mensagem dela e a nova mensagem do cliente).
+2. Carrega **um resumo curto** do assunto anterior (não o histórico cru de 20 mensagens).
+3. Sempre **pergunta ao cliente**: "Vi que da última vez conversamos sobre X. Quer continuar daquele assunto ou prefere tratar de outra coisa hoje?"
+4. Só usa o histórico antigo no prompt se o cliente confirmar que quer retomar; senão, trata como nova interação.
 
-### 2. `supabase/functions/nina-orchestrator/index.ts` — `instructions_for_assistant` no sucesso (linha 937-938)
-Trocar a frase atual por instruções específicas:
-- Sugerir 1–3 produtos mais relevantes (não despejar a lista toda).
-- Para cada produto incluir: **nome, preço (em R$), 1 linha de benefício e o link `url` em texto puro** (sem markdown — WhatsApp não renderiza `[]()`).
-- Se o cliente pediu algo específico e nada bateu, dizer isso e oferecer categorias próximas.
-- Manter tom da persona já configurada no system prompt.
+## Fix técnico
 
-### 3. `supabase/functions/nina-orchestrator/index.ts` — `buildEnhancedPrompt` (linha 1601)
-Quando `wc_products_enabled` estiver ligado, anexar um bloco curto ao system prompt:
-> "CATÁLOGO: Você tem acesso ao catálogo real da loja via `search_products`. Use proativamente sempre que houver interesse em produto, sugestão, comparação ou disponibilidade. Em toda recomendação inclua o link do produto."
+### Fix 1 — Reset de roteamento na reabertura (`whatsapp-webhook/index.ts`)
+No update de reabertura (linhas 218-227), também setar:
+- `queue: 'sales'`
+- `assigned_user_id: null`, `assigned_team: null`
+- `nina_context: {}`
+- `started_at: now()` (marco da nova sessão)
+- `metadata.resumption`: `{ previous_last_message_at, previous_topic_summary, asked_resume_question: false, user_confirmed_resume: null }`
 
-Para isso a função passa a aceitar `settings` como parâmetro e a chamada na linha 822 é ajustada.
+**Não mexer em `tags` da conversa nem do contato** — pode ter info útil (VIP etc.).
+
+### Fix 2 — Resumo do assunto anterior na reabertura (`whatsapp-webhook/index.ts`)
+Logo após detectar reabertura e antes do update, fazer chamada leve ao Lovable AI Gateway (`gemini-2.5-flash-lite`) com as últimas ~15 mensagens da conversa antiga pedindo um resumo de 1 frase do tema central. Gravar em `metadata.resumption.previous_topic_summary`. Falha silenciosa: se a chamada der erro, fica `null` e Nina pergunta genericamente.
+
+### Fix 3 — Detectar retomada e perguntar (`nina-orchestrator/index.ts`)
+Antes de montar `conversationHistory`:
+
+```text
+if conversation.metadata.resumption.asked_resume_question === false:
+  // Nina ainda não perguntou — primeira mensagem pós-retomada
+  Substituir conversationHistory por:
+    - system note: "Cliente retornou após {dias} dias de pausa. Resumo do assunto anterior: {summary}. NÃO retome o assunto antigo automaticamente. Cumprimente e pergunte se ele quer continuar onde paramos (mencione o assunto) ou tratar de outra coisa."
+    - apenas a mensagem atual do cliente
+  Marcar metadata.resumption.asked_resume_question = true
+  
+else if asked_resume_question === true && user_confirmed_resume === null:
+  // Cliente respondeu à pergunta — interpretar
+  Adicionar tool/instrução: classificar resposta como "retomar" | "novo assunto" | "ambíguo"
+  Gravar user_confirmed_resume e usar histórico completo só se confirmou retomada
+  
+else:
+  Fluxo normal (com ou sem histórico antigo conforme user_confirmed_resume)
+```
+
+Definição de "pausa significativa": **gap ≥ 24h** entre `previous_last_message_at` e a nova mensagem. Abaixo disso, é continuação natural e não pergunta.
+
+## Passos de debug que vou rodar antes
+1. Consultar conversas ativas com `queue='support'` cujo `last_message_at` é recente — confirmar quantas estão presas nesse estado.
+2. Para 2-3 contatos suspeitos, listar gap entre mensagens consecutivas pra ver tamanhos típicos de pausa.
+3. Olhar logs do `nina-orchestrator` filtrando por `Skipped: support queue`.
 
 ## Fora de escopo
-- Não mudar UI de Settings (já existe `WooProductsSettings`).
-- Não mudar `wc-products` (já devolve `url`).
-- Não tocar em fluxo de mensagens, dedupe, agendamento, handoff.
-- Não enviar imagem do produto (só link/texto) — se quiser depois, é outra task.
+- UI do chat (badges, etc.) — backend resolve sozinho.
+- Mexer em dedupe, agendamento, WooCommerce, handoff humano, áudio.
+- Criar tabela nova — tudo cabe em `conversations.metadata` e `nina_context`.
+- Não limpar `tags` da conversa nem do contato.
 
-## Pré-requisito do usuário
-Em **Configurações → APIs → WooCommerce — Catálogo de Produtos**, confirmar que o switch *"Permitir que a Nina consulte produtos durante as conversas"* está **ligado e salvo**. Sem isso, a tool não é registrada e a IA não consegue ver o catálogo.
+## Confirmação que preciso de você
+- **24h como limite de "pausa"** está bom? (alternativas: 12h, 48h, 7 dias)
