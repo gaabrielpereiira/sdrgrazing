@@ -66,6 +66,10 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
       .then(({ data }) => setSamplePayload(data?.payload ?? null));
   }, [isOpen, trigger]);
 
+  // Variables (whatsapp) — declarado cedo pois é usado por preview e auto-fill
+  const variables: string[] = Array.isArray(cfg.variables) ? cfg.variables : [];
+  const setVariables = (v: string[]) => setCfg(prev => ({ ...prev, variables: v }));
+
   // Texto do corpo do template selecionado
   const selectedTemplateBody = useMemo(() => {
     const tpl = templates.find(t => t.id === cfg.template_id);
