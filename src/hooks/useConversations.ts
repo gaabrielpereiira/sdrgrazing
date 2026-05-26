@@ -200,15 +200,28 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
     }
   }, []);
 
+  // Stable refs so the realtime effect doesn't tear down on every render
+  const fetchConversationsRef = useRef(fetchConversations);
+  const fetchAndAddConversationRef = useRef(fetchAndAddConversation);
+  const startPollingRef = useRef(startPolling);
+  const stopPollingRef = useRef(stopPolling);
+  useEffect(() => {
+    fetchConversationsRef.current = fetchConversations;
+    fetchAndAddConversationRef.current = fetchAndAddConversation;
+    startPollingRef.current = startPolling;
+    stopPollingRef.current = stopPolling;
+  });
+
   // Set up real-time subscription
   useEffect(() => {
-    fetchConversations();
+    fetchConversationsRef.current();
 
     console.log('[Realtime] Setting up real-time subscriptions...');
+    const channelSuffix = Math.random().toString(36).slice(2, 8);
 
     // Subscribe to new messages
     const messagesChannel = supabase
-      .channel('messages-realtime')
+      .channel(`messages-realtime-${channelSuffix}`)
       .on(
         'postgres_changes',
         {
