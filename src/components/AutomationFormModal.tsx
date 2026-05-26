@@ -29,6 +29,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [stages, setStages] = useState<PipelineStage[]>([]);
+  const [samplePayload, setSamplePayload] = useState<any>(null);
 
   useEffect(() => {
     if (!isOpen) return;
