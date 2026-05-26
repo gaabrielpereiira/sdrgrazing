@@ -55,6 +55,92 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
     }
   }, [isOpen, rule]);
 
+  // Carrega último payload do tópico para preview ao vivo
+  useEffect(() => {
+    if (!isOpen || !trigger) return;
+    supabase.from('webhook_events')
+      .select('payload')
+      .eq('topic', trigger)
+      .order('received_at', { ascending: false })
+      .limit(1).maybeSingle()
+      .then(({ data }) => setSamplePayload(data?.payload ?? null));
+  }, [isOpen, trigger]);
+
+  // Texto do corpo do template selecionado
+  const selectedTemplateBody = useMemo(() => {
+    const tpl = templates.find(t => t.id === cfg.template_id);
+    if (!tpl) return '';
+    const body = (tpl.components || []).find((c: any) => (c.type || '').toUpperCase() === 'BODY');
+    return body?.text || '';
+  }, [templates, cfg.template_id]);
+
+  // Quantidade de placeholders {{n}} no template
+  const templatePlaceholderCount = useMemo(() => {
+    const matches = selectedTemplateBody.match(/\{\{\s*\d+\s*\}\}/g) || [];
+    const nums = matches.map(m => parseInt(m.replace(/\D/g, ''), 10)).filter(n => !isNaN(n));
+    return nums.length ? Math.max(...nums) : 0;
+  }, [selectedTemplateBody]);
+
+  // Sugestão heurística por placeholder, baseada no texto ao redor
+  const suggestPathForPlaceholder = (n: number): string => {
+    const re = new RegExp(`([\\s\\S]{0,40})\\{\\{\\s*${n}\\s*\\}\\}([\\s\\S]{0,40})`, 'i');
+    const m = selectedTemplateBody.match(re);
+    const ctx = ((m?.[1] || '') + ' ' + (m?.[2] || '')).toLowerCase();
+    if (/(ol[áa]|nome|cliente|sr[a]?\.?)/.test(ctx)) return 'billing.first_name';
+    if (/(pedido|order|n[úu]mero|n[º°]|#)/.test(ctx)) return 'id';
+    if (/(total|valor|pre[çc]o|r\$)/.test(ctx)) return 'total';
+    if (/(status|situa[çc][ãa]o)/.test(ctx)) return 'status';
+    if (/(pagamento|m[ée]todo)/.test(ctx)) return 'payment_method_title';
+    if (/(produto|item)/.test(ctx)) return 'line_items[0].name';
+    if (/(email|e-mail)/.test(ctx)) return 'billing.email';
+    if (/(telefone|whats|celular)/.test(ctx)) return 'billing.phone';
+    return '';
+  };
+
+  const autoFillVariables = () => {
+    if (!templatePlaceholderCount) {
+      toast.info('Selecione um template com variáveis primeiro');
+      return;
+    }
+    const filled = Array.from({ length: templatePlaceholderCount }, (_, i) =>
+      variables[i] || suggestPathForPlaceholder(i + 1)
+    );
+    setVariables(filled);
+    toast.success(`${templatePlaceholderCount} variável(is) preenchida(s)`);
+  };
+
+  const labelForPath = (path: string): string => {
+    for (const g of WEBHOOK_FIELDS) {
+      const item = g.items.find(i => i.path === path);
+      if (item) return item.label;
+    }
+    return path || '—';
+  };
+
+  const previewValueFor = (path: string): string => {
+    if (!path) return '';
+    if (!samplePayload) return '';
+    const v = getByPath(samplePayload, path);
+    if (v == null) return '';
+    if (typeof v === 'object') return JSON.stringify(v).slice(0, 40);
+    return String(v);
+  };
+
+  const isCustomPath = (path: string): boolean => {
+    if (!path) return false;
+    return !FIELD_SUGGESTIONS.includes(path);
+  };
+
+  const renderedTemplatePreview = useMemo(() => {
+    if (!selectedTemplateBody) return '';
+    return selectedTemplateBody.replace(/\{\{\s*(\d+)\s*\}\}/g, (_m: string, n: string) => {
+      const path = variables[parseInt(n, 10) - 1];
+      if (!path) return `{{${n}}}`;
+      const val = previewValueFor(path);
+      return val ? val : `[${labelForPath(path)}]`;
+    });
+  }, [selectedTemplateBody, variables, samplePayload]);
+
   const addCondition = () => setConditions(c => [...c, { field: '', operator: 'eq', value: '' }]);
   const removeCondition = (i: number) => setConditions(c => c.filter((_, idx) => idx !== i));
   const updateCondition = (i: number, patch: Partial<Condition>) =>
