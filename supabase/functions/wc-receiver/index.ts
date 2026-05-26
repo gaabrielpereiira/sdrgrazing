@@ -65,8 +65,14 @@ Deno.serve(async (req) => {
 
     const expected = await hmacBase64(secret, rawBody);
     if (!signature || !timingSafeEqual(signature, expected)) {
-      console.warn('[wc-receiver] Invalid signature for topic:', topic);
-      return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+      console.warn(
+        `[wc-receiver] Invalid signature topic=${topic} bodyLen=${rawBody.length} ` +
+        `secretLen=${secret.length} got=${signature.slice(0, 12)}... expected=${expected.slice(0, 12)}...`
+      );
+      return new Response(JSON.stringify({
+        error: 'Invalid signature',
+        hint: 'O Secret salvo no painel não bate com o Secret do webhook no WooCommerce. Gere um novo, cole nos dois lados (sem espaços), salve em ambos e tente de novo.',
+      }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
