@@ -237,9 +237,67 @@ async function actionOutboundWebhook(rule: any, event: any) {
   }
 }
 
+// ─── Order persistence ────────────────────────────────────────────────
+
+async function upsertOrderFromEvent(supabase: any, event: any) {
+  if (!event?.topic?.startsWith('order.')) return;
+  const p = event.payload || {};
+  const wooId = Number(p.id);
+  if (!wooId || Number.isNaN(wooId)) {
+    console.warn(`[runner] order event ${event.id} missing payload.id, skipping orders upsert`);
+    return;
+  }
+  try {
+    const phone = normalizePhone(getByPath(p, 'billing.phone'));
+    let contactId: string | null = null;
+    if (phone) {
+      const { data: contact } = await supabase
+        .from('contacts').select('id').eq('phone_number', phone).maybeSingle();
+      contactId = contact?.id ?? null;
+    }
+    const fullName = [getByPath(p, 'billing.first_name'), getByPath(p, 'billing.last_name')]
+      .filter(Boolean).join(' ').trim() || null;
+    const totalNum = p.total != null ? Number(p.total) : null;
+
+    const row = {
+      woo_order_id: wooId,
+      contact_id: contactId,
+      status: p.status ?? null,
+      total: Number.isFinite(totalNum) ? totalNum : null,
+      currency: p.currency ?? null,
+      customer_id: p.customer_id != null ? Number(p.customer_id) : null,
+      customer_email: getByPath(p, 'billing.email') ?? null,
+      customer_phone: phone,
+      customer_name: fullName,
+      payment_method: p.payment_method ?? null,
+      payment_method_title: p.payment_method_title ?? null,
+      is_first_order: Boolean(p._is_first_order ?? false),
+      line_items: p.line_items ?? [],
+      billing: p.billing ?? {},
+      raw_payload: p,
+      order_created_at: p.date_created ?? null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('orders').upsert(row, { onConflict: 'woo_order_id' });
+    if (error) {
+      console.warn(`[runner] orders upsert failed for woo_order_id=${wooId}: ${error.message}`);
+    } else {
+      console.log(`[runner] orders upsert ok woo_order_id=${wooId} contact_id=${contactId ?? 'null'}`);
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'unknown';
+    console.warn(`[runner] orders upsert exception: ${msg}`);
+  }
+}
+
 // ─── Event processing ─────────────────────────────────────────────────
 
 async function processEvent(supabase: any, event: any) {
+  // Persist order data first (non-blocking on failure)
+  await upsertOrderFromEvent(supabase, event);
+
   const { data: rules, error: rulesErr } = await supabase
     .from('automation_rules').select('*').eq('active', true).eq('trigger_topic', event.topic);
   if (rulesErr) throw rulesErr;
