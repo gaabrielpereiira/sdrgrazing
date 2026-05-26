@@ -148,10 +148,6 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
 
   const setCfgField = (k: string, v: any) => setCfg(prev => ({ ...prev, [k]: v }));
 
-  // Variables (whatsapp)
-  const variables: string[] = Array.isArray(cfg.variables) ? cfg.variables : [];
-  const setVariables = (v: string[]) => setCfgField('variables', v);
-
   // Tags (crm_update) — comma-separated text input
   const tagsText = Array.isArray(cfg.add_tags) ? (cfg.add_tags as string[]).join(', ') : '';
 
