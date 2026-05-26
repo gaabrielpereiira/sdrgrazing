@@ -1086,7 +1086,7 @@ async function processQueueItem(
           aiContent = (aiContent || '') + '\n\n⚠️ Não encontrei nenhum agendamento ativo para cancelar.';
         }
       } catch (parseError) {
-        console.error('[Nina] Error parsing cancel_appointment arguments:', parseError);
+        console.error('[Nina] Error parsing cancel_appointment arguments:', parseError, 'raw:', String(toolCall.function?.arguments).slice(0, 500));
       }
     }
 
