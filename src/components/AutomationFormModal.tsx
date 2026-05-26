@@ -319,21 +319,83 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
                     placeholder="billing.phone"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono" />
                 </div>
+                {/* Preview do template */}
+                {selectedTemplateBody && (
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 mb-1 block">Preview da mensagem</label>
+                    <div className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 whitespace-pre-wrap">
+                      {renderedTemplatePreview}
+                    </div>
+                    {!samplePayload && (
+                      <p className="text-xs text-slate-500 mt-1">Sem webhook de exemplo ainda — os valores aparecem como rótulos <span className="text-slate-400">[Nome do cliente]</span>.</p>
+                    )}
+                  </div>
+                )}
+
                 <div>
-                  <label className="text-xs font-medium text-slate-300 mb-1 block">Variáveis do template (em ordem)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-slate-300">
+                      Variáveis do template {templatePlaceholderCount > 0 && <span className="text-slate-500">({templatePlaceholderCount} no template)</span>}
+                    </label>
+                    {templatePlaceholderCount > 0 && (
+                      <button onClick={autoFillVariables}
+                        className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
+                        <Wand2 className="w-3 h-3" /> Auto-preencher
+                      </button>
+                    )}
+                  </div>
                   <div className="space-y-2">
-                    {variables.map((v, i) => (
-                      <div key={i} className="flex gap-2">
-                        <span className="text-xs text-slate-400 self-center w-8">{`{{${i + 1}}}`}</span>
-                        <input value={v} onChange={e => setVariables(variables.map((va, idx) => idx === i ? e.target.value : va))}
-                          placeholder="caminho no payload (ex: billing.first_name)"
-                          className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono" />
-                        <button onClick={() => setVariables(variables.filter((_, idx) => idx !== i))}
-                          className="p-2 text-slate-400 hover:text-red-400">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                    {variables.map((v, i) => {
+                      const custom = isCustomPath(v);
+                      const previewVal = previewValueFor(v);
+                      return (
+                        <div key={i} className="flex flex-col gap-1">
+                          <div className="flex gap-2 items-center">
+                            <span className="text-xs text-slate-400 w-10 font-mono">{`{{${i + 1}}}`}</span>
+                            <select
+                              value={custom ? '__custom__' : (v || '')}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setVariables(variables.map((va, idx) =>
+                                  idx === i ? (val === '__custom__' ? (custom ? v : '') : val) : va
+                                ));
+                              }}
+                              className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50"
+                            >
+                              <option value="">Selecione um campo…</option>
+                              {WEBHOOK_FIELDS.map(g => (
+                                <optgroup key={g.group} label={g.group}>
+                                  {g.items.map(it => (
+                                    <option key={it.path} value={it.path}>{it.label}</option>
+                                  ))}
+                                </optgroup>
+                              ))}
+                              <option value="__custom__">Personalizado…</option>
+                            </select>
+                            <button onClick={() => setVariables(variables.filter((_, idx) => idx !== i))}
+                              className="p-2 text-slate-400 hover:text-red-400">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {custom && (
+                            <input
+                              value={v}
+                              onChange={e => setVariables(variables.map((va, idx) => idx === i ? e.target.value : va))}
+                              placeholder="caminho no payload (ex: meta_data[0].value)"
+                              className="ml-12 flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-50 font-mono"
+                            />
+                          )}
+                          {v && (
+                            <div className="ml-12 text-xs text-slate-500">
+                              Valor de exemplo:{' '}
+                              {previewVal
+                                ? <span className="text-emerald-400 font-mono">{previewVal}</span>
+                                : <span className="text-amber-400">{samplePayload ? '(vazio neste webhook)' : '(sem exemplo)'}</span>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => setVariables([...variables, ''])} className="gap-2 mt-2">
                     <Plus className="w-4 h-4" /> Adicionar variável
