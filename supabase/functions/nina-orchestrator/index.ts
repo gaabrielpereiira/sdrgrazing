@@ -1150,7 +1150,7 @@ async function processQueueItem(
 
         handoffRequested = { reason: args.reason, urgency: args.urgency };
       } catch (parseError) {
-        console.error('[Nina] Error parsing request_human_handoff arguments:', parseError);
+        console.error('[Nina] Error parsing request_human_handoff arguments:', parseError, 'raw:', String(toolCall.function?.arguments).slice(0, 500));
       }
     }
   }
