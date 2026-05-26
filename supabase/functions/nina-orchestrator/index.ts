@@ -1604,7 +1604,7 @@ function processPromptTemplate(prompt: string, contact: any): string {
   });
 }
 
-function buildEnhancedPrompt(basePrompt: string, contact: any, memory: any): string {
+function buildEnhancedPrompt(basePrompt: string, contact: any, memory: any, settings?: any): string {
   let contextInfo = '';
 
   if (contact) {
@@ -1629,6 +1629,15 @@ function buildEnhancedPrompt(basePrompt: string, contact: any, memory: any): str
       if (si.pain_points?.length) contextInfo += `\n- Dores: ${si.pain_points.join(', ')}`;
       if (si.next_best_action) contextInfo += `\n- Próxima ação sugerida: ${si.next_best_action}`;
     }
+  }
+
+  if (settings?.wc_products_enabled === true) {
+    contextInfo += `\n\nCATÁLOGO DE PRODUTOS:\n` +
+      `Você tem acesso ao catálogo real da loja via a ferramenta \`search_products\`. ` +
+      `Use-a PROATIVAMENTE sempre que o cliente demonstrar interesse em produtos, pedir sugestão, ` +
+      `comparar opções, perguntar preço/disponibilidade ou parecer indeciso sobre o que comprar. ` +
+      `Nunca invente produtos, preços ou links — só fale do que a ferramenta retornar. ` +
+      `Em toda recomendação, inclua o LINK do produto (campo url) em texto puro para o cliente clicar no WhatsApp.`;
   }
 
   return basePrompt + contextInfo;
