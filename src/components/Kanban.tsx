@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { 
   Plus, Search, MoreHorizontal, DollarSign, Loader2, CalendarClock, Tag, X, 
   Building, User, Calendar, ArrowRight, CheckCircle2, Circle, 
-  FileText, Phone, Mail, Paperclip, Send, CheckSquare, Clock, Trash2, Settings, Brain, MessageSquare, Bot
+  FileText, Phone, Mail, Paperclip, Send, CheckSquare, Clock, Trash2, Settings, Brain, MessageSquare, Bot, ShoppingBag
 } from 'lucide-react';
 import { Button } from './Button';
 import { api } from '../services/api';
@@ -415,6 +415,28 @@ const Kanban: React.FC = () => {
                              </span>
                          ))}
                       </div>
+
+                      {deal.lastOrder && (() => {
+                        const st = deal.lastOrder.status;
+                        const tone =
+                          st === 'completed' ? 'bg-emerald-900/40 text-emerald-300 border-emerald-800/60' :
+                          st === 'processing' ? 'bg-cyan-900/40 text-cyan-300 border-cyan-800/60' :
+                          st === 'cancelled' || st === 'failed' || st === 'refunded' || st === 'negado' ? 'bg-red-900/40 text-red-300 border-red-800/60' :
+                          st === 'on-hold' || st === 'pending' || st === 'checkout-draft' ? 'bg-amber-900/40 text-amber-300 border-amber-800/60' :
+                          'bg-slate-800 text-slate-300 border-slate-700';
+                        const total = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: deal.lastOrder.currency || 'BRL' }).format(deal.lastOrder.total);
+                        return (
+                          <div
+                            className={`flex items-center gap-1 mb-2 text-[10px] px-1.5 py-1 rounded border ${tone}`}
+                            title={`Pedido #${deal.lastOrder.wooOrderId} · ${deal.lastOrder.statusLabel} · ${total}`}
+                          >
+                            <ShoppingBag className="w-2.5 h-2.5 flex-shrink-0" />
+                            <span className="font-mono font-semibold">#{deal.lastOrder.wooOrderId}</span>
+                            <span className="text-[9px] opacity-80 truncate">· {deal.lastOrder.statusLabel}</span>
+                          </div>
+                        );
+                      })()}
+
 
                       <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                          <div className="flex items-center gap-1.5 text-slate-300 text-xs font-bold">

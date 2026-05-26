@@ -11,6 +11,7 @@ import {
   transformDBToUIConversation
 } from '../types';
 import { MOCK_CONTACTS, MOCK_TEAM, MOCK_APPOINTMENTS, MOCK_DEALS } from '../constants';
+import { ORDER_STATUSES } from '@/hooks/useAutomations';
 
 // Helper function to get current user ID
 const getCurrentUserId = async (): Promise<string> => {
@@ -896,29 +897,54 @@ export const api = {
 
     const convMap = new Map(conversations?.map(c => [c.contact_id, c.id]) || []);
 
-    return (data || []).map((d: any) => ({
-      id: d.id,
-      title: d.title,
-      company: d.company || d.contact?.name || d.contact?.call_name || 'Sem empresa',
-      value: Number(d.value) || 0,
-      stage: d.stage,
-      stageId: d.stage_id,
-      ownerAvatar: d.owner?.avatar || 'https://ui-avatars.com/api/?name=NA&background=334155&color=fff',
-      ownerId: d.owner_id,
-      ownerName: d.owner?.name,
-      tags: d.tags || [],
-      dueDate: d.due_date,
-      priority: (d.priority || 'medium') as 'low' | 'medium' | 'high',
-      contactId: d.contact_id,
-      contactName: d.contact?.name || d.contact?.call_name,
-      contactPhone: d.contact?.phone_number,
-      contactEmail: d.contact?.email,
-      wonAt: d.won_at,
-      lostAt: d.lost_at,
-      lostReason: d.lost_reason,
-      clientMemory: d.contact?.client_memory || null,
-      conversationId: convMap.get(d.contact_id) || undefined,
-    }));
+    // Buscar último pedido por contato (orders já vinculados pelo automation-runner)
+    const orderMap = new Map<string, any>();
+    if (contactIds.length > 0) {
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('woo_order_id,status,total,currency,order_created_at,contact_id')
+        .in('contact_id', contactIds)
+        .order('order_created_at', { ascending: false, nullsFirst: false });
+      (orders || []).forEach((o: any) => {
+        if (o.contact_id && !orderMap.has(o.contact_id)) orderMap.set(o.contact_id, o);
+      });
+    }
+    const statusLabelMap = new Map(ORDER_STATUSES.map(s => [s.slug, s.label]));
+
+    return (data || []).map((d: any) => {
+      const o = d.contact_id ? orderMap.get(d.contact_id) : null;
+      return {
+        id: d.id,
+        title: d.title,
+        company: d.company || d.contact?.name || d.contact?.call_name || 'Sem empresa',
+        value: Number(d.value) || 0,
+        stage: d.stage,
+        stageId: d.stage_id,
+        ownerAvatar: d.owner?.avatar || 'https://ui-avatars.com/api/?name=NA&background=334155&color=fff',
+        ownerId: d.owner_id,
+        ownerName: d.owner?.name,
+        tags: d.tags || [],
+        dueDate: d.due_date,
+        priority: (d.priority || 'medium') as 'low' | 'medium' | 'high',
+        contactId: d.contact_id,
+        contactName: d.contact?.name || d.contact?.call_name,
+        contactPhone: d.contact?.phone_number,
+        contactEmail: d.contact?.email,
+        wonAt: d.won_at,
+        lostAt: d.lost_at,
+        lostReason: d.lost_reason,
+        clientMemory: d.contact?.client_memory || null,
+        conversationId: convMap.get(d.contact_id) || undefined,
+        lastOrder: o ? {
+          wooOrderId: Number(o.woo_order_id),
+          status: o.status || 'unknown',
+          statusLabel: statusLabelMap.get(o.status) || o.status || 'Pedido',
+          total: Number(o.total) || 0,
+          currency: o.currency || 'BRL',
+          createdAt: o.order_created_at,
+        } : undefined,
+      };
+    });
   },
 
   // Pipeline Stages CRUD
