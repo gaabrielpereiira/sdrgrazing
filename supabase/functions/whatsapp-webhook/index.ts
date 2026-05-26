@@ -246,11 +246,30 @@ serve(async (req) => {
               .single();
 
             if (convError) {
-              console.error('[Webhook] Error creating conversation:', convError);
-              continue;
+              // Race condition: another parallel webhook already created the active
+              // conversation for this contact (unique partial index 23505). Re-fetch.
+              if ((convError as any).code === '23505') {
+                const { data: existing } = await supabase
+                  .from('conversations')
+                  .select('*')
+                  .eq('contact_id', contact.id)
+                  .eq('is_active', true)
+                  .maybeSingle();
+                if (existing) {
+                  conversation = existing;
+                  console.log('[Webhook] Recovered existing conversation after race:', conversation.id);
+                } else {
+                  console.error('[Webhook] Unique violation but no active conversation found:', convError);
+                  continue;
+                }
+              } else {
+                console.error('[Webhook] Error creating conversation:', convError);
+                continue;
+              }
+            } else {
+              conversation = newConversation;
+              console.log('[Webhook] Created new conversation:', conversation.id);
             }
-            conversation = newConversation;
-            console.log('[Webhook] Created new conversation:', conversation.id);
           }
           // Removed user_id update to maintain single-tenant null pattern
 
