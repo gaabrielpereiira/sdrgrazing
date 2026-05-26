@@ -1,49 +1,32 @@
-## Objetivo
-Mostrar automaticamente o número do último pedido WooCommerce no card do Deal (Kanban), vinculado pelo telefone do cliente.
+## Diagnóstico
+- DB Lovable Cloud: saudável (notifications tem 410 linhas, conexões em 26/60).
+- Console mostra `Setting up real-time subscriptions` seguido imediatamente de `Cleaning up subscriptions`, depois `TIMED_OUT` em todos os canais e fallback de polling de 10s que nunca para.
+- Causa: o `useEffect` em `src/hooks/useConversations.ts` (linha 486) tem dependências instáveis (`fetchConversations`, `fetchAndAddConversation`, `startPolling`, `stopPolling`) que recriam a cada render, fazendo o efeito desmontar/remontar. Como os canais usam nomes fixos (`messages-realtime`, `conversations-realtime`, `contacts-realtime`), o `.subscribe()` colide com a assinatura anterior antes dela fechar → TIMED_OUT → polling fallback infinito → `Failed to fetch` em cascata (incluindo notifications).
 
-## O que já existe (não muda)
-- `wc-receiver` recebe webhook do WooCommerce
-- `automation-runner` → `upsertOrderFromEvent` já grava na tabela `orders` e tenta vincular `contact_id` via `billing.phone` em **toda** chegada
-- Tabela `orders` já tem `woo_order_id`, `status`, `total`, `contact_id`
+## Correções (frontend apenas)
 
-## Mudanças (apenas frontend)
+### 1. `src/hooks/useConversations.ts` — estabilizar o efeito de Realtime
+- Trocar as dependências do useEffect (linha 486) para `[]` e referenciar os callbacks via `useRef` atualizado a cada render. Padrão:
+  ```ts
+  const fetchRef = useRef(fetchConversations);
+  useEffect(() => { fetchRef.current = fetchConversations; });
+  // dentro do effect: fetchRef.current()
+  ```
+  Aplicar o mesmo para `fetchAndAddConversation`, `startPolling`, `stopPolling`.
+- Usar **nome de canal único por mount** (igual já está em `useNotifications`):
+  ```ts
+  const suffix = Math.random().toString(36).slice(2, 8);
+  supabase.channel(`messages-realtime-${suffix}`)
+  ```
+  Para os três canais. Isso evita colisão se houver remount residual.
+- Manter o polling fallback, mas garantir que `stopPolling()` seja chamado em `SUBSCRIBED` (já é) e na cleanup (já é). Sem o ciclo de remount, ele deixará de disparar.
 
-### 1. `src/types.ts` — estender `Deal`
-Adicionar campo opcional:
-```ts
-lastOrder?: {
-  wooOrderId: number;
-  status: string;       // ex: "processing"
-  statusLabel: string;  // ex: "Pago Online"
-  total: number;
-  currency: string;
-  createdAt: string;
-};
-```
+### 2. `src/hooks/useNotifications.ts` — reduzir ruído
+- Já usa canal único e polling de 15s. Ajuste pequeno: aumentar polling para 30s e parar de pollar quando `realtimeConnected === true` (poupar requests; cada `Failed to fetch` polui logs).
 
-### 2. `src/services/api.ts` — `fetchPipeline`
-Depois da query de `deals` + `conversations`, fazer uma terceira query:
-```ts
-supabase.from('orders')
-  .select('woo_order_id,status,total,currency,order_created_at,contact_id')
-  .in('contact_id', contactIds)
-  .order('order_created_at', { ascending: false });
-```
-Reduzir para `Map<contactId, latestOrder>` (primeira ocorrência = mais recente). Mapear para `deal.lastOrder` usando `ORDER_STATUSES` (já existente em `useAutomations`) para o `statusLabel`.
-
-### 3. `src/components/Kanban.tsx` — render no card
-Logo abaixo da linha de tags (linha 417), adicionar quando `deal.lastOrder` existir:
-```
-[#1234 · Pago Online · R$ 297]
-```
-Pequeno badge com ícone `ShoppingBag`, cor por status (processing=cyan, completed=emerald, cancelled/failed=red, on-hold/pending=amber). Sem alterar lógica de drag/click.
-
-### 4. Mover `ORDER_STATUSES` para arquivo compartilhado
-Hoje vive dentro de `useAutomations.ts`. Exportar de lá (ou criar `src/lib/orderStatus.ts`) para reutilizar no `api.ts` e no Kanban sem duplicar.
+### 3. Verificação
+- Após salvar, no preview: abrir DevTools → console deve mostrar `Messages channel status: SUBSCRIBED` (não TIMED_OUT) e **não** repetir "Setting up..." em loop.
+- O badge de notificações volta a carregar e o chat para de "sincronizar sem parar".
 
 ## O que NÃO mudar
-- Webhook receiver, automation-runner, schema do banco — vínculo já é automático.
-- Outros componentes (Contatos, Chat, Deal Detail) — fora do escopo pedido.
-
-## Verificação
-Após implementar: abrir `/kanban`, conferir que deals de contatos com pedidos mostram o badge com nº do pedido e status amigável; deals sem pedido não mostram nada.
+- Nenhuma migration, nenhum edge function, nenhuma RLS. O backend está OK; é puramente bug de ciclo de vida do hook no frontend.

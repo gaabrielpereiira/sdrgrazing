@@ -18,6 +18,7 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<PlatformNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const realtimeConnectedRef = useRef(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
 
   const fetchNotifications = useCallback(async () => {
@@ -69,13 +70,15 @@ export function useNotifications() {
       )
       .subscribe((status) => {
         console.info('[Notifications] channel status:', status);
-        setRealtimeConnected(status === 'SUBSCRIBED');
+        const connected = status === 'SUBSCRIBED';
+        realtimeConnectedRef.current = connected;
+        setRealtimeConnected(connected);
       });
 
-    // Polling fallback every 15s in case realtime drops
+    // Polling fallback every 30s, but only while realtime isn't connected
     const pollInterval = setInterval(() => {
-      fetchNotifications();
-    }, 15000);
+      if (!realtimeConnectedRef.current) fetchNotifications();
+    }, 30000);
 
     return () => {
       clearInterval(pollInterval);

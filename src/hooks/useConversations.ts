@@ -200,15 +200,28 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
     }
   }, []);
 
+  // Stable refs so the realtime effect doesn't tear down on every render
+  const fetchConversationsRef = useRef(fetchConversations);
+  const fetchAndAddConversationRef = useRef(fetchAndAddConversation);
+  const startPollingRef = useRef(startPolling);
+  const stopPollingRef = useRef(stopPolling);
+  useEffect(() => {
+    fetchConversationsRef.current = fetchConversations;
+    fetchAndAddConversationRef.current = fetchAndAddConversation;
+    startPollingRef.current = startPolling;
+    stopPollingRef.current = stopPolling;
+  });
+
   // Set up real-time subscription
   useEffect(() => {
-    fetchConversations();
+    fetchConversationsRef.current();
 
     console.log('[Realtime] Setting up real-time subscriptions...');
+    const channelSuffix = Math.random().toString(36).slice(2, 8);
 
     // Subscribe to new messages
     const messagesChannel = supabase
-      .channel('messages-realtime')
+      .channel(`messages-realtime-${channelSuffix}`)
       .on(
         'postgres_changes',
         {
@@ -233,7 +246,7 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
             if (!conversationExists) {
               // Message from a new conversation - fetch it asynchronously
               console.log('[Realtime] Message from unknown conversation, fetching async...');
-              fetchAndAddConversation(newMessage.conversation_id);
+              fetchAndAddConversationRef.current(newMessage.conversation_id);
               return prev; // Return prev, async fetch will update state
             }
 
@@ -340,19 +353,19 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
         console.log('[Realtime] Messages channel status:', status);
         if (status === 'SUBSCRIBED') {
           console.log('[Realtime] ✅ Successfully connected to messages channel');
-          stopPolling();
+          stopPollingRef.current();
         } else if (status === 'CHANNEL_ERROR') {
           console.error('[Realtime] ❌ Error connecting to messages channel:', err);
-          startPolling();
+          startPollingRef.current();
         } else if (status === 'TIMED_OUT') {
           console.warn('[Realtime] ⚠️ Connection timed out, starting polling fallback...');
-          startPolling();
+          startPollingRef.current();
         }
       });
 
     // Subscribe to conversation changes
     const conversationsChannel = supabase
-      .channel('conversations-realtime')
+      .channel(`conversations-realtime-${channelSuffix}`)
       .on(
         'postgres_changes',
         {
@@ -371,7 +384,7 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
               return prev;
             }
             // Not in state - fetch it
-            fetchAndAddConversation(newConv.id);
+            fetchAndAddConversationRef.current(newConv.id);
             return prev;
           });
         }
@@ -396,7 +409,7 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
             if (!exists) {
               if (updated.is_active === isActiveFilter && matchesQueue) {
                 console.log('[Realtime] Conversation entered current filter — fetching:', updated.id);
-                fetchAndAddConversation(updated.id);
+                fetchAndAddConversationRef.current(updated.id);
               }
               return prev;
             }
@@ -424,19 +437,19 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
         console.log('[Realtime] Conversations channel status:', status);
         if (status === 'SUBSCRIBED') {
           console.log('[Realtime] ✅ Successfully connected to conversations channel');
-          stopPolling();
+          stopPollingRef.current();
         } else if (status === 'CHANNEL_ERROR') {
           console.error('[Realtime] ❌ Error connecting to conversations channel:', err);
-          startPolling();
+          startPollingRef.current();
         } else if (status === 'TIMED_OUT') {
           console.warn('[Realtime] ⚠️ Conversations channel timed out, starting polling fallback...');
-          startPolling();
+          startPollingRef.current();
         }
       });
 
     // Subscribe to contact changes (name, phone, tags, avatar, etc.)
     const contactsChannel = supabase
-      .channel('contacts-realtime')
+      .channel(`contacts-realtime-${channelSuffix}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'contacts' },
@@ -478,12 +491,15 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
     // Cleanup
     return () => {
       console.log('[Realtime] Cleaning up subscriptions');
-      stopPolling();
+      stopPollingRef.current();
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
       supabase.removeChannel(contactsChannel);
     };
-  }, [fetchConversations, fetchAndAddConversation, startPolling, stopPolling]);
+    // Only resubscribe when the queue/active filter changes. Callbacks are
+    // accessed via refs to avoid tearing down the channels on every render
+    // (which caused TIMED_OUT loops and the "syncing forever" symptom).
+  }, [isActiveFilter, queueFilter]);
 
   // Send message
   const sendMessage = useCallback(async (conversationId: string, content: string, opts?: { replyToId?: string | null }) => {
