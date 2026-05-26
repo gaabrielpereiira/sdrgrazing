@@ -949,6 +949,72 @@ export type Database = {
         }
         Relationships: []
       }
+      orders: {
+        Row: {
+          billing: Json | null
+          contact_id: string | null
+          created_at: string
+          currency: string | null
+          customer_email: string | null
+          customer_id: number | null
+          customer_name: string | null
+          customer_phone: string | null
+          id: string
+          is_first_order: boolean | null
+          line_items: Json | null
+          order_created_at: string | null
+          payment_method: string | null
+          payment_method_title: string | null
+          raw_payload: Json | null
+          status: string | null
+          total: number | null
+          updated_at: string
+          woo_order_id: number
+        }
+        Insert: {
+          billing?: Json | null
+          contact_id?: string | null
+          created_at?: string
+          currency?: string | null
+          customer_email?: string | null
+          customer_id?: number | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          id?: string
+          is_first_order?: boolean | null
+          line_items?: Json | null
+          order_created_at?: string | null
+          payment_method?: string | null
+          payment_method_title?: string | null
+          raw_payload?: Json | null
+          status?: string | null
+          total?: number | null
+          updated_at?: string
+          woo_order_id: number
+        }
+        Update: {
+          billing?: Json | null
+          contact_id?: string | null
+          created_at?: string
+          currency?: string | null
+          customer_email?: string | null
+          customer_id?: number | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          id?: string
+          is_first_order?: boolean | null
+          line_items?: Json | null
+          order_created_at?: string | null
+          payment_method?: string | null
+          payment_method_title?: string | null
+          raw_payload?: Json | null
+          status?: string | null
+          total?: number | null
+          updated_at?: string
+          woo_order_id?: number
+        }
+        Relationships: []
+      }
       pipeline_stages: {
         Row: {
           ai_trigger_criteria: string | null
