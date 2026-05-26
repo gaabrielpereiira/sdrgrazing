@@ -70,10 +70,49 @@ export const TRIGGER_TOPICS = [
   { value: 'product.updated', label: 'Produto atualizado' },
 ];
 
-export const FIELD_SUGGESTIONS = [
-  'total', 'status', 'billing.phone', 'billing.first_name', 'billing.email',
-  'customer_id', 'line_items[0].product_id', 'payment_method',
+export interface WebhookField { path: string; label: string }
+export interface WebhookFieldGroup { group: string; items: WebhookField[] }
+
+export const WEBHOOK_FIELDS: WebhookFieldGroup[] = [
+  { group: 'Cliente', items: [
+    { path: 'billing.first_name',     label: 'Nome do cliente' },
+    { path: 'billing.last_name',      label: 'Sobrenome do cliente' },
+    { path: 'billing.phone',          label: 'Telefone' },
+    { path: 'billing.email',          label: 'E-mail' },
+    { path: 'billing.company',        label: 'Empresa' },
+    { path: 'billing.city',           label: 'Cidade' },
+    { path: 'billing.state',          label: 'Estado' },
+  ]},
+  { group: 'Pedido', items: [
+    { path: 'id',                     label: 'Número do pedido' },
+    { path: 'number',                 label: 'Número de exibição' },
+    { path: 'total',                  label: 'Valor total' },
+    { path: 'currency',               label: 'Moeda' },
+    { path: 'status',                 label: 'Status' },
+    { path: 'payment_method',         label: 'Forma de pagamento (slug)' },
+    { path: 'payment_method_title',   label: 'Forma de pagamento' },
+    { path: 'date_created',           label: 'Data do pedido' },
+  ]},
+  { group: 'Itens', items: [
+    { path: 'line_items[0].name',     label: 'Nome do 1º produto' },
+    { path: 'line_items[0].quantity', label: 'Quantidade do 1º produto' },
+    { path: 'line_items[0].total',    label: 'Total do 1º produto' },
+    { path: 'line_items[0].product_id', label: 'ID do 1º produto' },
+  ]},
 ];
+
+export const FIELD_SUGGESTIONS = WEBHOOK_FIELDS.flatMap(g => g.items.map(i => i.path));
+
+export function getByPath(obj: any, path: string): any {
+  if (!obj || !path) return undefined;
+  const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
+  let cur: any = obj;
+  for (const p of parts) {
+    if (cur == null) return undefined;
+    cur = cur[p];
+  }
+  return cur;
+}
 
 export const OPERATORS = [
   { value: 'eq', label: 'igual a (=)' },

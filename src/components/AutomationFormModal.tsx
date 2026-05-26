@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { X, Plus, Trash2, Loader2, Code } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { X, Plus, Trash2, Loader2, Code, Wand2 } from 'lucide-react';
 import { Button } from './Button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { TRIGGER_TOPICS, FIELD_SUGGESTIONS, OPERATORS, ACTION_TYPES, ORDER_STATUSES, AutomationRule } from '@/hooks/useAutomations';
+import { TRIGGER_TOPICS, FIELD_SUGGESTIONS, OPERATORS, ACTION_TYPES, ORDER_STATUSES, WEBHOOK_FIELDS, getByPath, AutomationRule } from '@/hooks/useAutomations';
 
 interface Props {
   isOpen: boolean;
@@ -29,6 +29,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [stages, setStages] = useState<PipelineStage[]>([]);
+  const [samplePayload, setSamplePayload] = useState<any>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -54,16 +55,102 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
     }
   }, [isOpen, rule]);
 
+  // Carrega último payload do tópico para preview ao vivo
+  useEffect(() => {
+    if (!isOpen || !trigger) return;
+    supabase.from('webhook_events')
+      .select('payload')
+      .eq('topic', trigger)
+      .order('received_at', { ascending: false })
+      .limit(1).maybeSingle()
+      .then(({ data }) => setSamplePayload(data?.payload ?? null));
+  }, [isOpen, trigger]);
+
+  // Variables (whatsapp) — declarado cedo pois é usado por preview e auto-fill
+  const variables: string[] = Array.isArray(cfg.variables) ? cfg.variables : [];
+  const setVariables = (v: string[]) => setCfg(prev => ({ ...prev, variables: v }));
+
+  // Texto do corpo do template selecionado
+  const selectedTemplateBody = useMemo(() => {
+    const tpl = templates.find(t => t.id === cfg.template_id);
+    if (!tpl) return '';
+    const body = (tpl.components || []).find((c: any) => (c.type || '').toUpperCase() === 'BODY');
+    return body?.text || '';
+  }, [templates, cfg.template_id]);
+
+  // Quantidade de placeholders {{n}} no template
+  const templatePlaceholderCount = useMemo(() => {
+    const matches = selectedTemplateBody.match(/\{\{\s*\d+\s*\}\}/g) || [];
+    const nums = matches.map((m: string) => parseInt(m.replace(/\D/g, ''), 10)).filter((n: number) => !isNaN(n));
+    return nums.length ? Math.max(...nums) : 0;
+  }, [selectedTemplateBody]);
+
+  // Sugestão heurística por placeholder, baseada no texto ao redor
+  const suggestPathForPlaceholder = (n: number): string => {
+    const re = new RegExp(`([\\s\\S]{0,40})\\{\\{\\s*${n}\\s*\\}\\}([\\s\\S]{0,40})`, 'i');
+    const m = selectedTemplateBody.match(re);
+    const ctx = ((m?.[1] || '') + ' ' + (m?.[2] || '')).toLowerCase();
+    if (/(ol[áa]|nome|cliente|sr[a]?\.?)/.test(ctx)) return 'billing.first_name';
+    if (/(pedido|order|n[úu]mero|n[º°]|#)/.test(ctx)) return 'id';
+    if (/(total|valor|pre[çc]o|r\$)/.test(ctx)) return 'total';
+    if (/(status|situa[çc][ãa]o)/.test(ctx)) return 'status';
+    if (/(pagamento|m[ée]todo)/.test(ctx)) return 'payment_method_title';
+    if (/(produto|item)/.test(ctx)) return 'line_items[0].name';
+    if (/(email|e-mail)/.test(ctx)) return 'billing.email';
+    if (/(telefone|whats|celular)/.test(ctx)) return 'billing.phone';
+    return '';
+  };
+
+  const autoFillVariables = () => {
+    if (!templatePlaceholderCount) {
+      toast.info('Selecione um template com variáveis primeiro');
+      return;
+    }
+    const filled = Array.from({ length: templatePlaceholderCount }, (_, i) =>
+      variables[i] || suggestPathForPlaceholder(i + 1)
+    );
+    setVariables(filled);
+    toast.success(`${templatePlaceholderCount} variável(is) preenchida(s)`);
+  };
+
+  const labelForPath = (path: string): string => {
+    for (const g of WEBHOOK_FIELDS) {
+      const item = g.items.find(i => i.path === path);
+      if (item) return item.label;
+    }
+    return path || '—';
+  };
+
+  const previewValueFor = (path: string): string => {
+    if (!path) return '';
+    if (!samplePayload) return '';
+    const v = getByPath(samplePayload, path);
+    if (v == null) return '';
+    if (typeof v === 'object') return JSON.stringify(v).slice(0, 40);
+    return String(v);
+  };
+
+  const isCustomPath = (path: string): boolean => {
+    if (!path) return false;
+    return !FIELD_SUGGESTIONS.includes(path);
+  };
+
+  const renderedTemplatePreview = useMemo(() => {
+    if (!selectedTemplateBody) return '';
+    return selectedTemplateBody.replace(/\{\{\s*(\d+)\s*\}\}/g, (_m: string, n: string) => {
+      const path = variables[parseInt(n, 10) - 1];
+      if (!path) return `{{${n}}}`;
+      const val = previewValueFor(path);
+      return val ? val : `[${labelForPath(path)}]`;
+    });
+  }, [selectedTemplateBody, variables, samplePayload]);
+
   const addCondition = () => setConditions(c => [...c, { field: '', operator: 'eq', value: '' }]);
   const removeCondition = (i: number) => setConditions(c => c.filter((_, idx) => idx !== i));
   const updateCondition = (i: number, patch: Partial<Condition>) =>
     setConditions(c => c.map((co, idx) => idx === i ? { ...co, ...patch } : co));
 
   const setCfgField = (k: string, v: any) => setCfg(prev => ({ ...prev, [k]: v }));
-
-  // Variables (whatsapp)
-  const variables: string[] = Array.isArray(cfg.variables) ? cfg.variables : [];
-  const setVariables = (v: string[]) => setCfgField('variables', v);
 
   // Tags (crm_update) — comma-separated text input
   const tagsText = Array.isArray(cfg.add_tags) ? (cfg.add_tags as string[]).join(', ') : '';
@@ -232,21 +319,83 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
                     placeholder="billing.phone"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono" />
                 </div>
+                {/* Preview do template */}
+                {selectedTemplateBody && (
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 mb-1 block">Preview da mensagem</label>
+                    <div className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 whitespace-pre-wrap">
+                      {renderedTemplatePreview}
+                    </div>
+                    {!samplePayload && (
+                      <p className="text-xs text-slate-500 mt-1">Sem webhook de exemplo ainda — os valores aparecem como rótulos <span className="text-slate-400">[Nome do cliente]</span>.</p>
+                    )}
+                  </div>
+                )}
+
                 <div>
-                  <label className="text-xs font-medium text-slate-300 mb-1 block">Variáveis do template (em ordem)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-slate-300">
+                      Variáveis do template {templatePlaceholderCount > 0 && <span className="text-slate-500">({templatePlaceholderCount} no template)</span>}
+                    </label>
+                    {templatePlaceholderCount > 0 && (
+                      <button onClick={autoFillVariables}
+                        className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
+                        <Wand2 className="w-3 h-3" /> Auto-preencher
+                      </button>
+                    )}
+                  </div>
                   <div className="space-y-2">
-                    {variables.map((v, i) => (
-                      <div key={i} className="flex gap-2">
-                        <span className="text-xs text-slate-400 self-center w-8">{`{{${i + 1}}}`}</span>
-                        <input value={v} onChange={e => setVariables(variables.map((va, idx) => idx === i ? e.target.value : va))}
-                          placeholder="caminho no payload (ex: billing.first_name)"
-                          className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono" />
-                        <button onClick={() => setVariables(variables.filter((_, idx) => idx !== i))}
-                          className="p-2 text-slate-400 hover:text-red-400">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                    {variables.map((v, i) => {
+                      const custom = isCustomPath(v);
+                      const previewVal = previewValueFor(v);
+                      return (
+                        <div key={i} className="flex flex-col gap-1">
+                          <div className="flex gap-2 items-center">
+                            <span className="text-xs text-slate-400 w-10 font-mono">{`{{${i + 1}}}`}</span>
+                            <select
+                              value={custom ? '__custom__' : (v || '')}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setVariables(variables.map((va, idx) =>
+                                  idx === i ? (val === '__custom__' ? (custom ? v : '') : val) : va
+                                ));
+                              }}
+                              className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50"
+                            >
+                              <option value="">Selecione um campo…</option>
+                              {WEBHOOK_FIELDS.map(g => (
+                                <optgroup key={g.group} label={g.group}>
+                                  {g.items.map(it => (
+                                    <option key={it.path} value={it.path}>{it.label}</option>
+                                  ))}
+                                </optgroup>
+                              ))}
+                              <option value="__custom__">Personalizado…</option>
+                            </select>
+                            <button onClick={() => setVariables(variables.filter((_, idx) => idx !== i))}
+                              className="p-2 text-slate-400 hover:text-red-400">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {custom && (
+                            <input
+                              value={v}
+                              onChange={e => setVariables(variables.map((va, idx) => idx === i ? e.target.value : va))}
+                              placeholder="caminho no payload (ex: meta_data[0].value)"
+                              className="ml-12 flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-50 font-mono"
+                            />
+                          )}
+                          {v && (
+                            <div className="ml-12 text-xs text-slate-500">
+                              Valor de exemplo:{' '}
+                              {previewVal
+                                ? <span className="text-emerald-400 font-mono">{previewVal}</span>
+                                : <span className="text-amber-400">{samplePayload ? '(vazio neste webhook)' : '(sem exemplo)'}</span>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => setVariables([...variables, ''])} className="gap-2 mt-2">
                     <Plus className="w-4 h-4" /> Adicionar variável
