@@ -790,11 +790,173 @@ async function processQueueItem(
     .order('sent_at', { ascending: false })
     .limit(20);
 
+  // === Resumption handling ===
+  // If the webhook reopened a previously closed conversation, the conversation
+  // has metadata.resumption set. We do not want Nina to silently continue the
+  // old topic — she must ask the client first whether they want to resume or
+  // start a new subject. We also classify the reply and only feed the old
+  // history into the model if the client confirmed resumption.
+  const RESUMPTION_GAP_MS = 24 * 60 * 60 * 1000; // 24h
+  let resumption = (conversation.metadata as any)?.resumption || null;
+  const detectedAt = resumption?.detected_at ? new Date(resumption.detected_at).getTime() : 0;
+  const prevLastMs = resumption?.previous_last_message_at
+    ? new Date(resumption.previous_last_message_at).getTime()
+    : 0;
+  const gapMs = detectedAt && prevLastMs ? detectedAt - prevLastMs : 0;
+  const isShortGap = resumption && gapMs > 0 && gapMs < RESUMPTION_GAP_MS;
+  // Short gap (<24h) — treat as continuation, drop resumption flag
+  if (isShortGap) {
+    resumption = null;
+    const md = { ...(conversation.metadata as any || {}) };
+    delete md.resumption;
+    await supabase.from('conversations').update({ metadata: md }).eq('id', conversation.id);
+  }
+
+  let historySource: any[] = (recentMessages || []).slice().reverse();
+  let resumptionSystemNote: string | null = null;
+
+  if (resumption) {
+    const allOldest = historySource;
+    const cutoffMs = detectedAt;
+    const oldMessages = allOldest.filter((m: any) => new Date(m.sent_at).getTime() < cutoffMs);
+    const newMessages = allOldest.filter((m: any) => new Date(m.sent_at).getTime() >= cutoffMs);
+
+    if (resumption.asked_resume_question === false) {
+      // First inbound message after reopen — summarize old topic, ask client.
+      let summary = resumption.summary as string | null;
+      if (!summary && oldMessages.length > 0) {
+        try {
+          const transcript = oldMessages
+            .slice(-15)
+            .map((m: any) => `${m.from_type === 'user' ? 'Cliente' : 'Atendente'}: ${m.content || '[mídia]'}`)
+            .join('\n');
+          const sumRes = await fetch(LOVABLE_AI_URL, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash-lite',
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    'Resuma em UMA frase curta (máx. 18 palavras) o assunto central da conversa abaixo, em português, sem rodeios. Apenas o resumo, sem prefixos como "Resumo:".',
+                },
+                { role: 'user', content: transcript },
+              ],
+              temperature: 0.2,
+              max_tokens: 80,
+            }),
+          });
+          if (sumRes.ok) {
+            const sumData = await sumRes.json();
+            summary = (sumData.choices?.[0]?.message?.content || '').trim() || null;
+          }
+        } catch (e) {
+          console.warn('[Nina] Resumption summary failed:', e);
+        }
+      }
+
+      const daysAgo = Math.max(1, Math.round(gapMs / (24 * 60 * 60 * 1000)));
+      const subjectClause = summary
+        ? `O assunto anterior foi: "${summary}".`
+        : 'Não temos um resumo claro do assunto anterior.';
+      resumptionSystemNote =
+        `IMPORTANTE — RETOMADA DE CONTATO:\n` +
+        `O cliente está voltando a falar depois de aproximadamente ${daysAgo} dia(s) de pausa. ${subjectClause}\n` +
+        `NÃO retome o assunto antigo automaticamente. Cumprimente de forma breve e calorosa, ` +
+        `mencione brevemente o tema anterior e PERGUNTE se ele quer continuar de onde paramos ou tratar de outro assunto agora. ` +
+        `Aguarde a resposta dele antes de avançar.`;
+
+      // Persist state
+      const md = { ...(conversation.metadata as any || {}) };
+      md.resumption = { ...resumption, summary, asked_resume_question: true };
+      await supabase.from('conversations').update({ metadata: md }).eq('id', conversation.id);
+
+      // Only feed the current message into the model on this turn
+      historySource = newMessages;
+    } else if (resumption.user_confirmed_resume === null) {
+      // Client just answered the resume question — classify intent
+      const lastUser = newMessages
+        .filter((m: any) => m.from_type === 'user')
+        .slice(-1)[0];
+      const reply = (lastUser?.content || '').toLowerCase().trim();
+      let intent: 'resume' | 'new' | 'ambiguous' = 'ambiguous';
+      // Quick keyword pass
+      const resumeKeywords = ['continuar', 'continua', 'retomar', 'retomamos', 'sim', 'pode sim', 'isso', 'aquilo mesmo', 'mesmo assunto', 'de onde paramos'];
+      const newKeywords = ['outro', 'novo assunto', 'nova', 'mudar', 'diferente', 'não', 'nao', 'agora é', 'outra coisa', 'esquece'];
+      if (resumeKeywords.some((k) => reply.includes(k)) && !newKeywords.some((k) => reply.includes(k))) {
+        intent = 'resume';
+      } else if (newKeywords.some((k) => reply.includes(k))) {
+        intent = 'new';
+      } else {
+        // Ask the model to classify
+        try {
+          const clsRes = await fetch(LOVABLE_AI_URL, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash-lite',
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    'Você classifica respostas de clientes. Responda APENAS uma palavra: "resume" se o cliente quer continuar o assunto anterior, "new" se quer tratar de outro assunto, ou "ambiguous" se não dá pra ter certeza.',
+                },
+                {
+                  role: 'user',
+                  content: `Pergunta feita ao cliente: queria saber se ele quer continuar o assunto anterior ou tratar de outro.\nResposta do cliente: "${reply}"`,
+                },
+              ],
+              temperature: 0,
+              max_tokens: 5,
+            }),
+          });
+          if (clsRes.ok) {
+            const clsData = await clsRes.json();
+            const out = (clsData.choices?.[0]?.message?.content || '').toLowerCase().trim();
+            if (out.includes('resume')) intent = 'resume';
+            else if (out.includes('new')) intent = 'new';
+          }
+        } catch (e) {
+          console.warn('[Nina] Resumption classification failed:', e);
+        }
+      }
+
+      console.log('[Nina] Resumption intent classified as:', intent);
+
+      if (intent === 'resume') {
+        // Keep full history; clear resumption flag
+        const md = { ...(conversation.metadata as any || {}) };
+        md.resumption = { ...resumption, user_confirmed_resume: true };
+        await supabase.from('conversations').update({ metadata: md }).eq('id', conversation.id);
+        resumptionSystemNote =
+          `O cliente confirmou que quer CONTINUAR o assunto anterior. Retome naturalmente de onde paramos, sem repetir perguntas já respondidas.`;
+        // history stays full
+      } else if (intent === 'new') {
+        const md = { ...(conversation.metadata as any || {}) };
+        md.resumption = { ...resumption, user_confirmed_resume: false };
+        await supabase.from('conversations').update({ metadata: md }).eq('id', conversation.id);
+        resumptionSystemNote =
+          `O cliente quer tratar de um NOVO assunto. Esqueça o tema anterior e trate a mensagem atual como início de uma nova conversa.`;
+        historySource = newMessages;
+      } else {
+        // Ambiguous — ask again with a clearer choice
+        resumptionSystemNote =
+          `A resposta do cliente sobre retomar o assunto anterior foi ambígua. ` +
+          `Pergunte de forma direta e objetiva, dando duas opções claras: continuar o assunto anterior ou tratar de outra coisa.`;
+        historySource = newMessages;
+      }
+    } else if (resumption.user_confirmed_resume === false) {
+      // Already decided: new subject — never load old history
+      historySource = newMessages;
+    }
+    // user_confirmed_resume === true → full history, no special note
+  }
+
   // Build conversation history for AI — include image_url for incoming images
   // that already have media_url, so Gemini can actually see them instead of
   // receiving an empty "[imagem recebida]" placeholder.
-  const conversationHistory = (recentMessages || [])
-    .reverse()
+  const conversationHistory = historySource
     .map((msg: any) => {
       const role = msg.from_type === 'user' ? 'user' : 'assistant';
       const isIncomingImage =
@@ -827,7 +989,12 @@ async function processQueueItem(
   );
 
   // Process template variables ({{ data_hora }}, {{ dia_semana }}, etc.)
-  const processedPrompt = processPromptTemplate(enhancedSystemPrompt, conversation.contact);
+  let processedPrompt = processPromptTemplate(enhancedSystemPrompt, conversation.contact);
+
+  // Append resumption directive when contact returned after a long pause
+  if (resumptionSystemNote) {
+    processedPrompt = `${processedPrompt}\n\n${resumptionSystemNote}`;
+  }
 
   console.log('[Nina] Calling Lovable AI...');
 
