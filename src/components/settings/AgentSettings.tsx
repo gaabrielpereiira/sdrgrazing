@@ -138,14 +138,32 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
       }
 
       // Load settings from global data
+      const rawProvider = (data as any).ai_provider;
+      const provider: AiProvider = (rawProvider === 'openai' || rawProvider === 'anthropic') ? rawProvider : 'google';
+      const rawKeys = (data as any).ai_api_keys ?? {};
+      const apiKeys = {
+        google: typeof rawKeys.google === 'string' ? rawKeys.google : '',
+        openai: typeof rawKeys.openai === 'string' ? rawKeys.openai : '',
+        anthropic: typeof rawKeys.anthropic === 'string' ? rawKeys.anthropic : '',
+      };
+      const safeModelMode = (data.ai_model_mode === 'flash' || data.ai_model_mode === 'pro' || data.ai_model_mode === 'pro3' || data.ai_model_mode === 'adaptive')
+        ? data.ai_model_mode
+        : 'flash';
+      const catalogIds = MODEL_CATALOG[provider].map(m => m.id);
+      const rawModel = (data as any).ai_model;
+      const aiModel = (typeof rawModel === 'string' && catalogIds.includes(rawModel))
+        ? rawModel
+        : (provider === 'google' ? safeModelMode : MODEL_CATALOG[provider][0].id);
+
       setSettings({
         id: data.id,
         system_prompt_override: data.system_prompt_override,
         is_active: data.is_active,
         auto_response_enabled: data.auto_response_enabled,
-        ai_model_mode: (data.ai_model_mode === 'flash' || data.ai_model_mode === 'pro' || data.ai_model_mode === 'pro3' || data.ai_model_mode === 'adaptive') 
-          ? data.ai_model_mode 
-          : 'flash',
+        ai_model_mode: safeModelMode,
+        ai_provider: provider,
+        ai_model: aiModel,
+        ai_api_keys: apiKeys,
         message_breaking_enabled: data.message_breaking_enabled,
         business_hours_start: data.business_hours_start,
         business_hours_end: data.business_hours_end,
