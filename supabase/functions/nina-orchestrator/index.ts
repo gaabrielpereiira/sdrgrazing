@@ -1061,7 +1061,7 @@ async function processQueueItem(
           aiContent = (aiContent || '') + `\n\n⚠️ Já existe um agendamento para esse horário (${appointmentRescheduled.conflictWith}). Podemos reagendar para outro horário?`;
         }
       } catch (parseError) {
-        console.error('[Nina] Error parsing reschedule_appointment arguments:', parseError);
+        console.error('[Nina] Error parsing reschedule_appointment arguments:', parseError, 'raw:', String(toolCall.function?.arguments).slice(0, 500));
       }
     }
     
