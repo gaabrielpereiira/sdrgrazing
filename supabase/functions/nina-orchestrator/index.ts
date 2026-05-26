@@ -1029,7 +1029,11 @@ async function processQueueItem(
       ...conversationHistory
     ],
     temperature: aiSettings.temperature,
-    max_tokens: 1000
+    // Reasoning models (e.g. gemini-3-pro-preview) consume tokens for internal
+    // thinking that count against max_tokens. 1000 was too low and produced
+    // mid-word truncations like "Grazing Esp". 4000 leaves room for thinking +
+    // a complete WhatsApp-sized reply.
+    max_tokens: 4000
   };
 
   // Only add tools if we have any
@@ -1065,8 +1069,22 @@ async function processQueueItem(
   let aiMessage = aiData.choices?.[0]?.message;
   let aiContent = aiMessage?.content || '';
   let toolCalls = aiMessage?.tool_calls || [];
+  const finishReason = aiData.choices?.[0]?.finish_reason;
 
-  console.log('[Nina] AI response received, content length:', aiContent?.length || 0, ', tool_calls:', toolCalls.length);
+  console.log('[Nina] AI response received, content length:', aiContent?.length || 0, ', tool_calls:', toolCalls.length, ', finish_reason:', finishReason);
+
+  // Detect truncation by max_tokens. Reasoning models can return a partial
+  // message (e.g. "Grazing Esp"). Cut back to the last complete chunk —
+  // a paragraph break (\n\n) or terminal punctuation — to avoid sending
+  // gibberish to the customer. If nothing complete remains, drop the reply
+  // entirely (a notification will be raised downstream).
+  if (finishReason === 'length' && aiContent) {
+    const trimmed = trimToLastCompleteChunk(aiContent);
+    if (trimmed !== aiContent) {
+      console.warn('[Nina] AI reply was truncated by max_tokens. Original length:', aiContent.length, 'trimmed to:', trimmed.length, 'preview:', aiContent.slice(0, 120));
+      aiContent = trimmed;
+    }
+  }
 
   // === WooCommerce product search round-trip ===
   // If the model called search_products, fetch the catalog, feed it back, and
@@ -1139,7 +1157,8 @@ async function processQueueItem(
         ...toolMessages,
       ],
       temperature: aiSettings.temperature,
-      max_tokens: 1000,
+      // Same reasoning-token budget concern as the main call above.
+      max_tokens: 4000,
     };
 
     const followupRes = await fetch(LOVABLE_AI_URL, {
@@ -1151,15 +1170,23 @@ async function processQueueItem(
     if (followupRes.ok) {
       const followupData = await followupRes.json();
       aiMessage = followupData.choices?.[0]?.message;
-      const followupContent = aiMessage?.content || '';
+      let followupContent = aiMessage?.content || '';
+      const followupFinish = followupData.choices?.[0]?.finish_reason;
       // Replace tool_calls so downstream handlers see only NEW calls (e.g. handoff/appointment)
       toolCalls = aiMessage?.tool_calls || [];
-      console.log('[Nina] Follow-up AI reply length:', followupContent.length, ', new tool_calls:', toolCalls.length);
+      console.log('[Nina] Follow-up AI reply length:', followupContent.length, ', new tool_calls:', toolCalls.length, ', finish_reason:', followupFinish);
+
+      if (followupFinish === 'length' && followupContent) {
+        const trimmed = trimToLastCompleteChunk(followupContent);
+        if (trimmed !== followupContent) {
+          console.warn('[Nina] Follow-up reply truncated by max_tokens. Original length:', followupContent.length, 'trimmed to:', trimmed.length);
+          followupContent = trimmed;
+        }
+      }
+
       if (followupContent) {
         aiContent = followupContent;
       } else {
-        // Followup returned empty: clear original tool_calls so we don't trip the
-        // generic fallback below — fall through to the "skip send" branch instead.
         aiContent = '';
         toolCalls = [];
         console.warn('[Nina] Follow-up returned empty content — will skip send.');
@@ -1818,6 +1845,33 @@ function breakMessageIntoChunks(content: string): string[] {
   
   return chunks.length > 0 ? chunks : [content];
 }
+
+// When the AI hits max_tokens mid-reply, trim back to the last complete unit
+// so we never send mid-word fragments like "Grazing Esp" to the customer.
+// Prefers the last \n\n boundary; falls back to the last terminal punctuation
+// (. ! ? closing quote/paren). Returns '' if nothing complete remains.
+function trimToLastCompleteChunk(content: string): string {
+  const text = content.trimEnd();
+  if (!text) return '';
+
+  const lastDoubleNewline = text.lastIndexOf('\n\n');
+  if (lastDoubleNewline > 0) {
+    return text.slice(0, lastDoubleNewline).trimEnd();
+  }
+
+  // Find last sentence-ending punctuation, optionally followed by closing
+  // quote/paren/emoji-safe chars. Be conservative: require punctuation in the
+  // first 90% of the text (so we don't accept a stray "." inside a truncated url).
+  const cutoff = Math.floor(text.length * 0.95);
+  const search = text.slice(0, cutoff);
+  const match = search.match(/^[\s\S]*[.!?…][)"'\]\s]*/);
+  if (match && match[0].length >= 20) {
+    return match[0].trimEnd();
+  }
+
+  return '';
+}
+
 
 function getModelSettings(
   settings: any,
