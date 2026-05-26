@@ -1069,8 +1069,22 @@ async function processQueueItem(
   let aiMessage = aiData.choices?.[0]?.message;
   let aiContent = aiMessage?.content || '';
   let toolCalls = aiMessage?.tool_calls || [];
+  const finishReason = aiData.choices?.[0]?.finish_reason;
 
-  console.log('[Nina] AI response received, content length:', aiContent?.length || 0, ', tool_calls:', toolCalls.length);
+  console.log('[Nina] AI response received, content length:', aiContent?.length || 0, ', tool_calls:', toolCalls.length, ', finish_reason:', finishReason);
+
+  // Detect truncation by max_tokens. Reasoning models can return a partial
+  // message (e.g. "Grazing Esp"). Cut back to the last complete chunk —
+  // a paragraph break (\n\n) or terminal punctuation — to avoid sending
+  // gibberish to the customer. If nothing complete remains, drop the reply
+  // entirely (a notification will be raised downstream).
+  if (finishReason === 'length' && aiContent) {
+    const trimmed = trimToLastCompleteChunk(aiContent);
+    if (trimmed !== aiContent) {
+      console.warn('[Nina] AI reply was truncated by max_tokens. Original length:', aiContent.length, 'trimmed to:', trimmed.length, 'preview:', aiContent.slice(0, 120));
+      aiContent = trimmed;
+    }
+  }
 
   // === WooCommerce product search round-trip ===
   // If the model called search_products, fetch the catalog, feed it back, and
