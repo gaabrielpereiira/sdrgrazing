@@ -935,7 +935,12 @@ async function processQueueItem(
           };
         } else {
           result.instructions_for_assistant =
-            'Use estes produtos para redigir uma resposta em texto curto para o cliente. NÃO chame search_products de novo nesta mensagem.';
+            'Use APENAS estes produtos na resposta (nunca invente outros). Escolha 1 a 3 mais relevantes para o que o cliente pediu. Para CADA produto sugerido inclua, em texto puro (sem markdown [](), pois é WhatsApp):\n' +
+            '• Nome do produto\n' +
+            '• Preço em R$ (use `price`; se `on_sale` for true, mencione que está em promoção)\n' +
+            '• Uma linha curta de benefício (baseada em `short_desc`)\n' +
+            '• O link do produto (campo `url`) em linha separada, sem encurtar\n\n' +
+            'Se nenhum produto bater bem com o pedido, diga isso de forma honesta e ofereça alternativas próximas ou peça mais detalhes. Mantenha o tom da persona já definida no prompt do sistema. NÃO chame search_products de novo nesta mensagem.';
         }
       } catch (e) {
         console.error('[Nina] wc-products fetch threw:', e);
