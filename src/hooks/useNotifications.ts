@@ -18,6 +18,7 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<PlatformNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const realtimeConnectedRef = useRef(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
 
   const fetchNotifications = useCallback(async () => {
