@@ -13,12 +13,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+type AiProvider = 'google' | 'openai' | 'anthropic';
+
 interface AgentSettings {
   id?: string;
   system_prompt_override: string | null;
   is_active: boolean;
   auto_response_enabled: boolean;
   ai_model_mode: 'flash' | 'pro' | 'pro3' | 'adaptive';
+  ai_provider: AiProvider;
+  ai_model: string;
+  ai_api_keys: { google: string; openai: string; anthropic: string };
   message_breaking_enabled: boolean;
   business_hours_start: string;
   business_hours_end: string;
@@ -27,6 +32,33 @@ interface AgentSettings {
   sdr_name: string | null;
   ai_scheduling_enabled: boolean;
 }
+
+const PROVIDERS: { id: AiProvider; label: string; iconLabel: string; placeholder: string; keyPrefix: RegExp }[] = [
+  { id: 'google', label: 'Google', iconLabel: 'G', placeholder: 'AIza...', keyPrefix: /^AIza[0-9A-Za-z_\-]{20,}$/ },
+  { id: 'openai', label: 'OpenAI', iconLabel: 'AI', placeholder: 'sk-...', keyPrefix: /^sk-[A-Za-z0-9_\-]{20,}$/ },
+  { id: 'anthropic', label: 'Anthropic', iconLabel: 'A', placeholder: 'sk-ant-...', keyPrefix: /^sk-ant-[A-Za-z0-9_\-]{20,}$/ },
+];
+
+const MODEL_CATALOG: Record<AiProvider, { id: string; label: string; tag: string; icon: string; desc: string }[]> = {
+  google: [
+    { id: 'flash', label: 'Flash', tag: 'Rápido', icon: '⚡', desc: 'Gemini 2.5 Flash: respostas rápidas e econômicas' },
+    { id: 'pro', label: 'Pro 2.5', tag: 'Inteligente', icon: '🧠', desc: 'Gemini 2.5 Pro: respostas elaboradas e inteligentes' },
+    { id: 'pro3', label: 'Pro 3', tag: 'Mais Recente', icon: '🚀', desc: 'Gemini 3 Pro: modelo mais recente e avançado' },
+    { id: 'adaptive', label: 'Adaptativo', tag: 'Contexto', icon: '🎯', desc: 'Alterna automaticamente baseado no contexto da conversa' },
+  ],
+  openai: [
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini', tag: 'Rápido', icon: '⚡', desc: 'GPT-4o mini: rápido e econômico' },
+    { id: 'gpt-4o', label: 'GPT-4o', tag: 'Equilibrado', icon: '🧠', desc: 'GPT-4o: equilíbrio entre custo e qualidade' },
+    { id: 'gpt-4.1', label: 'GPT-4.1', tag: 'Mais Recente', icon: '🚀', desc: 'GPT-4.1: última geração de modelos GPT' },
+    { id: 'o3', label: 'o3', tag: 'Raciocínio', icon: '🎯', desc: 'o3: modelo focado em raciocínio profundo' },
+  ],
+  anthropic: [
+    { id: 'claude-haiku-3-5-20251001', label: 'Haiku 3.5', tag: 'Rápido', icon: '⚡', desc: 'Claude Haiku 3.5: rápido e econômico' },
+    { id: 'claude-sonnet-4-5', label: 'Sonnet 4', tag: 'Equilibrado', icon: '🧠', desc: 'Claude Sonnet 4: equilíbrio entre custo e qualidade' },
+    { id: 'claude-sonnet-4-5-20251001', label: 'Sonnet 4.5', tag: 'Mais Recente', icon: '🚀', desc: 'Claude Sonnet 4.5: versão mais recente do Sonnet' },
+    { id: 'claude-opus-4-5', label: 'Opus 4', tag: 'Poderoso', icon: '🎯', desc: 'Claude Opus 4: máximo poder de raciocínio' },
+  ],
+};
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Dom' },
