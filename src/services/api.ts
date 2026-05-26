@@ -1382,7 +1382,7 @@ export const api = {
       `)
       .eq('is_active', isActive)
       .order('last_message_at', { ascending: false })
-      .limit(50);
+      .limit(500);
 
     if (queue !== 'all') {
       query = query.eq('queue', queue);
