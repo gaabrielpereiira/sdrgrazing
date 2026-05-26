@@ -1,47 +1,49 @@
-## Problemas identificados
+## Objetivo
+Mostrar automaticamente o número do último pedido WooCommerce no card do Deal (Kanban), vinculado pelo telefone do cliente.
 
-### 1. Histórico do chat parando em 16/05 (apesar do badge "299")
+## O que já existe (não muda)
+- `wc-receiver` recebe webhook do WooCommerce
+- `automation-runner` → `upsertOrderFromEvent` já grava na tabela `orders` e tenta vincular `contact_id` via `billing.phone` em **toda** chegada
+- Tabela `orders` já tem `woo_order_id`, `status`, `total`, `contact_id`
 
-Em `src/services/api.ts` → `fetchConversations` (linha 1372), a query tem `.limit(50)`. Como ordena por `last_message_at DESC`, só carregamos as **50 conversas mais recentes** de cada aba.
+## Mudanças (apenas frontend)
 
-- O contador "299" em `useConversationTabCounts` faz outra query (`limit(5000)`) só com `id, queue, is_active` — por isso o número bate certo.
-- A lista só vê 50, então em "Finalizadas" o corte cai por volta de 16/05.
-
-### 2. "Última Interação" não aparece em Contatos
-
-Em `api.fetchContacts` (linha 444), o campo já é convertido para string formatada:
+### 1. `src/types.ts` — estender `Deal`
+Adicionar campo opcional:
 ```ts
-lastContact: new Date(c.last_activity).toLocaleDateString('pt-BR')
+lastOrder?: {
+  wooOrderId: number;
+  status: string;       // ex: "processing"
+  statusLabel: string;  // ex: "Pago Online"
+  total: number;
+  currency: string;
+  createdAt: string;
+};
 ```
-Depois, em `Contacts.tsx` (linha 318), o componente faz **outra vez**:
+
+### 2. `src/services/api.ts` — `fetchPipeline`
+Depois da query de `deals` + `conversations`, fazer uma terceira query:
 ```ts
-new Date(contact.lastContact).toLocaleDateString('pt-BR')
+supabase.from('orders')
+  .select('woo_order_id,status,total,currency,order_created_at,contact_id')
+  .in('contact_id', contactIds)
+  .order('order_created_at', { ascending: false });
 ```
-`new Date("26/05/2026")` retorna `Invalid Date` → a coluna mostra "Invalid Date". Além disso, `fetchContacts` também tem `.limit(100)`, escondendo a maioria dos contatos.
+Reduzir para `Map<contactId, latestOrder>` (primeira ocorrência = mais recente). Mapear para `deal.lastOrder` usando `ORDER_STATUSES` (já existente em `useAutomations`) para o `statusLabel`.
 
-## Correções propostas
+### 3. `src/components/Kanban.tsx` — render no card
+Logo abaixo da linha de tags (linha 417), adicionar quando `deal.lastOrder` existir:
+```
+[#1234 · Pago Online · R$ 297]
+```
+Pequeno badge com ícone `ShoppingBag`, cor por status (processing=cyan, completed=emerald, cancelled/failed=red, on-hold/pending=amber). Sem alterar lógica de drag/click.
 
-### A. `src/services/api.ts` — `fetchConversations`
-- Subir o limite para **500** (suficiente para o volume atual; mantém payload controlado).
-- Continuar ordenando por `last_message_at DESC` para preservar UX.
-- Manter `.limit(300)` por conversa nas mensagens (já está bom).
+### 4. Mover `ORDER_STATUSES` para arquivo compartilhado
+Hoje vive dentro de `useAutomations.ts`. Exportar de lá (ou criar `src/lib/orderStatus.ts`) para reutilizar no `api.ts` e no Kanban sem duplicar.
 
-### B. `src/services/api.ts` — `fetchContacts`
-- Retornar `lastContact` como **ISO string** (`c.last_activity`) em vez de string formatada — assim o componente consegue formatar corretamente.
-- Subir o limite de `100` para **500**.
+## O que NÃO mudar
+- Webhook receiver, automation-runner, schema do banco — vínculo já é automático.
+- Outros componentes (Contatos, Chat, Deal Detail) — fora do escopo pedido.
 
-### C. `src/types.ts` (se necessário)
-- Nenhuma mudança de tipo: `Contact.lastContact` continua `string`, só muda o conteúdo (ISO em vez de "dd/mm/yyyy").
-
-### D. `src/components/Contacts.tsx`
-- Manter `new Date(contact.lastContact).toLocaleDateString('pt-BR')` (agora funciona porque vem ISO).
-- Adicionar fallback `—` se a data for inválida/ausente.
-
-### Fora de escopo
-- Paginação real / scroll infinito da lista de conversas (pode ser feito depois se 500 ficar pouco).
-- Mudanças no contador das abas (`useConversationTabCounts` já está correto).
-- Tabela `orders`, multi-provider IA, ou outras seções.
-
-## Resultado esperado
-- Aba "Finalizadas" passa a mostrar todo o histórico recente (até 500 conversas) em vez de cortar em 50.
-- Coluna "Última Interação" em Contatos exibe a data correta (ex.: `26/05/2026`) em vez de "Invalid Date".
+## Verificação
+Após implementar: abrir `/kanban`, conferir que deals de contatos com pedidos mostram o badge com nº do pedido e status amigável; deals sem pedido não mostram nada.
