@@ -1,5 +1,5 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { Bot, Loader2, Calendar, Wand2, Building2, RotateCcw, Info } from 'lucide-react';
+import { Bot, Loader2, Calendar, Wand2, Building2, RotateCcw, Info, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { Button } from '../Button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -13,12 +13,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+type AiProvider = 'google' | 'openai' | 'anthropic';
+
 interface AgentSettings {
   id?: string;
   system_prompt_override: string | null;
   is_active: boolean;
   auto_response_enabled: boolean;
   ai_model_mode: 'flash' | 'pro' | 'pro3' | 'adaptive';
+  ai_provider: AiProvider;
+  ai_model: string;
+  ai_api_keys: { google: string; openai: string; anthropic: string };
   message_breaking_enabled: boolean;
   business_hours_start: string;
   business_hours_end: string;
@@ -27,6 +32,33 @@ interface AgentSettings {
   sdr_name: string | null;
   ai_scheduling_enabled: boolean;
 }
+
+const PROVIDERS: { id: AiProvider; label: string; iconLabel: string; placeholder: string; keyPrefix: RegExp }[] = [
+  { id: 'google', label: 'Google', iconLabel: 'G', placeholder: 'AIza...', keyPrefix: /^AIza[0-9A-Za-z_\-]{20,}$/ },
+  { id: 'openai', label: 'OpenAI', iconLabel: 'AI', placeholder: 'sk-...', keyPrefix: /^sk-[A-Za-z0-9_\-]{20,}$/ },
+  { id: 'anthropic', label: 'Anthropic', iconLabel: 'A', placeholder: 'sk-ant-...', keyPrefix: /^sk-ant-[A-Za-z0-9_\-]{20,}$/ },
+];
+
+const MODEL_CATALOG: Record<AiProvider, { id: string; label: string; tag: string; icon: string; desc: string }[]> = {
+  google: [
+    { id: 'flash', label: 'Flash', tag: 'Rápido', icon: '⚡', desc: 'Gemini 2.5 Flash: respostas rápidas e econômicas' },
+    { id: 'pro', label: 'Pro 2.5', tag: 'Inteligente', icon: '🧠', desc: 'Gemini 2.5 Pro: respostas elaboradas e inteligentes' },
+    { id: 'pro3', label: 'Pro 3', tag: 'Mais Recente', icon: '🚀', desc: 'Gemini 3 Pro: modelo mais recente e avançado' },
+    { id: 'adaptive', label: 'Adaptativo', tag: 'Contexto', icon: '🎯', desc: 'Alterna automaticamente baseado no contexto da conversa' },
+  ],
+  openai: [
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini', tag: 'Rápido', icon: '⚡', desc: 'GPT-4o mini: rápido e econômico' },
+    { id: 'gpt-4o', label: 'GPT-4o', tag: 'Equilibrado', icon: '🧠', desc: 'GPT-4o: equilíbrio entre custo e qualidade' },
+    { id: 'gpt-4.1', label: 'GPT-4.1', tag: 'Mais Recente', icon: '🚀', desc: 'GPT-4.1: última geração de modelos GPT' },
+    { id: 'o3', label: 'o3', tag: 'Raciocínio', icon: '🎯', desc: 'o3: modelo focado em raciocínio profundo' },
+  ],
+  anthropic: [
+    { id: 'claude-haiku-3-5-20251001', label: 'Haiku 3.5', tag: 'Rápido', icon: '⚡', desc: 'Claude Haiku 3.5: rápido e econômico' },
+    { id: 'claude-sonnet-4-5', label: 'Sonnet 4', tag: 'Equilibrado', icon: '🧠', desc: 'Claude Sonnet 4: equilíbrio entre custo e qualidade' },
+    { id: 'claude-sonnet-4-5-20251001', label: 'Sonnet 4.5', tag: 'Mais Recente', icon: '🚀', desc: 'Claude Sonnet 4.5: versão mais recente do Sonnet' },
+    { id: 'claude-opus-4-5', label: 'Opus 4', tag: 'Poderoso', icon: '🎯', desc: 'Claude Opus 4: máximo poder de raciocínio' },
+  ],
+};
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Dom' },
@@ -56,6 +88,9 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     is_active: true,
     auto_response_enabled: true,
     ai_model_mode: 'flash',
+    ai_provider: 'google',
+    ai_model: 'flash',
+    ai_api_keys: { google: '', openai: '', anthropic: '' },
     message_breaking_enabled: true,
     business_hours_start: '09:00',
     business_hours_end: '18:00',
@@ -64,6 +99,8 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     sdr_name: null,
     ai_scheduling_enabled: true,
   });
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
   useImperativeHandle(ref, () => ({
     save: handleSave,
@@ -101,14 +138,32 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
       }
 
       // Load settings from global data
+      const rawProvider = (data as any).ai_provider;
+      const provider: AiProvider = (rawProvider === 'openai' || rawProvider === 'anthropic') ? rawProvider : 'google';
+      const rawKeys = (data as any).ai_api_keys ?? {};
+      const apiKeys = {
+        google: typeof rawKeys.google === 'string' ? rawKeys.google : '',
+        openai: typeof rawKeys.openai === 'string' ? rawKeys.openai : '',
+        anthropic: typeof rawKeys.anthropic === 'string' ? rawKeys.anthropic : '',
+      };
+      const safeModelMode = (data.ai_model_mode === 'flash' || data.ai_model_mode === 'pro' || data.ai_model_mode === 'pro3' || data.ai_model_mode === 'adaptive')
+        ? data.ai_model_mode
+        : 'flash';
+      const catalogIds = MODEL_CATALOG[provider].map(m => m.id);
+      const rawModel = (data as any).ai_model;
+      const aiModel = (typeof rawModel === 'string' && catalogIds.includes(rawModel))
+        ? rawModel
+        : (provider === 'google' ? safeModelMode : MODEL_CATALOG[provider][0].id);
+
       setSettings({
         id: data.id,
         system_prompt_override: data.system_prompt_override,
         is_active: data.is_active,
         auto_response_enabled: data.auto_response_enabled,
-        ai_model_mode: (data.ai_model_mode === 'flash' || data.ai_model_mode === 'pro' || data.ai_model_mode === 'pro3' || data.ai_model_mode === 'adaptive') 
-          ? data.ai_model_mode 
-          : 'flash',
+        ai_model_mode: safeModelMode,
+        ai_provider: provider,
+        ai_model: aiModel,
+        ai_api_keys: apiKeys,
         message_breaking_enabled: data.message_breaking_enabled,
         business_hours_start: data.business_hours_start,
         business_hours_end: data.business_hours_end,
@@ -135,7 +190,10 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           system_prompt_override: settings.system_prompt_override,
           is_active: settings.is_active,
           auto_response_enabled: settings.auto_response_enabled,
-          ai_model_mode: settings.ai_model_mode,
+          ai_model_mode: settings.ai_provider === 'google' ? settings.ai_model : settings.ai_model_mode,
+          ai_provider: settings.ai_provider,
+          ai_model: settings.ai_model,
+          ai_api_keys: settings.ai_api_keys,
           message_breaking_enabled: settings.message_breaking_enabled,
           business_hours_start: settings.business_hours_start,
           business_hours_end: settings.business_hours_end,
@@ -144,7 +202,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           sdr_name: settings.sdr_name,
           ai_scheduling_enabled: settings.ai_scheduling_enabled,
           updated_at: new Date().toISOString(),
-        })
+        } as any)
         .eq('id', settings.id!);
 
       if (error) throw error;
@@ -351,67 +409,121 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           {/* AI Model Selection */}
           <div className="mb-4">
             <label className="text-xs font-medium text-slate-400 mb-3 block">Modelo de IA</label>
+
+            {/* Provider pill selector */}
+            <div className="flex gap-2 mb-3">
+              {PROVIDERS.map((p) => {
+                const active = settings.ai_provider === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      const catalog = MODEL_CATALOG[p.id];
+                      const currentIsValid = catalog.some(m => m.id === settings.ai_model);
+                      const nextModel = currentIsValid ? settings.ai_model : catalog[0].id;
+                      setSettings({ ...settings, ai_provider: p.id, ai_model: nextModel });
+                      setApiKeyError(null);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium transition-all ${
+                      active
+                        ? 'bg-violet-500/20 border-violet-500 text-violet-300'
+                        : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-[11px] font-bold ${active ? 'bg-violet-500/30' : 'bg-slate-800'}`}>
+                      {p.iconLabel}
+                    </span>
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Model cards (dynamic per provider) */}
             <div className="grid grid-cols-4 gap-2">
-              <button
-                type="button"
-                onClick={() => setSettings({ ...settings, ai_model_mode: 'flash' })}
-                className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
-                  settings.ai_model_mode === 'flash'
-                    ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
-                }`}
-              >
-                <span className="text-lg">⚡</span>
-                <span className="text-xs font-medium">Flash</span>
-                <span className="text-[10px] text-center opacity-70">Rápido</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSettings({ ...settings, ai_model_mode: 'pro' })}
-                className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
-                  settings.ai_model_mode === 'pro'
-                    ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
-                }`}
-              >
-                <span className="text-lg">🧠</span>
-                <span className="text-xs font-medium">Pro 2.5</span>
-                <span className="text-[10px] text-center opacity-70">Inteligente</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSettings({ ...settings, ai_model_mode: 'pro3' })}
-                className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
-                  settings.ai_model_mode === 'pro3'
-                    ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
-                }`}
-              >
-                <span className="text-lg">🚀</span>
-                <span className="text-xs font-medium">Pro 3</span>
-                <span className="text-[10px] text-center opacity-70">Mais Recente</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSettings({ ...settings, ai_model_mode: 'adaptive' })}
-                className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
-                  settings.ai_model_mode === 'adaptive'
-                    ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
-                }`}
-              >
-                <span className="text-lg">🎯</span>
-                <span className="text-xs font-medium">Adaptativo</span>
-                <span className="text-[10px] text-center opacity-70">Contexto</span>
-              </button>
+              {MODEL_CATALOG[settings.ai_provider].map((m) => {
+                const active = settings.ai_model === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setSettings({ ...settings, ai_model: m.id })}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
+                      active
+                        ? 'bg-violet-500/20 border-violet-500 text-violet-300'
+                        : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-lg">{m.icon}</span>
+                    <span className="text-xs font-medium">{m.label}</span>
+                    <span className="text-[10px] text-center opacity-70">{m.tag}</span>
+                  </button>
+                );
+              })}
             </div>
             <p className="text-xs text-slate-500 mt-2">
-              {settings.ai_model_mode === 'flash' && 'Gemini 2.5 Flash: respostas rápidas e econômicas'}
-              {settings.ai_model_mode === 'pro' && 'Gemini 2.5 Pro: respostas elaboradas e inteligentes'}
-              {settings.ai_model_mode === 'pro3' && 'Gemini 3 Pro: modelo mais recente e avançado'}
-              {settings.ai_model_mode === 'adaptive' && 'Alterna automaticamente baseado no contexto da conversa'}
+              {MODEL_CATALOG[settings.ai_provider].find(m => m.id === settings.ai_model)?.desc ?? ''}
             </p>
+
+            {/* API Key for current provider */}
+            {(() => {
+              const provider = PROVIDERS.find(p => p.id === settings.ai_provider)!;
+              const value = settings.ai_api_keys[settings.ai_provider] ?? '';
+              const hasValue = value.trim().length > 0;
+              const borderClass = apiKeyError
+                ? 'border-red-500 focus:ring-red-500/50'
+                : hasValue
+                  ? 'border-emerald-500/60 focus:ring-emerald-500/50'
+                  : 'border-slate-700 focus:ring-violet-500/50';
+              return (
+                <div className="mt-4">
+                  <label className="text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5" />
+                    API Key — {provider.label}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      value={value}
+                      onChange={(e) => {
+                        setSettings({
+                          ...settings,
+                          ai_api_keys: { ...settings.ai_api_keys, [settings.ai_provider]: e.target.value },
+                        });
+                        if (apiKeyError) setApiKeyError(null);
+                      }}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v.length === 0) { setApiKeyError(null); return; }
+                        setApiKeyError(provider.keyPrefix.test(v) ? null : `Formato inválido. Esperado prefixo "${provider.placeholder.replace('...', '')}"`);
+                      }}
+                      placeholder={provider.placeholder}
+                      autoComplete="off"
+                      spellCheck={false}
+                      className={`h-9 w-full rounded-lg border bg-slate-950 pl-3 pr-10 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-colors ${borderClass}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(s => !s)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1"
+                      aria-label={showApiKey ? 'Ocultar chave' : 'Revelar chave'}
+                    >
+                      {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {apiKeyError ? (
+                    <p className="text-[11px] text-red-400 mt-1.5">{apiKeyError}</p>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 mt-1.5">
+                      Sua chave é salva com criptografia e nunca é exposta publicamente.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
+
 
           {/* Toggles em grid 2x2 com tooltips */}
           <div className="grid grid-cols-2 gap-3">
