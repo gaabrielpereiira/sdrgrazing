@@ -88,6 +88,9 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     is_active: true,
     auto_response_enabled: true,
     ai_model_mode: 'flash',
+    ai_provider: 'google',
+    ai_model: 'flash',
+    ai_api_keys: { google: '', openai: '', anthropic: '' },
     message_breaking_enabled: true,
     business_hours_start: '09:00',
     business_hours_end: '18:00',
@@ -96,6 +99,8 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     sdr_name: null,
     ai_scheduling_enabled: true,
   });
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
   useImperativeHandle(ref, () => ({
     save: handleSave,
