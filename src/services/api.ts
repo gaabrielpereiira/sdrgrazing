@@ -424,7 +424,7 @@ export const api = {
       .from('contacts')
       .select('*')
       .order('last_activity', { ascending: false })
-      .limit(100);
+      .limit(500);
 
     if (error) {
       console.error('[API] Error fetching contacts:', error);
@@ -441,7 +441,7 @@ export const api = {
       phone: c.phone_number,
       email: c.email || '',
       status: 'lead' as const, // Map from tags or client_memory in future
-      lastContact: new Date(c.last_activity).toLocaleDateString('pt-BR'),
+      lastContact: c.last_activity, // ISO string; component formats it
       isBusiness: !!(c as any).is_business,
       companyName: (c as any).company_name ?? null,
     }));
