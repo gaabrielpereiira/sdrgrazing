@@ -496,7 +496,10 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
       supabase.removeChannel(conversationsChannel);
       supabase.removeChannel(contactsChannel);
     };
-  }, [fetchConversations, fetchAndAddConversation, startPolling, stopPolling]);
+    // Only resubscribe when the queue/active filter changes. Callbacks are
+    // accessed via refs to avoid tearing down the channels on every render
+    // (which caused TIMED_OUT loops and the "syncing forever" symptom).
+  }, [isActiveFilter, queueFilter]);
 
   // Send message
   const sendMessage = useCallback(async (conversationId: string, content: string, opts?: { replyToId?: string | null }) => {
