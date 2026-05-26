@@ -84,6 +84,21 @@ export const OPERATORS = [
   { value: 'is_first_order', label: 'é primeiro pedido' },
 ];
 
+export const ORDER_STATUSES = [
+  { slug: 'pending',          label: 'Novo Pedido' },
+  { slug: 'on-hold',          label: 'Em orçamento' },
+  { slug: 'checkout-draft',   label: 'Rascunho' },
+  { slug: 'processing',       label: 'Pago Online' },
+  { slug: 'completed',        label: 'Pago Manual / Confirmado' },
+  { slug: 'em-producao',      label: 'Impresso' },
+  { slug: 'pedido-pronto',    label: 'Pronto' },
+  { slug: 'retirado-entrega', label: 'Retirado' },
+  { slug: 'negado',           label: 'Proposta negada' },
+  { slug: 'cancelled',        label: 'Cancelado' },
+  { slug: 'refunded',         label: 'Estornado' },
+  { slug: 'failed',           label: 'CHARGEBACK' },
+];
+
 export const ACTION_TYPES = [
   { value: 'whatsapp_message', label: 'Enviar mensagem WhatsApp', enabled: true },
   { value: 'crm_update', label: 'Atualizar CRM (tags / mover deal)', enabled: true },
