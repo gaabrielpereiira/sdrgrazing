@@ -162,9 +162,19 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
                   className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 md:w-48">
                   {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
-                <input value={c.value} onChange={e => updateCondition(i, { value: e.target.value })}
-                  placeholder="valor"
-                  className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50" />
+                {c.field === 'status' && (c.operator === 'eq' || c.operator === 'neq') ? (
+                  <select value={c.value} onChange={e => updateCondition(i, { value: e.target.value })}
+                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50">
+                    <option value="">Selecione o status...</option>
+                    {ORDER_STATUSES.map(s => (
+                      <option key={s.slug} value={s.slug}>{s.label} ({s.slug})</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input value={c.value} onChange={e => updateCondition(i, { value: e.target.value })}
+                    placeholder="valor"
+                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50" />
+                )}
                 <button onClick={() => removeCondition(i)} className="p-2 text-slate-400 hover:text-red-400">
                   <Trash2 className="w-4 h-4" />
                 </button>
