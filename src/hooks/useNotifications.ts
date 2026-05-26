@@ -72,10 +72,10 @@ export function useNotifications() {
         setRealtimeConnected(status === 'SUBSCRIBED');
       });
 
-    // Polling fallback every 15s in case realtime drops
+    // Polling fallback every 30s, but only while realtime isn't connected
     const pollInterval = setInterval(() => {
-      fetchNotifications();
-    }, 15000);
+      if (!realtimeConnected) fetchNotifications();
+    }, 30000);
 
     return () => {
       clearInterval(pollInterval);
