@@ -315,24 +315,63 @@ async function upsertOrderFromEvent(supabase: any, event: any) {
 // ─── Event processing ─────────────────────────────────────────────────
 
 async function processEvent(supabase: any, event: any) {
-  // Persist order data first (non-blocking on failure)
+  // For order.* events, read the previous status BEFORE upserting so that
+  // changed_to filters can compare prev vs current value.
+  const prevState: Record<string, any> = {};
+  let externalId: string | null = null;
+  if (event?.topic?.startsWith('order.')) {
+    const wooId = Number(event?.payload?.id);
+    if (Number.isFinite(wooId)) {
+      externalId = String(wooId);
+      const { data: prevOrder } = await supabase
+        .from('orders').select('status').eq('woo_order_id', wooId).maybeSingle();
+      prevState.status = prevOrder?.status ?? null;
+    }
+  }
+
+  // Persist order data (non-blocking on failure)
   await upsertOrderFromEvent(supabase, event);
 
   const { data: rules, error: rulesErr } = await supabase
     .from('automation_rules').select('*').eq('active', true).eq('trigger_topic', event.topic);
   if (rulesErr) throw rulesErr;
-  console.log(`[runner] event=${event.id} topic=${event.topic} matched ${rules?.length || 0} active rule(s)`);
+  console.log(`[runner] event=${event.id} topic=${event.topic} matched ${rules?.length || 0} active rule(s) prev_status=${prevState.status ?? 'null'}`);
 
   let queuedWhatsapp = false;
 
   for (const rule of rules || []) {
     try {
-      if (!matchesFilters(event.payload, rule.filters)) {
+      if (!matchesFilters(event.payload, rule.filters, prevState)) {
         await supabase.from('automation_logs').insert({
           rule_id: rule.id, event_id: event.id, status: 'skipped',
-          result: { reason: 'filters_not_matched' },
+          result: { reason: 'filters_not_matched', prev_status: prevState.status ?? null },
         });
         continue;
+      }
+
+      // Idempotency guard: claim the (rule, external_id, target_signature) slot
+      // BEFORE running the action. If insert fails with 23505, the rule already
+      // fired for this transition — skip silently.
+      const targetSignature = buildTargetSignature(rule.filters, event.id);
+      const claimExternalId = externalId ?? `event:${event.id}`;
+      const { error: claimErr } = await supabase
+        .from('automation_executions')
+        .insert({
+          rule_id: rule.id,
+          external_id: claimExternalId,
+          target_signature: targetSignature,
+          event_id: event.id,
+        });
+      if (claimErr) {
+        if ((claimErr as any).code === '23505') {
+          await supabase.from('automation_logs').insert({
+            rule_id: rule.id, event_id: event.id, status: 'skipped',
+            result: { reason: 'already_executed_for_transition', external_id: claimExternalId, target_signature: targetSignature },
+          });
+          console.log(`[runner] rule=${rule.id} skipped (already executed) ext=${claimExternalId} sig=${targetSignature}`);
+          continue;
+        }
+        throw new Error(`execution claim failed: ${claimErr.message}`);
       }
 
       let outcome: { status: string; result: any };
