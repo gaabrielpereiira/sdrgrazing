@@ -276,6 +276,12 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
             <Button variant="ghost" size="sm" onClick={addCondition} className="gap-2">
               <Plus className="w-4 h-4" /> Adicionar filtro
             </Button>
+            {conditions.some(c => c.operator === 'changed_to') && (
+              <p className="text-xs text-slate-500">
+                <span className="text-cyan-400">mudou para</span> só dispara no momento exato em que o pedido entra
+                naquele status. Reentregas do mesmo webhook não disparam de novo.
+              </p>
+            )}
             {conditions.length > 0 && (
               <div>
                 <button onClick={() => setShowJson(!showJson)}
