@@ -115,6 +115,7 @@ export function getByPath(obj: any, path: string): any {
 }
 
 export const OPERATORS = [
+  { value: 'changed_to', label: 'mudou para' },
   { value: 'eq', label: 'igual a (=)' },
   { value: 'neq', label: 'diferente de (≠)' },
   { value: 'gte', label: 'maior ou igual (≥)' },
