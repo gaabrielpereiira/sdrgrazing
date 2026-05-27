@@ -137,52 +137,35 @@ export const MobileSidebar = ({
   ...props
 }: React.ComponentProps<"div">) => {
   const { open, setOpen } = useSidebar();
+
   return (
     <>
       <div
-        className={cn(
-          "h-14 px-4 py-4 flex flex-row md:hidden items-center justify-between bg-slate-950/80 backdrop-blur-xl w-full border-b border-slate-800/50"
-        )}
+        className="h-14 px-4 flex flex-row md:hidden items-center justify-end bg-slate-950 w-full border-b border-slate-800/50 flex-shrink-0"
         {...props}
       >
-        <div className="flex justify-end w-full">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="p-3 -mr-2 text-slate-200 hover:text-cyan-400 transition-colors"
+          aria-label="Abrir menu"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+      </div>
+      {open && (
+        <div className="md:hidden fixed inset-0 bg-slate-950 p-10 z-[200] flex flex-col justify-between">
           <button
             type="button"
-            onClick={() => setOpen(!open)}
-            className="p-3 -mr-2 text-slate-200 hover:text-cyan-400 transition-colors"
-            aria-label="Abrir menu"
+            className="absolute right-10 top-10 p-2 text-slate-200 hover:text-cyan-400 transition-colors"
+            onClick={() => setOpen(false)}
+            aria-label="Fechar menu"
           >
-            <Menu className="w-6 h-6" />
+            <X className="w-6 h-6" />
           </button>
+          {children}
         </div>
-        <AnimatePresence>
-          {open && (
-            <motion.div
-              initial={{ x: "-100%", opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: "-100%", opacity: 0 }}
-              transition={{
-                duration: 0.3,
-                ease: "easeInOut",
-              }}
-              className={cn(
-                "fixed h-full w-full inset-0 bg-slate-950 p-10 z-[100] flex flex-col justify-between",
-                className
-              )}
-            >
-              <button
-                type="button"
-                className="absolute right-10 top-10 z-50 p-2 text-slate-200 hover:text-cyan-400 transition-colors"
-                onClick={() => setOpen(false)}
-                aria-label="Fechar menu"
-              >
-                <X className="w-6 h-6" />
-              </button>
-              {children}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      )}
     </>
   );
 };
