@@ -170,12 +170,14 @@ export const MobileSidebar = ({
                 className
               )}
             >
-              <div
-                className="absolute right-10 top-10 z-50 text-slate-200 cursor-pointer hover:text-cyan-400 transition-colors"
-                onClick={() => setOpen(!open)}
+              <button
+                type="button"
+                className="absolute right-10 top-10 z-50 p-2 text-slate-200 hover:text-cyan-400 transition-colors"
+                onClick={() => setOpen(false)}
+                aria-label="Fechar menu"
               >
-                <X />
-              </div>
+                <X className="w-6 h-6" />
+              </button>
               {children}
             </motion.div>
           )}
