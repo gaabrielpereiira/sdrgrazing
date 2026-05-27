@@ -31,20 +31,40 @@ function compareValues(a: any, op: string, b: string): boolean {
   if (op === 'contains') return String(a ?? '').toLowerCase().includes(b.toLowerCase());
   if (op === 'gte') return Number(a) >= Number(b);
   if (op === 'lte') return Number(a) <= Number(b);
+  // changed_to is handled separately in matchesFilters because it needs prev state
   return false;
 }
 
-function matchesFilters(payload: any, filters: any): boolean {
+function matchesFilters(payload: any, filters: any, prevState: Record<string, any> = {}): boolean {
   const conditions = filters?.conditions || [];
   if (conditions.length === 0) return true;
   const logic = (filters?.logic || 'AND').toUpperCase();
   const results = conditions.map((c: any) => {
     const val = getByPath(payload, c.field);
     if (c.operator === 'is_first_order') return Boolean(payload?._is_first_order ?? false);
+    if (c.operator === 'changed_to') {
+      // only true when current value equals target AND previous value differs
+      const prev = prevState[c.field];
+      return String(val ?? '') === c.value && String(prev ?? '') !== c.value;
+    }
     return compareValues(val, c.operator, c.value);
   });
   return logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
 }
+
+// Build a stable signature describing the transition this rule guards against.
+// Used together with rule_id+external_id to deduplicate executions.
+function buildTargetSignature(filters: any, eventId: string): string {
+  const conditions: any[] = filters?.conditions || [];
+  const transitionParts = conditions
+    .filter((c) => c.operator === 'changed_to' || c.operator === 'eq')
+    .map((c) => `${c.field}=${c.value}`)
+    .sort();
+  if (transitionParts.length > 0) return transitionParts.join('&');
+  // No transition condition → fall back to per-event idempotency
+  return `event:${eventId}`;
+}
+
 
 function renderTemplate(tpl: string, payload: any): string {
   if (!tpl) return '';
