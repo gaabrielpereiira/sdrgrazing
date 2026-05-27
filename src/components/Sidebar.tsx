@@ -181,9 +181,7 @@ const SidebarContent = () => {
 };
 
 const AppSidebar: React.FC = () => {
-  const [open, setOpen] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth >= 768 : true
-  );
+  const [open, setOpen] = useState(false);
 
   return (
     <Sidebar open={open} setOpen={setOpen}>
