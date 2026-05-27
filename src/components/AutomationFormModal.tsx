@@ -252,7 +252,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
                   className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 md:w-48">
                   {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
-                {c.field === 'status' && (c.operator === 'eq' || c.operator === 'neq') ? (
+                {c.field === 'status' && (c.operator === 'eq' || c.operator === 'neq' || c.operator === 'changed_to') ? (
                   <select value={c.value} onChange={e => updateCondition(i, { value: e.target.value })}
                     className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50">
                     <option value="">Selecione o status...</option>
