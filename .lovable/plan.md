@@ -1,75 +1,81 @@
+## Diagnóstico
+
+Olhando os logs e os eventos, o WooCommerce dispara `order.updated` **a cada micro-alteração** do pedido (mudança de status, nota interna, e‑mail enviado, pagamento, etc.). Hoje o `automation-runner`:
+
+1. Roda **todas as regras** com `trigger_topic = order.updated` em **toda** chamada.
+2. O filtro só compara o `status` **atual** do payload (`status eq processing`), sem saber se houve **transição**. Se o pedido fica em `processing` por horas, qualquer outro `order.updated` durante esse tempo dispara a regra de novo.
+3. `cooldown_hours = 0` nas regras → nada barra o reenvio.
+4. Não existe chave de idempotência por (regra + pedido + status-alvo), então a mesma transição pode logar várias vezes (ex.: webhook reenviado pelo Woo, retry, race).
+5. A regra `Pedido atualizado | Retirado` casa com `status = retirado-entrega`, mas a mensagem "Pedido feito" (`PEDIDO_FEITO`) que aparece no print é da regra `Pedido atualizado | Pago` — ela continua disparando porque o status do payload anterior já era `processing`/`completed` e o webhook foi reentregue, dando a sensação de "mensagem errada para um pedido que já foi atualizado para retirado".
+
 ## Objetivo
 
-Tornar o campo "Variáveis do template" amigável: em vez de digitar caminhos como `billing.first_name`, escolher de uma lista nomeada (Nome do cliente, Número do pedido, Total, etc.) com **preview ao vivo** do valor que será enviado, usando o último webhook recebido como exemplo.
+Garantir que cada regra **dispare uma única vez por transição real de status** de cada pedido, e nunca rode em re‑entregas/duplicatas do mesmo webhook.
 
-## O que muda
+## Mudanças
 
-### 1. `src/hooks/useAutomations.ts` — Catálogo rico de campos
+### 1. Idempotência por evento (proteção total contra reenvio)
 
-Substituir o array simples `FIELD_SUGGESTIONS` por um catálogo agrupado:
+Adicionar uma chave única no `webhook_events` para a combinação `source + topic + external_id`, onde `external_id` é extraído do payload (`payload.id` para pedidos Woo). No `wc-receiver`:
 
-```ts
-export const WEBHOOK_FIELDS = [
-  { group: 'Cliente', items: [
-    { path: 'billing.first_name', label: 'Nome do cliente' },
-    { path: 'billing.last_name',  label: 'Sobrenome do cliente' },
-    { path: 'billing.phone',      label: 'Telefone' },
-    { path: 'billing.email',      label: 'E-mail' },
-    { path: 'billing.company',    label: 'Empresa' },
-    { path: 'billing.city',       label: 'Cidade' },
-  ]},
-  { group: 'Pedido', items: [
-    { path: 'id',                 label: 'Número do pedido' },
-    { path: 'number',             label: 'Número de exibição' },
-    { path: 'total',              label: 'Valor total' },
-    { path: 'currency',           label: 'Moeda' },
-    { path: 'status',             label: 'Status' },
-    { path: 'payment_method_title', label: 'Forma de pagamento' },
-    { path: 'date_created',       label: 'Data do pedido' },
-    { path: 'line_items[0].name', label: 'Nome do 1º produto' },
-    { path: 'line_items[0].quantity', label: 'Qtd. do 1º produto' },
-  ]},
-];
+- Calcular `external_id` antes do insert.
+- Inserir com `onConflict: (source, topic, external_id, event_signature)` retornando o evento (novo ou existente).
+- `event_signature` = hash curto de `(status, date_modified)` do payload, para diferenciar updates reais de reenvios idênticos.
+- Se o conflito ocorrer e o evento já existir com `processed = true` e mesma assinatura → responder 200 sem reprocessar.
+
+### 2. Idempotência por regra/transição
+
+Nova tabela `automation_executions`:
+
+```text
+rule_id           uuid
+external_id       text   -- ex: woo_order_id como texto
+target_signature  text   -- ex: "status:retirado-entrega"
+executed_at       timestamptz default now()
+UNIQUE (rule_id, external_id, target_signature)
 ```
 
-Manter `FIELD_SUGGESTIONS` exportado (achatado a partir de `WEBHOOK_FIELDS`) para compatibilidade com os filtros "SE".
+No `automation-runner`, antes de executar a ação:
 
-### 2. `src/components/AutomationFormModal.tsx` — Picker + preview
+- Montar `target_signature` a partir das condições do filtro com operador `eq` sobre campos "de transição" (ver §3).
+- Tentar `insert` em `automation_executions`. Se vier `23505` (já existe) → logar `skipped` com `reason: already_executed_for_transition` e parar.
+- Só executar a ação após o insert bem-sucedido.
 
-Na seção "Variáveis do template":
+Isso garante: mesmo que o Woo reentregue o webhook 10 vezes ou outro `order.updated` chegue com o mesmo status, a regra roda **uma vez só** por (pedido, status-alvo).
 
-- Trocar o `<input>` por um `<select>` agrupado (`<optgroup>`) com os rótulos amigáveis, mais a opção **"Personalizado…"** que abre o input livre atual (mantém poder para usuários técnicos).
-- Ao lado de cada linha `{{n}}`, mostrar o **valor resolvido** consultando o último `webhook_events.payload` cujo `topic` casa com o `trigger` escolhido. Caixa cinza tipo `"João"` ou `(vazio)`.
-- Acima da lista de variáveis, renderizar um **preview do corpo do template** com as variáveis substituídas por `[Nome do cliente]`, `[Total]`, etc. (rótulos), para o usuário visualizar a mensagem antes de salvar.
-- Adicionar botão **"Auto-preencher"**: para cada `{{n}}` do template, sugerir automaticamente um campo (ex.: `{{1}}` → `billing.first_name`) com base em heurística simples sobre o texto ao redor do placeholder (ex.: "Olá {{1}}" → nome). Usuário pode ajustar.
+### 3. Filtro por transição real (status mudou para X)
 
-### 3. Buscar payload de exemplo
+Hoje as condições só olham o valor atual. Adicionar:
 
-Adicionar `useEffect` no modal que carrega o último webhook do tópico atual:
+- Novo operador `changed_to` no `AutomationFormModal` (UI) e em `compareValues` do runner.
+- Para `order.*`: o runner busca o registro anterior em `public.orders` (antes do upsert) e compara `prev.status` vs `payload.status`. A condição `status changed_to "retirado-entrega"` só passa se `prev.status !== "retirado-entrega"` **e** `payload.status === "retirado-entrega"`.
+- Mover o `upsertOrderFromEvent` para depois da avaliação das regras (ou ler o estado anterior antes de chamar o upsert).
 
-```ts
-supabase.from('webhook_events')
-  .select('payload')
-  .eq('topic', trigger)
-  .order('received_at', { ascending: false })
-  .limit(1).maybeSingle()
-  .then(({ data }) => setSamplePayload(data?.payload || null));
-```
+### 4. Migrar regras existentes
 
-E função local `getByPath()` (igual à do edge function) para resolver caminhos com suporte a `line_items[0].name`.
+Migration de dados convertendo as 3 regras `order.updated` atuais (`Pago`, `Retirado`, `Mensagem pedido feito`) do operador `eq` em `status` para o novo operador `changed_to`. Comportamento humano-visível continua igual, mas só dispara na transição.
 
-## Fora de escopo
+### 5. UI
 
-- Backend (`automation-runner`) não muda — ele já resolve `cfg.variables` pelo caminho. O fix do erro `#131008` que você viu antes acontece automaticamente quando o usuário preencher as variáveis pelo novo picker.
-- Sem alteração no schema do banco.
+Em `AutomationFormModal.tsx`, ao escolher o campo `status` num trigger `order.updated`, mostrar como operadores: `igual a`, `mudou para` (default sugerido), `contém`. Texto de ajuda curto explicando que "mudou para" só dispara quando o pedido entra naquele status.
 
-## Resultado
+### 6. Limpeza de duplicatas anteriores (opcional, recomendado)
 
-Ao editar a automação "PEDIDO_FEITO", o usuário vê:
+Migration única que marca como `processed = true` os `webhook_events` duplicados antigos por `(topic, payload->>id, payload->>status)` mantendo só o mais antigo, para evitar reprocessamento se alguém clicar em "reprocessar".
 
-```
-{{1}}  [Nome do cliente ▾]   → "João"
-{{2}}  [Número do pedido ▾]  → "131008"
+## Arquivos tocados
 
-Preview: "Olá [Nome do cliente], Recebemos o seu pedido [Número do pedido]!"
-```
+- `supabase/migrations/<new>_automation_idempotency.sql` — tabela `automation_executions`, índice único em `webhook_events`, ajuste de regras existentes.
+- `supabase/functions/wc-receiver/index.ts` — calcular `external_id`/`event_signature`, insert idempotente.
+- `supabase/functions/automation-runner/index.ts` — operador `changed_to`, leitura do status anterior, guard `automation_executions`, mover upsert.
+- `src/components/AutomationFormModal.tsx` — operador `changed_to` no select de operadores.
+- `src/hooks/useAutomations.ts` — tipos do operador, se houver enum.
+
+## Detalhes técnicos
+
+- `event_signature` = `sha1(status + '|' + date_modified)` truncado em 16 chars, calculado no `wc-receiver`.
+- `automation_executions.target_signature`:
+  - Se houver condições `changed_to` → join `field=value` (`status=retirado-entrega`).
+  - Caso contrário (regras sem transição) → `external_id` puro + `rule_id` ainda dá idempotência por pedido; usar `event_id` como sufixo se a regra for explicitamente "rodar em todo evento".
+- Não alterar o fluxo do `whatsapp-sender`; a deduplicação acontece antes da entrada na `send_queue`.
+- Manter retries existentes (`scheduleRetry`) intactos; eles continuam funcionando porque a 2ª tentativa cai na proteção `automation_executions` se a 1ª já tinha enfileirado.
