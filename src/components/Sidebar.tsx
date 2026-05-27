@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import viaIcon from '@/assets/icon-via.png';
 import viaLogoWhite from '@/assets/logo-via-white.png';
 import { NotificationsBell } from '@/components/NotificationsBell';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 type MenuRole = 'admin' | 'sdr' | 'support' | 'user';
 
@@ -67,6 +68,7 @@ const SidebarContent = () => {
   const navigate = useNavigate();
   const currentPath = location.pathname.substring(1) || 'dashboard';
   const { open, setOpen } = useSidebar();
+  const isMobile = useIsMobile();
 
   const effectiveRole: MenuRole = (role as MenuRole) || 'user';
   const links = menuItems
@@ -115,6 +117,7 @@ const SidebarContent = () => {
               key={idx}
               link={link}
               isActive={currentPath.startsWith(link.href.slice(1))}
+              onClick={() => { if (isMobile) setOpen(false); }}
             />
           ))}
           <div className="mt-2 pt-2 border-t border-border/30">
@@ -178,7 +181,9 @@ const SidebarContent = () => {
 };
 
 const AppSidebar: React.FC = () => {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true
+  );
 
   return (
     <Sidebar open={open} setOpen={setOpen}>
