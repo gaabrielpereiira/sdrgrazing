@@ -145,7 +145,10 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
     });
   }, [selectedTemplateBody, variables, samplePayload]);
 
-  const addCondition = () => setConditions(c => [...c, { field: '', operator: 'eq', value: '' }]);
+  const addCondition = () => {
+    const defaultOp = trigger.startsWith('order.') ? 'changed_to' : 'eq';
+    setConditions(c => [...c, { field: 'status', operator: defaultOp, value: '' }]);
+  };
   const removeCondition = (i: number) => setConditions(c => c.filter((_, idx) => idx !== i));
   const updateCondition = (i: number, patch: Partial<Condition>) =>
     setConditions(c => c.map((co, idx) => idx === i ? { ...co, ...patch } : co));
