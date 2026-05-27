@@ -80,20 +80,40 @@ Deno.serve(async (req) => {
     let payload: any = {};
     try { payload = JSON.parse(rawBody); } catch { payload = { raw: rawBody }; }
 
+    // Idempotency: derive a stable external_id and event_signature so that
+    // re-deliveries of the same WooCommerce event are not re-processed.
+    const externalId = payload?.id != null ? String(payload.id) : null;
+    const sigSource = `${payload?.status ?? ''}|${payload?.date_modified ?? payload?.date_modified_gmt ?? ''}`;
+    let eventSignature: string | null = null;
+    if (externalId) {
+      const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(sigSource));
+      eventSignature = Array.from(new Uint8Array(buf))
+        .slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+
     const { data: ev, error: insErr } = await supabase
       .from('webhook_events')
-      .insert({ topic, payload, source: 'woocommerce', processed: false })
+      .insert({
+        topic, payload, source: 'woocommerce', processed: false,
+        external_id: externalId, event_signature: eventSignature,
+      })
       .select('id')
       .single();
 
     if (insErr) {
+      if ((insErr as any).code === '23505') {
+        console.log(`[wc-receiver] Duplicate event ignored topic=${topic} external_id=${externalId} sig=${eventSignature}`);
+        return new Response(JSON.stringify({ success: true, duplicate: true }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       console.error('[wc-receiver] Insert error:', insErr);
       return new Response(JSON.stringify({ error: insErr.message }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log(`[wc-receiver] Stored event ${ev.id} topic=${topic}`);
+    console.log(`[wc-receiver] Stored event ${ev.id} topic=${topic} external_id=${externalId}`);
 
     // Phase 2: fire-and-forget trigger of the automation runner
     fetch(`${supabaseUrl}/functions/v1/automation-runner`, {
