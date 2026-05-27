@@ -83,6 +83,33 @@ export type Database = {
           },
         ]
       }
+      automation_executions: {
+        Row: {
+          event_id: string | null
+          executed_at: string
+          external_id: string
+          id: string
+          rule_id: string
+          target_signature: string
+        }
+        Insert: {
+          event_id?: string | null
+          executed_at?: string
+          external_id: string
+          id?: string
+          rule_id: string
+          target_signature: string
+        }
+        Update: {
+          event_id?: string | null
+          executed_at?: string
+          external_id?: string
+          id?: string
+          rule_id?: string
+          target_signature?: string
+        }
+        Relationships: []
+      }
       automation_logs: {
         Row: {
           event_id: string | null
@@ -1368,6 +1395,8 @@ export type Database = {
       webhook_events: {
         Row: {
           error: string | null
+          event_signature: string | null
+          external_id: string | null
           id: string
           last_error_at: string | null
           next_retry_at: string | null
@@ -1380,6 +1409,8 @@ export type Database = {
         }
         Insert: {
           error?: string | null
+          event_signature?: string | null
+          external_id?: string | null
           id?: string
           last_error_at?: string | null
           next_retry_at?: string | null
@@ -1392,6 +1423,8 @@ export type Database = {
         }
         Update: {
           error?: string | null
+          event_signature?: string | null
+          external_id?: string | null
           id?: string
           last_error_at?: string | null
           next_retry_at?: string | null

@@ -145,7 +145,10 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
     });
   }, [selectedTemplateBody, variables, samplePayload]);
 
-  const addCondition = () => setConditions(c => [...c, { field: '', operator: 'eq', value: '' }]);
+  const addCondition = () => {
+    const defaultOp = trigger.startsWith('order.') ? 'changed_to' : 'eq';
+    setConditions(c => [...c, { field: 'status', operator: defaultOp, value: '' }]);
+  };
   const removeCondition = (i: number) => setConditions(c => c.filter((_, idx) => idx !== i));
   const updateCondition = (i: number, patch: Partial<Condition>) =>
     setConditions(c => c.map((co, idx) => idx === i ? { ...co, ...patch } : co));
@@ -249,7 +252,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
                   className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 md:w-48">
                   {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
-                {c.field === 'status' && (c.operator === 'eq' || c.operator === 'neq') ? (
+                {c.field === 'status' && (c.operator === 'eq' || c.operator === 'neq' || c.operator === 'changed_to') ? (
                   <select value={c.value} onChange={e => updateCondition(i, { value: e.target.value })}
                     className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50">
                     <option value="">Selecione o status...</option>
@@ -273,6 +276,12 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
             <Button variant="ghost" size="sm" onClick={addCondition} className="gap-2">
               <Plus className="w-4 h-4" /> Adicionar filtro
             </Button>
+            {conditions.some(c => c.operator === 'changed_to') && (
+              <p className="text-xs text-slate-500">
+                <span className="text-cyan-400">mudou para</span> só dispara no momento exato em que o pedido entra
+                naquele status. Reentregas do mesmo webhook não disparam de novo.
+              </p>
+            )}
             {conditions.length > 0 && (
               <div>
                 <button onClick={() => setShowJson(!showJson)}
