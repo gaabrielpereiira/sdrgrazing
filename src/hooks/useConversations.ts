@@ -92,6 +92,12 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
         return;
       }
 
+      // Skip if conversation doesn't match the active/finished filter
+      if ((convData as any).is_active !== isActiveFilter) {
+        console.log('[Realtime] Conversation is_active mismatch, skipping:', (convData as any).is_active, 'expected:', isActiveFilter);
+        return;
+      }
+
       // Skip if conversation doesn't match the active queue filter
       if (queueFilter !== 'all' && (convData as any).queue !== queueFilter) {
         console.log('[Realtime] Conversation queue mismatch, skipping:', (convData as any).queue);
@@ -400,24 +406,28 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
           console.log('[Realtime] Conversation UPDATE:', payload.new);
           const updated = payload.new as any;
           
-          // Always update fields in place — never remove from state on is_active flip,
-          // otherwise the user perceives "the conversation lost its history" when another
-          // operator/edge-fn finalizes (or reopens) the chat they're viewing.
           setConversationsTracked(prev => {
             const exists = prev.some(c => c.id === updated.id);
             const matchesQueue = queueFilter === 'all' || updated.queue === queueFilter;
+            const matchesActive = updated.is_active === isActiveFilter;
+
             if (!exists) {
-              if (updated.is_active === isActiveFilter && matchesQueue) {
+              // Conversation not in our current list — add it if it now matches our view
+              if (matchesActive && matchesQueue) {
                 console.log('[Realtime] Conversation entered current filter — fetching:', updated.id);
                 fetchAndAddConversationRef.current(updated.id);
               }
               return prev;
             }
-            // If the conversation moved out of the queue this view tracks, remove it
-            if (!matchesQueue) {
-              console.log('[Realtime] Conversation left queue, removing from view:', updated.id);
+
+            // Conversation IS in our list — remove it if it no longer belongs here
+            // (e.g. finalized while on the active tab, or reopened while on the finished tab)
+            if (!matchesActive || !matchesQueue) {
+              console.log('[Realtime] Conversation left current filter (is_active changed or queue changed), removing:', updated.id);
               return prev.filter(c => c.id !== updated.id);
             }
+
+            // Still belongs here — update fields in place
             return prev.map(conv => {
               if (conv.id === updated.id) {
                 return {
