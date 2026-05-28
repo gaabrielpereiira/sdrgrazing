@@ -391,6 +391,10 @@ const ChatInterface: React.FC = () => {
   // Pending conversation id requested via URL waiting for realtime to deliver it
   const pendingConversationIdRef = React.useRef<string | null>(null);
 
+  // Ref que indica que o usuário tocou "Voltar" manualmente no mobile.
+  // Impede o useEffect de re-selecionar automaticamente a primeira conversa.
+  const userNavigatedBackRef = React.useRef(false);
+
   // Auto-select first conversation or from URL param
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -411,6 +415,10 @@ const ChatInterface: React.FC = () => {
     }
 
     if (pendingConversationIdRef.current) return;
+
+    // Se o usuário voltou manualmente para a lista, não re-seleciona
+    if (userNavigatedBackRef.current && !selectedChatId) return;
+
     if (conversations.length > 0 && (!selectedChatId || !conversations.some(c => c.id === selectedChatId))) {
       setSelectedChatId(conversations[0].id);
     } else if (conversations.length === 0) {
@@ -420,11 +428,13 @@ const ChatInterface: React.FC = () => {
 
   // Reset selection when switching tabs
   useEffect(() => {
+    userNavigatedBackRef.current = false;
     setSelectedChatId(null);
   }, [chatTab]);
 
   // Reset selection when switching main tab (admin)
   useEffect(() => {
+    userNavigatedBackRef.current = false;
     setSelectedChatId(null);
   }, [mainTab]);
 
@@ -1191,7 +1201,7 @@ const ChatInterface: React.FC = () => {
             filteredConversations.map((chat) => (
               <div 
                 key={chat.id}
-                onClick={() => setSelectedChatId(chat.id)}
+                onClick={() => { userNavigatedBackRef.current = false; setSelectedChatId(chat.id); }}
                 className={`flex items-center p-4 cursor-pointer transition-all duration-200 border-b border-slate-800/30 hover:bg-slate-800/50 ${
                   selectedChatId === chat.id 
                     ? 'bg-slate-800/80 border-l-2 border-l-cyan-500' 
@@ -1330,7 +1340,10 @@ const ChatInterface: React.FC = () => {
               {/* Botão voltar — mobile only, bem visível */}
               <button
                 type="button"
-                onClick={() => setSelectedChatId(null)}
+                onClick={() => {
+                  userNavigatedBackRef.current = true;
+                  setSelectedChatId(null);
+                }}
                 className="md:hidden flex items-center gap-1 px-2 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
                 aria-label="Voltar para lista"
               >
