@@ -91,6 +91,25 @@ Deno.serve(async (req) => {
         .slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
     }
 
+    // For order.updated events: skip if the order status hasn't changed from what's
+    // already stored in our database. This prevents WooCommerce background plugins
+    // (PDF generation, analytics, etc.) from re-triggering automations on old orders
+    // whose date_modified changed but whose status did not.
+    if (topic === 'order.updated' && externalId && payload?.status) {
+      const { data: knownOrder } = await supabase
+        .from('orders')
+        .select('status')
+        .eq('woo_order_id', Number(externalId))
+        .maybeSingle();
+
+      if (knownOrder && knownOrder.status === payload.status) {
+        console.log(`[wc-receiver] Skipping order.updated ${externalId}: status="${payload.status}" unchanged in DB`);
+        return new Response(JSON.stringify({ success: true, skipped: 'status_unchanged' }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     const { data: ev, error: insErr } = await supabase
       .from('webhook_events')
       .insert({

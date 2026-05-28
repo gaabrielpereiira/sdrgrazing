@@ -374,10 +374,30 @@ async function processEvent(supabase: any, event: any) {
   // Persist order data (non-blocking on failure)
   await upsertOrderFromEvent(supabase, event);
 
+  // ── Inject computed fields into the payload ────────────────────────────
+  // These fields (prefixed with _) are calculated at processing time and can
+  // be used in filter conditions just like any other payload field.
+  //
+  // _order_age_hours: how many hours have elapsed since the order was created.
+  //   Use with operator "lte" to skip automations for old orders.
+  //   Example: field=_order_age_hours, operator=lte, value=24  →  only fires
+  //   for orders created in the last 24 h (ignores status updates on old orders).
+  if (event.payload && (event.payload.date_created_gmt || event.payload.date_created)) {
+    try {
+      const dateStr = event.payload.date_created_gmt || event.payload.date_created;
+      const iso = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+      const ageMs = Date.now() - new Date(iso).getTime();
+      event.payload._order_age_hours = Math.round((ageMs / (1000 * 60 * 60)) * 10) / 10;
+    } catch { /* ignore malformed dates */ }
+  }
+
   const { data: rules, error: rulesErr } = await supabase
     .from('automation_rules').select('*').eq('active', true).eq('trigger_topic', event.topic);
   if (rulesErr) throw rulesErr;
-  console.log(`[runner] event=${event.id} topic=${event.topic} matched ${rules?.length || 0} active rule(s) prev_status=${prevState.status ?? 'null'}`);
+  console.log(
+    `[runner] event=${event.id} topic=${event.topic} matched ${rules?.length || 0} active rule(s)` +
+    ` prev_status=${prevState.status ?? 'null'} order_age_hours=${event.payload?._order_age_hours ?? 'n/a'}`
+  );
 
   let queuedWhatsapp = false;
 
