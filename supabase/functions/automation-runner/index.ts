@@ -25,6 +25,29 @@ function normalizePhone(raw: any): string | null {
   return digits.length >= 8 ? digits : null;
 }
 
+/**
+ * Converts digits-only phone to Brazilian canonical form (with country code 55).
+ * e.g. "11957065883" → "5511957065883"
+ *      "5511957065883" → "5511957065883" (unchanged)
+ */
+function canonicalPhone(digits: string): string {
+  const d = digits.replace(/^0+/, ''); // strip leading zeros (e.g. 0055...)
+  if (d.startsWith('55') && d.length >= 12) return d;
+  return '55' + d;
+}
+
+/**
+ * Returns all phone variants to check when looking up a contact.
+ * Covers mismatches between WooCommerce (local format) and WhatsApp (international format).
+ * e.g. "11957065883" → ["11957065883", "5511957065883"]
+ *      "5511957065883" → ["5511957065883", "11957065883"]
+ */
+function phoneVariants(phone: string): string[] {
+  const canonical = canonicalPhone(phone);
+  const withoutCC = canonical.startsWith('55') ? canonical.slice(2) : canonical;
+  return [...new Set([phone, canonical, withoutCC])];
+}
+
 function compareValues(a: any, op: string, b: string): boolean {
   if (op === 'eq') return String(a ?? '') === b;
   if (op === 'neq') return String(a ?? '') !== b;
@@ -75,15 +98,27 @@ function renderTemplate(tpl: string, payload: any): string {
 }
 
 async function findOrCreateContact(supabase: any, phone: string, payload: any) {
-  const { data: existing } = await supabase
-    .from('contacts').select('id, name').eq('phone_number', phone).maybeSingle();
-  if (existing) return existing;
+  // Try all phone variants (with/without country code 55) so that a contact created
+  // via WhatsApp (5511957065883) is matched even when WooCommerce sends the local
+  // format without the country code (11957065883).
+  const variants = phoneVariants(phone);
+  for (const v of variants) {
+    const { data: byPhone } = await supabase
+      .from('contacts').select('id, name').eq('phone_number', v).maybeSingle();
+    if (byPhone) return byPhone;
+    const { data: byWa } = await supabase
+      .from('contacts').select('id, name').eq('whatsapp_id', v).maybeSingle();
+    if (byWa) return byWa;
+  }
+
+  // Not found — create with canonical phone (includes country code for WhatsApp delivery)
+  const canonical = canonicalPhone(phone);
   const name =
     [getByPath(payload, 'billing.first_name'), getByPath(payload, 'billing.last_name')]
       .filter(Boolean).join(' ').trim() ||
     getByPath(payload, 'first_name') || null;
   const { data: created, error } = await supabase
-    .from('contacts').insert({ phone_number: phone, name, whatsapp_id: phone })
+    .from('contacts').insert({ phone_number: canonical, name, whatsapp_id: canonical })
     .select('id, name').single();
   if (error) throw new Error(`contact insert: ${error.message}`);
   return created;
@@ -110,12 +145,17 @@ async function findOrCreateConversation(supabase: any, contactId: string) {
 
 async function isInCooldown(supabase: any, phone: string, ruleId: string, hours: number): Promise<boolean> {
   if (!hours || hours <= 0) return false;
-  const { data } = await supabase
-    .from('contact_cooldowns').select('last_sent_at')
-    .eq('contact_phone', phone).eq('rule_id', ruleId).maybeSingle();
-  if (!data?.last_sent_at) return false;
-  const elapsed = (Date.now() - new Date(data.last_sent_at).getTime()) / (1000 * 60 * 60);
-  return elapsed < hours;
+  // Check cooldown for all phone variants so format mismatches don't bypass the guard
+  for (const v of phoneVariants(phone)) {
+    const { data } = await supabase
+      .from('contact_cooldowns').select('last_sent_at')
+      .eq('contact_phone', v).eq('rule_id', ruleId).maybeSingle();
+    if (data?.last_sent_at) {
+      const elapsed = (Date.now() - new Date(data.last_sent_at).getTime()) / (1000 * 60 * 60);
+      if (elapsed < hours) return true;
+    }
+  }
+  return false;
 }
 
 // ─── Action handlers ──────────────────────────────────────────────────
@@ -156,12 +196,14 @@ async function actionWhatsapp(supabase: any, rule: any, event: any) {
   });
   if (queueErr) return { status: 'failed', result: { reason: 'send_queue_insert_failed', error: queueErr.message } };
 
+  // Store cooldown with canonical phone so isInCooldown always finds it regardless of format
+  const canonicalForCooldown = canonicalPhone(phone);
   await supabase.from('contact_cooldowns').upsert(
-    { contact_phone: phone, rule_id: rule.id, last_sent_at: new Date().toISOString() },
+    { contact_phone: canonicalForCooldown, rule_id: rule.id, last_sent_at: new Date().toISOString() },
     { onConflict: 'contact_phone,rule_id' }
   );
 
-  return { status: 'success', result: { phone, template: tpl.name, conversation_id: conversation.id } };
+  return { status: 'success', result: { phone: canonicalForCooldown, template: tpl.name, conversation_id: conversation.id } };
 }
 
 async function actionCrmUpdate(supabase: any, rule: any, event: any) {
