@@ -1327,23 +1327,25 @@ const ChatInterface: React.FC = () => {
 
             {/* Chat Header */}
             <div className="h-16 px-3 md:px-6 flex items-center justify-between bg-slate-900/80 backdrop-blur-md border-b border-slate-800 z-10 shrink-0 gap-2">
+              {/* Botão voltar — mobile only, bem visível */}
               <button
                 type="button"
                 onClick={() => setSelectedChatId(null)}
-                className="md:hidden p-2 -ml-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
-                aria-label="Voltar"
+                className="md:hidden flex items-center gap-1 px-2 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
+                aria-label="Voltar para lista"
               >
                 <ChevronLeft className="w-5 h-5" />
+                <span className="text-xs font-medium">Voltar</span>
               </button>
-              <div 
-                className="flex items-center p-1.5 -ml-1.5 rounded-lg pr-3 group/header"
+              <div
+                className="flex items-center p-1.5 -ml-1.5 rounded-lg pr-3 group/header flex-1 min-w-0"
               >
-                <div className="relative cursor-pointer" onClick={() => setShowProfileInfo(!showProfileInfo)}>
+                <div className="relative cursor-pointer flex-shrink-0" onClick={() => setShowProfileInfo(!showProfileInfo)}>
                   <img src={activeChat.contactAvatar} alt={activeChat.contactName} className="w-9 h-9 rounded-full ring-2 ring-slate-800" />
                   <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
                 </div>
-                <div className="ml-3">
-                  <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 flex-wrap">
+                <div className="ml-3 min-w-0 flex-1">
+                  <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                     {isEditingName ? (
                       <input
                         autoFocus
@@ -1362,50 +1364,48 @@ const ChatInterface: React.FC = () => {
                         type="button"
                         onClick={startEditName}
                         title="Clique para editar o nome do contato"
-                        className="inline-flex items-center gap-1.5 hover:text-cyan-300 transition-colors"
+                        className="inline-flex items-center gap-1.5 hover:text-cyan-300 transition-colors truncate max-w-[140px] md:max-w-none"
                       >
-                        {activeChat.contactName}
-                        <Pencil className="w-3 h-3 opacity-0 group-hover/header:opacity-60 transition-opacity" />
+                        <span className="truncate">{activeChat.contactName}</span>
+                        <Pencil className="w-3 h-3 opacity-0 group-hover/header:opacity-60 transition-opacity flex-shrink-0" />
                       </button>
                     )}
-                    {renderStatusBadge(activeChat.status)}
-                    {isPending(activeChat) && (
-                      <span
-                        className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] rounded-md font-medium flex items-center gap-1 animate-pulse"
-                        title="Aguardando resposta"
-                      >
-                        <AlertTriangle className="w-2.5 h-2.5" />
-                        Pendente
-                      </span>
-                    )}
-                    {assignedMember ? (
-                      <span
-                        className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-cyan-500/10 text-cyan-300 border-cyan-500/30 flex items-center gap-1"
-                        title={`Atendente responsável: ${assignedMember.name}`}
-                      >
-                        <img src={assignedMember.avatar} alt={assignedMember.name} className="w-3.5 h-3.5 rounded-full" />
-                        {assignedMember.name}
-                      </span>
-                    ) : activeChat.status === 'human' ? (
-                      <span
-                        className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-orange-500/10 text-orange-300 border-orange-500/30 flex items-center gap-1"
-                        title="Nenhum atendente atribuído"
-                      >
-                        <AlertTriangle className="w-3 h-3" />
-                        Sem responsável
-                      </span>
-                    ) : null}
+                    {/* Badges — ocultos no mobile para não sufocar o nome */}
+                    <span className="hidden md:flex items-center gap-2 flex-wrap">
+                      {renderStatusBadge(activeChat.status)}
+                      {isPending(activeChat) && (
+                        <span
+                          className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] rounded-md font-medium flex items-center gap-1 animate-pulse"
+                          title="Aguardando resposta"
+                        >
+                          <AlertTriangle className="w-2.5 h-2.5" />
+                          Pendente
+                        </span>
+                      )}
+                      {assignedMember ? (
+                        <span
+                          className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-cyan-500/10 text-cyan-300 border-cyan-500/30 flex items-center gap-1"
+                          title={`Atendente responsável: ${assignedMember.name}`}
+                        >
+                          <img src={assignedMember.avatar} alt={assignedMember.name} className="w-3.5 h-3.5 rounded-full" />
+                          {assignedMember.name}
+                        </span>
+                      ) : activeChat.status === 'human' ? (
+                        <span
+                          className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-orange-500/10 text-orange-300 border-orange-500/30 flex items-center gap-1"
+                          title="Nenhum atendente atribuído"
+                        >
+                          <AlertTriangle className="w-3 h-3" />
+                          Sem responsável
+                        </span>
+                      ) : null}
+                    </span>
                   </h2>
-                  {activeChat.isBusiness && activeChat.companyName && (
-                    <p className="text-[11px] text-cyan-300/70 font-medium flex items-center gap-1 mt-0.5">
-                      <Building2 className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{activeChat.companyName}</span>
-                    </p>
-                  )}
-                  <p className="text-xs text-cyan-500 font-medium">{activeChat.contactPhone}</p>
+                  <p className="text-xs text-cyan-500 font-medium truncate">{activeChat.contactPhone}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
+              {/* Botões de ação — ocultos no mobile, visíveis no desktop */}
+              <div className="hidden md:flex items-center gap-1">
                 {/* Status control buttons */}
                 <Button 
                   variant="ghost" 
@@ -1575,6 +1575,7 @@ const ChatInterface: React.FC = () => {
                 </Button>
               </div>
             </div>
+
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar relative z-0">
