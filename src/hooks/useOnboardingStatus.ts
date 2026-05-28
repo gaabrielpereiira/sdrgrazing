@@ -186,13 +186,15 @@ export function useOnboardingStatus(): OnboardingStatus {
 
   const requiredSteps = steps.filter(s => s.isRequired);
   const completedRequired = requiredSteps.filter(s => s.isComplete).length;
-  const allStepsComplete = steps.every(s => s.isComplete);
+  // isComplete baseia-se apenas nos steps obrigatórios OU se o usuário já viu o wizard.
+  // Isso evita que o wizard apareça em novos dispositivos quando o sistema já está configurado.
+  const requiredComplete = requiredSteps.every(s => s.isComplete);
   const currentStepIndex = steps.findIndex(s => !s.isComplete);
   const completionPercentage = Math.round((steps.filter(s => s.isComplete).length / steps.length) * 100);
 
   return {
     loading,
-    isComplete: allStepsComplete,
+    isComplete: requiredComplete || hasSeenWizard,
     currentStep: currentStepIndex === -1 ? steps.length - 1 : currentStepIndex,
     steps,
     completionPercentage,
