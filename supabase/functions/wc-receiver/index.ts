@@ -102,7 +102,30 @@ Deno.serve(async (req) => {
 
     if (insErr) {
       if ((insErr as any).code === '23505') {
-        console.log(`[wc-receiver] Duplicate event ignored topic=${topic} external_id=${externalId} sig=${eventSignature}`);
+        console.log(`[wc-receiver] Duplicate event topic=${topic} external_id=${externalId} sig=${eventSignature}`);
+
+        // Bug fix: if the original event is still unprocessed (runner may have failed on first
+        // delivery), re-trigger the runner so the automation eventually executes.
+        if (externalId && eventSignature) {
+          const { data: existing } = await supabase
+            .from('webhook_events')
+            .select('id, processed')
+            .eq('external_id', externalId)
+            .eq('event_signature', eventSignature)
+            .maybeSingle();
+
+          if (existing && !existing.processed) {
+            console.log(`[wc-receiver] Re-triggering runner for unprocessed event ${existing.id}`);
+            const retrigger = fetch(`${supabaseUrl}/functions/v1/automation-runner`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ event_id: existing.id }),
+            }).catch((e) => console.warn('[wc-receiver] runner re-trigger failed:', e));
+            // @ts-ignore — EdgeRuntime.waitUntil keeps the function alive after response
+            try { EdgeRuntime.waitUntil(retrigger); } catch (_) { /* outside edge runtime */ }
+          }
+        }
+
         return new Response(JSON.stringify({ success: true, duplicate: true }), {
           status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -115,12 +138,18 @@ Deno.serve(async (req) => {
 
     console.log(`[wc-receiver] Stored event ${ev.id} topic=${topic} external_id=${externalId}`);
 
-    // Phase 2: fire-and-forget trigger of the automation runner
-    fetch(`${supabaseUrl}/functions/v1/automation-runner`, {
+    // Phase 2: trigger the automation runner.
+    // Use EdgeRuntime.waitUntil so the runtime keeps the function alive until the HTTP
+    // request completes — without it the Deno runtime can terminate the function as soon
+    // as the response is returned, silently dropping the fire-and-forget call.
+    const runnerCall = fetch(`${supabaseUrl}/functions/v1/automation-runner`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ event_id: ev.id }),
     }).catch((e) => console.warn('[wc-receiver] runner trigger failed:', e));
+
+    // @ts-ignore — EdgeRuntime.waitUntil is available in Supabase Edge Runtime
+    try { EdgeRuntime.waitUntil(runnerCall); } catch (_) { /* outside edge runtime */ }
 
     return new Response(JSON.stringify({ success: true, event_id: ev.id }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },

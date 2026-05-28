@@ -480,11 +480,16 @@ Deno.serve(async (req) => {
     }
 
     if (triggerSender) {
-      fetch(`${supabaseUrl}/functions/v1/whatsapp-sender`, {
+      // Use EdgeRuntime.waitUntil so the runtime keeps the function alive until the sender
+      // request is established — same fix as wc-receiver → automation-runner.
+      const senderCall = fetch(`${supabaseUrl}/functions/v1/whatsapp-sender`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       }).catch((e) => console.warn('[runner] sender trigger failed:', e));
+
+      // @ts-ignore — EdgeRuntime.waitUntil is available in Supabase Edge Runtime
+      try { EdgeRuntime.waitUntil(senderCall); } catch (_) { /* outside edge runtime */ }
     }
 
     return new Response(JSON.stringify({ success: true, processed: events.length }), {

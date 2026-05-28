@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Zap, Plus, Search, Pencil, Trash2, Loader2, Activity, FileClock, Inbox, BarChart3, FlaskConical } from 'lucide-react';
+import { Zap, Plus, Search, Pencil, Trash2, Loader2, Activity, FileClock, Inbox, BarChart3, FlaskConical, RefreshCw } from 'lucide-react';
 import { Button } from './Button';
 import { useAutomations, AutomationRule, TRIGGER_TOPICS, ACTION_TYPES } from '@/hooks/useAutomations';
 import AutomationFormModal from './AutomationFormModal';
@@ -21,6 +21,27 @@ const Automations: React.FC = () => {
   const [editing, setEditing] = useState<AutomationRule | null>(null);
   const [logsRule, setLogsRule] = useState<AutomationRule | null>(null);
   const [simulateOpen, setSimulateOpen] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
+
+  const reprocessPending = async () => {
+    if (reprocessing) return;
+    setReprocessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('automation-runner', { body: {} });
+      if (error) throw error;
+      const processed = (data as any)?.processed ?? 0;
+      if (processed > 0) {
+        toast.success(`${processed} evento(s) reprocessado(s) com sucesso`);
+      } else {
+        toast.info('Nenhum evento pendente encontrado');
+      }
+      refresh();
+    } catch (e) {
+      toast.error('Erro ao reprocessar', { description: e instanceof Error ? e.message : '' });
+    } finally {
+      setReprocessing(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -61,6 +82,20 @@ const Automations: React.FC = () => {
             <span className="text-slate-300">{pendingEvents}</span>
             <span className="text-slate-500">pendentes</span>
           </div>
+          {pendingEvents > 0 && (
+            <Button
+              variant="ghost"
+              onClick={reprocessPending}
+              disabled={reprocessing}
+              className="gap-2 border border-amber-500/30 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+            >
+              {reprocessing
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <RefreshCw className="w-4 h-4" />}
+              <span className="hidden sm:inline">Reprocessar pendentes</span>
+              <span className="sm:hidden">Reprocessar</span>
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => setSimulateOpen(true)} className="gap-2">
             <FlaskConical className="w-4 h-4" />
             <span className="hidden sm:inline">Simular evento</span>
