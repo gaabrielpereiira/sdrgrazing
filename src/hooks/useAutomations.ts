@@ -68,7 +68,11 @@ export const TRIGGER_TOPICS = [
   { value: 'customer.created', label: 'Cliente criado' },
   { value: 'customer.updated', label: 'Cliente atualizado' },
   { value: 'product.updated', label: 'Produto atualizado' },
+  { value: 'pipeline.deal.won', label: 'Deal movido para Ganho (Pipeline)' },
 ];
+
+/** Returns true for pipeline-originated triggers (no webhook payload, uses deal/contact context) */
+export const isPipelineTrigger = (topic: string) => topic.startsWith('pipeline.');
 
 export interface WebhookField { path: string; label: string }
 export interface WebhookFieldGroup { group: string; items: WebhookField[] }
@@ -102,6 +106,22 @@ export const WEBHOOK_FIELDS: WebhookFieldGroup[] = [
 ];
 
 export const FIELD_SUGGESTIONS = WEBHOOK_FIELDS.flatMap(g => g.items.map(i => i.path));
+
+/** Fields available when trigger is pipeline.deal.won */
+export const PIPELINE_FIELDS: WebhookFieldGroup[] = [
+  { group: 'Deal', items: [
+    { path: 'deal.title',   label: 'Título do deal' },
+    { path: 'deal.company', label: 'Empresa' },
+    { path: 'deal.value',   label: 'Valor do deal' },
+  ]},
+  { group: 'Contato', items: [
+    { path: 'contact.name',  label: 'Nome do contato' },
+    { path: 'contact.phone', label: 'Telefone' },
+    { path: 'contact.email', label: 'E-mail' },
+  ]},
+];
+
+export const PIPELINE_FIELD_SUGGESTIONS = PIPELINE_FIELDS.flatMap(g => g.items.map(i => i.path));
 
 export function getByPath(obj: any, path: string): any {
   if (!obj || !path) return undefined;

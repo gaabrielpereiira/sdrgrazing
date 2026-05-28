@@ -3,7 +3,7 @@ import { X, Plus, Trash2, Loader2, Code, Wand2 } from 'lucide-react';
 import { Button } from './Button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { TRIGGER_TOPICS, FIELD_SUGGESTIONS, OPERATORS, ACTION_TYPES, ORDER_STATUSES, WEBHOOK_FIELDS, getByPath, AutomationRule } from '@/hooks/useAutomations';
+import { TRIGGER_TOPICS, FIELD_SUGGESTIONS, OPERATORS, ACTION_TYPES, ORDER_STATUSES, WEBHOOK_FIELDS, PIPELINE_FIELDS, PIPELINE_FIELD_SUGGESTIONS, isPipelineTrigger, getByPath, AutomationRule } from '@/hooks/useAutomations';
 
 interface Props {
   isOpen: boolean;
@@ -53,6 +53,8 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
       setCfg({ phone_field: 'billing.phone', variables: [] });
       setCooldownHours(0); setActive(true);
     }
+    // When editing a pipeline rule, reset cfg defaults to no phone_field
+    // (handled below in the render — phone_field is hidden for pipeline triggers)
   }, [isOpen, rule]);
 
   // Carrega último payload do tópico para preview ao vivo
@@ -65,6 +67,13 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
       .limit(1).maybeSingle()
       .then(({ data }) => setSamplePayload(data?.payload ?? null));
   }, [isOpen, trigger]);
+
+  // Whether the selected trigger is a pipeline event (no webhook payload; uses deal/contact context)
+  const isPipeline = isPipelineTrigger(trigger);
+
+  // Active field groups for variable pickers (depends on trigger type)
+  const activeFields = isPipeline ? PIPELINE_FIELDS : WEBHOOK_FIELDS;
+  const activeFieldSuggestions = isPipeline ? PIPELINE_FIELD_SUGGESTIONS : FIELD_SUGGESTIONS;
 
   // Variables (whatsapp) — declarado cedo pois é usado por preview e auto-fill
   const variables: string[] = Array.isArray(cfg.variables) ? cfg.variables : [];
@@ -90,6 +99,18 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
     const re = new RegExp(`([\\s\\S]{0,40})\\{\\{\\s*${n}\\s*\\}\\}([\\s\\S]{0,40})`, 'i');
     const m = selectedTemplateBody.match(re);
     const ctx = ((m?.[1] || '') + ' ' + (m?.[2] || '')).toLowerCase();
+
+    // Pipeline trigger suggestions
+    if (isPipeline) {
+      if (/(ol[áa]|nome|cliente|sr[a]?\.?)/.test(ctx)) return 'contact.name';
+      if (/(empresa|compan)/.test(ctx)) return 'deal.company';
+      if (/(total|valor|pre[çc]o|r\$|deal)/.test(ctx)) return 'deal.value';
+      if (/(telefone|whats|celular)/.test(ctx)) return 'contact.phone';
+      if (/(email|e-mail)/.test(ctx)) return 'contact.email';
+      return '';
+    }
+
+    // Webhook (WooCommerce) suggestions
     if (/(ol[áa]|nome|cliente|sr[a]?\.?)/.test(ctx)) return 'billing.first_name';
     if (/(pedido|order|n[úu]mero|n[º°]|#)/.test(ctx)) return 'id';
     if (/(total|valor|pre[çc]o|r\$)/.test(ctx)) return 'total';
@@ -114,7 +135,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
   };
 
   const labelForPath = (path: string): string => {
-    for (const g of WEBHOOK_FIELDS) {
+    for (const g of [...WEBHOOK_FIELDS, ...PIPELINE_FIELDS]) {
       const item = g.items.find(i => i.path === path);
       if (item) return item.label;
     }
@@ -132,7 +153,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
 
   const isCustomPath = (path: string): boolean => {
     if (!path) return false;
-    return !FIELD_SUGGESTIONS.includes(path);
+    return !activeFieldSuggestions.includes(path);
   };
 
   const renderedTemplatePreview = useMemo(() => {
@@ -243,6 +264,12 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
                 </select>
               )}
             </div>
+            {isPipeline && (
+              <p className="text-xs text-slate-500">
+                Triggers de pipeline não possuem payload externo — filtros adicionais não se aplicam.
+                A automação sempre dispara quando o deal é marcado como <span className="text-amber-400">Ganho</span>.
+              </p>
+            )}
             {conditions.map((c, i) => (
               <div key={i} className="flex flex-col md:flex-row gap-2">
                 <input list="field-suggestions" value={c.field} onChange={e => updateCondition(i, { field: e.target.value })}
@@ -271,7 +298,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
               </div>
             ))}
             <datalist id="field-suggestions">
-              {FIELD_SUGGESTIONS.map(f => <option key={f} value={f} />)}
+              {activeFieldSuggestions.map(f => <option key={f} value={f} />)}
             </datalist>
             <Button variant="ghost" size="sm" onClick={addCondition} className="gap-2">
               <Plus className="w-4 h-4" /> Adicionar filtro
@@ -311,6 +338,17 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
             {/* WhatsApp config */}
             {actionType === 'whatsapp_message' && (
               <div className="space-y-3 pt-2">
+                {/* Pipeline trigger context hint */}
+                {isPipeline && (
+                  <div className="flex items-start gap-2 px-3 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+                    <span className="text-cyan-400 text-lg leading-none mt-0.5">🏆</span>
+                    <p className="text-xs text-cyan-300">
+                      Esta automação dispara quando um deal é movido para <strong>Ganho</strong>.
+                      O WhatsApp será enviado para o contato vinculado ao deal.
+                      Use os campos <span className="font-mono">contact.*</span> e <span className="font-mono">deal.*</span> nas variáveis abaixo.
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs font-medium text-slate-300 mb-1 block">Template aprovado</label>
                   <select value={cfg.template_id || ''} onChange={e => setCfgField('template_id', e.target.value)}
@@ -322,12 +360,15 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
                     <p className="text-xs text-amber-400 mt-1">Nenhum template aprovado. Cadastre em Templates WhatsApp.</p>
                   )}
                 </div>
+                {/* Phone field — hidden for pipeline triggers (contact is resolved via deal.contact_id) */}
+                {!isPipeline && (
                 <div>
                   <label className="text-xs font-medium text-slate-300 mb-1 block">Campo do telefone (no payload)</label>
                   <input value={cfg.phone_field || 'billing.phone'} onChange={e => setCfgField('phone_field', e.target.value)}
                     placeholder="billing.phone"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono" />
                 </div>
+                )}
                 {/* Preview do template */}
                 {selectedTemplateBody && (
                   <div>
@@ -372,7 +413,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
                               className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50"
                             >
                               <option value="">Selecione um campo…</option>
-                              {WEBHOOK_FIELDS.map(g => (
+                              {activeFields.map(g => (
                                 <optgroup key={g.group} label={g.group}>
                                   {g.items.map(it => (
                                     <option key={it.path} value={it.path}>{it.label}</option>

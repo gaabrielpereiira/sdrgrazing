@@ -54,6 +54,147 @@ export const clearStagesCache = () => {
   systemStagesCacheByUser.clear();
 };
 
+/**
+ * Executes active `pipeline.deal.won` automation rules for the given deal.
+ * Finds the deal's contact + conversation and sends the configured WhatsApp template.
+ * Called after a deal is moved to / marked as "Ganho".
+ */
+const firePipelineAutomations = async (dealId: string): Promise<void> => {
+  try {
+    // 1. Get active pipeline.deal.won automation rules
+    const { data: rules, error: rulesError } = await supabase
+      .from('automation_rules')
+      .select('*')
+      .eq('trigger_topic', 'pipeline.deal.won')
+      .eq('active', true);
+
+    if (rulesError || !rules?.length) return;
+
+    // 2. Get deal + contact data
+    const { data: deal } = await supabase
+      .from('deals')
+      .select('id, title, company, value, contact_id, contact:contacts(id, name, call_name, phone_number, email)')
+      .eq('id', dealId)
+      .single();
+
+    if (!deal) return;
+
+    const contact = deal.contact as any;
+    const contactName: string = contact?.name || contact?.call_name || contact?.phone_number || '';
+    const contactPhone: string = contact?.phone_number || '';
+    const contactEmail: string = contact?.email || '';
+
+    // 3. Build variable-interpolation context
+    const context: Record<string, string> = {
+      'deal.title':   deal.title   || '',
+      'deal.company': deal.company || '',
+      'deal.value':   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+                        .format(deal.value || 0),
+      'contact.name':  contactName,
+      'contact.phone': contactPhone,
+      'contact.email': contactEmail,
+    };
+
+    // 4. Find the contact's most-recent conversation
+    if (!deal.contact_id) {
+      console.warn('[Pipeline Automation] Deal has no contact_id — cannot send WhatsApp');
+      return;
+    }
+
+    const { data: conversation } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('contact_id', deal.contact_id)
+      .order('last_message_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!conversation) {
+      console.warn(`[Pipeline Automation] No conversation found for contact ${deal.contact_id}`);
+      return;
+    }
+
+    // 5. Execute each matching rule
+    for (const rule of rules) {
+      if (rule.action_type !== 'whatsapp_message') continue;
+      const cfg: Record<string, any> = rule.action_config || {};
+      if (!cfg.template_id) continue;
+
+      try {
+        // Fetch approved template
+        const { data: template } = await supabase
+          .from('whatsapp_templates')
+          .select('*')
+          .eq('id', cfg.template_id)
+          .single();
+
+        if (!template) continue;
+
+        // Resolve variable values from context
+        const variablePaths: string[] = Array.isArray(cfg.variables) ? cfg.variables : [];
+        const variableValues = variablePaths.map((p: string) => context[p] ?? '');
+
+        // Interpolate template body
+        const bodyComponent = (template.components || []).find(
+          (c: any) => (c.type || '').toUpperCase() === 'BODY'
+        );
+        const bodyText: string = bodyComponent?.text || '';
+        const interpolatedBody = bodyText.replace(
+          /\{\{\s*(\d+)\s*\}\}/g,
+          (_: string, n: string) => variableValues[parseInt(n, 10) - 1] ?? `{{${n}}}`
+        );
+
+        const variablesRecord: Record<string, string> = {};
+        variableValues.forEach((v, i) => { variablesRecord[`{{${i + 1}}}`] = v; });
+
+        // Send via existing template pipeline (adds to send_queue + triggers whatsapp-sender)
+        await api.sendTemplateMessage(conversation.id, {
+          template: {
+            id: template.id,
+            name: template.name,
+            language: template.language || 'pt_BR',
+            category: template.category || 'MARKETING',
+            components: template.components || [],
+          },
+          variables: variablesRecord,
+          interpolatedBody,
+        });
+
+        // Log success
+        await supabase.from('automation_logs').insert({
+          rule_id: rule.id,
+          event_id: null,
+          status: 'success',
+          result: {
+            trigger: 'pipeline.deal.won',
+            deal_id: dealId,
+            contact_id: deal.contact_id,
+            conversation_id: conversation.id,
+          },
+          executed_at: new Date().toISOString(),
+        });
+      } catch (ruleErr) {
+        console.error(`[Pipeline Automation] Rule ${rule.id} failed:`, ruleErr);
+        try {
+          await supabase.from('automation_logs').insert({
+            rule_id: rule.id,
+            event_id: null,
+            status: 'failed',
+            result: {
+              trigger: 'pipeline.deal.won',
+              deal_id: dealId,
+              error: ruleErr instanceof Error ? ruleErr.message : 'Unknown error',
+            },
+            executed_at: new Date().toISOString(),
+          });
+        } catch { /* ignore log failure */ }
+      }
+    }
+  } catch (err) {
+    console.error('[Pipeline Automation] Fatal error:', err);
+  }
+};
+
 // Helper functions for dashboard metrics
 const formatResponseTime = (ms: number): string => {
   if (!ms || ms === 0) return '0s';
@@ -1205,17 +1346,23 @@ export const api = {
    */
   moveDealStage: async (id: string, newStageId: string): Promise<void> => {
     const { ganhoId, perdidoId } = await getSystemStageIds();
-    
+
     // Build update object - clear won_at/lost_at if moving away from those stages
     const updates: Record<string, any> = { stage_id: newStageId };
-    
+
     if (newStageId !== ganhoId && newStageId !== perdidoId) {
       updates.won_at = null;
       updates.lost_at = null;
       updates.lost_reason = null;
       updates.stage = 'in_progress';
     }
-    
+
+    // If moving to Ganho via drag-and-drop, record the timestamp
+    if (newStageId === ganhoId) {
+      updates.stage = 'won';
+      updates.won_at = new Date().toISOString();
+    }
+
     const { error } = await supabase
       .from('deals')
       .update(updates)
@@ -1225,6 +1372,11 @@ export const api = {
       console.error('[API] Error moving deal stage:', error);
       throw error;
     }
+
+    // Fire pipeline automations when deal is dragged to Ganho
+    if (newStageId === ganhoId) {
+      firePipelineAutomations(id);
+    }
   },
 
   /**
@@ -1232,25 +1384,28 @@ export const api = {
    */
   markDealWon: async (dealId: string): Promise<void> => {
     const { ganhoId } = await getSystemStageIds();
-    
+
     if (!ganhoId) {
       console.error('[API] Ganho stage not found');
       throw new Error('Stage "Ganho" not found in pipeline');
     }
-    
+
     const { error } = await supabase
       .from('deals')
-      .update({ 
+      .update({
         stage: 'won',
         stage_id: ganhoId,
         won_at: new Date().toISOString()
       })
       .eq('id', dealId);
-      
+
     if (error) {
       console.error('[API] Error marking deal as won:', error);
       throw error;
     }
+
+    // Fire pipeline automations after marking deal as won
+    firePipelineAutomations(dealId);
   },
 
   /**
