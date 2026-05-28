@@ -1830,7 +1830,7 @@ const ChatInterface: React.FC = () => {
 
             {/* Input Area */}
             {chatTab === 'finished' ? (
-              <div className="p-4 bg-slate-900/90 border-t border-slate-800 backdrop-blur-sm z-10">
+              <div className="p-4 pb-safe bg-slate-900/90 border-t border-slate-800 backdrop-blur-sm z-10">
                 <div className="max-w-4xl mx-auto flex items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-950/60 border border-slate-800">
                   <div className="flex items-center gap-3 text-sm text-slate-400">
                     <XCircle className="w-5 h-5 text-rose-400" />
@@ -1848,7 +1848,7 @@ const ChatInterface: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="p-4 bg-slate-900/90 border-t border-slate-800 backdrop-blur-sm z-10">
+              <div className="p-4 pb-safe bg-slate-900/90 border-t border-slate-800 backdrop-blur-sm z-10">
                 {/* Hidden file inputs */}
                 <input
                   ref={imageInputRef}

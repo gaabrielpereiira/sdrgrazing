@@ -112,3 +112,20 @@
   height: 100vh;
   height: 100dvh;
 }
+
+/* Impede scroll da página inteira no mobile — só áreas internas devem scrollar */
+html, body {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Padding seguro para elementos na base da tela (home bar do iPhone) */
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+}
