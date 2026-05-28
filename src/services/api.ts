@@ -84,7 +84,20 @@ const firePipelineAutomations = async (dealId: string): Promise<void> => {
     const contactPhone: string = contact?.phone_number || '';
     const contactEmail: string = contact?.email || '';
 
-    // 3. Build variable-interpolation context
+    // 3. Fetch last order for this contact
+    let lastOrder: any = null;
+    if (deal.contact_id) {
+      const { data: orderData } = await supabase
+        .from('orders')
+        .select('woo_order_id, status, total, currency')
+        .eq('contact_id', deal.contact_id)
+        .order('order_created_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+      lastOrder = orderData;
+    }
+
+    // 4. Build variable-interpolation context
     const context: Record<string, string> = {
       'deal.title':   deal.title   || '',
       'deal.company': deal.company || '',
@@ -93,9 +106,15 @@ const firePipelineAutomations = async (dealId: string): Promise<void> => {
       'contact.name':  contactName,
       'contact.phone': contactPhone,
       'contact.email': contactEmail,
+      'order.number': lastOrder ? String(lastOrder.woo_order_id) : '',
+      'order.total':  lastOrder
+        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+            .format(Number(lastOrder.total) || 0)
+        : '',
+      'order.status': lastOrder?.status || '',
     };
 
-    // 4. Find the contact's most-recent conversation
+    // 5. Find the contact's most-recent conversation
     if (!deal.contact_id) {
       console.warn('[Pipeline Automation] Deal has no contact_id — cannot send WhatsApp');
       return;
@@ -114,7 +133,7 @@ const firePipelineAutomations = async (dealId: string): Promise<void> => {
       return;
     }
 
-    // 5. Execute each matching rule
+    // 6. Execute each matching rule
     for (const rule of rules) {
       if (rule.action_type !== 'whatsapp_message') continue;
       const cfg: Record<string, any> = rule.action_config || {};

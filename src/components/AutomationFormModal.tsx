@@ -104,7 +104,10 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
     if (isPipeline) {
       if (/(ol[áa]|nome|cliente|sr[a]?\.?)/.test(ctx)) return 'contact.name';
       if (/(empresa|compan)/.test(ctx)) return 'deal.company';
-      if (/(total|valor|pre[çc]o|r\$|deal)/.test(ctx)) return 'deal.value';
+      if (/(pedido|order|n[úu]mero|n[º°]|#)/.test(ctx)) return 'order.number';
+      if (/(total|valor|pre[çc]o|r\$)/.test(ctx)) return 'order.total';
+      if (/(status|situa[çc][ãa]o)/.test(ctx)) return 'order.status';
+      if (/(deal|oportunidade)/.test(ctx)) return 'deal.value';
       if (/(telefone|whats|celular)/.test(ctx)) return 'contact.phone';
       if (/(email|e-mail)/.test(ctx)) return 'contact.email';
       return '';

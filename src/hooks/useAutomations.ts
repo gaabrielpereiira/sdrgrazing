@@ -119,6 +119,11 @@ export const PIPELINE_FIELDS: WebhookFieldGroup[] = [
     { path: 'contact.phone', label: 'Telefone' },
     { path: 'contact.email', label: 'E-mail' },
   ]},
+  { group: 'Último Pedido', items: [
+    { path: 'order.number',  label: 'Número do pedido' },
+    { path: 'order.total',   label: 'Total do pedido' },
+    { path: 'order.status',  label: 'Status do pedido' },
+  ]},
 ];
 
 export const PIPELINE_FIELD_SUGGESTIONS = PIPELINE_FIELDS.flatMap(g => g.items.map(i => i.path));
