@@ -142,13 +142,15 @@ async function findOrCreateContact(supabase: any, phone: string, payload: any) {
     }
   }
   if (matchingIds.length > 1) {
-    // Multiple duplicate contacts — pick the one with the most-recent active conversation.
+    // Multiple duplicate contacts — pick the one with the OLDEST active conversation.
+    // The original contact (real history) always has the oldest conversation.
+    // Duplicates created by automation bugs are always newer.
     const { data: convContact } = await supabase
       .from('conversations')
       .select('contact_id')
       .in('contact_id', matchingIds)
       .eq('is_active', true)
-      .order('last_message_at', { ascending: false })
+      .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle();
     const preferredId = convContact?.contact_id ?? matchingIds[0];
@@ -191,12 +193,15 @@ async function findOrCreateConversation(supabase: any, contactId: string, phone?
 
   const ids = [...contactIds];
 
-  // Find the most-recent active conversation among all matching contacts.
+  // Find the OLDEST active conversation among all matching contacts.
+  // The original conversation (real chat history) is always the oldest.
+  // Duplicate conversations created by the automation bug are always newer,
+  // so ascending order by created_at consistently picks the correct one.
   const { data: existing } = await supabase
     .from('conversations').select('id')
     .in('contact_id', ids)
     .eq('is_active', true)
-    .order('last_message_at', { ascending: false })
+    .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
 
@@ -574,6 +579,9 @@ async function scheduleRetry(supabase: any, event: any, errorMsg: string) {
   console.log(`[runner] event ${event.id} retry ${attempt}/${MAX_RETRIES} scheduled at ${next}`);
 }
 
+// Version tag — update this to confirm a new deployment is running in Supabase logs.
+const RUNNER_VERSION = '2026-05-29-v4';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -581,6 +589,8 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    console.log(`[runner] version=${RUNNER_VERSION} start`);
 
     let body: any = {};
     try { body = await req.json(); } catch { body = {}; }
