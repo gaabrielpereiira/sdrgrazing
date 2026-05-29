@@ -97,8 +97,26 @@ function renderTemplate(tpl: string, payload: any): string {
   });
 }
 
+/**
+ * Returns all contact IDs that match any variant of the given phone number.
+ * Uses a single OR query across phone_number and whatsapp_id for all variants.
+ * This handles duplicates created before the normalisation fix was deployed.
+ */
+async function contactIdsByPhone(supabase: any, phone: string): Promise<string[]> {
+  const variants = phoneVariants(phone);
+  const orParts = variants.flatMap(v => [
+    `phone_number.eq.${v}`,
+    `whatsapp_id.eq.${v}`,
+  ]);
+  const { data } = await supabase
+    .from('contacts')
+    .select('id')
+    .or(orParts.join(','));
+  return (data || []).map((r: any) => r.id).filter(Boolean);
+}
+
 async function findOrCreateContact(supabase: any, phone: string, payload: any) {
-  // 1. Try by email first — most reliable identifier, unaffected by phone format differences.
+  // 1. Try by email first — most reliable, unaffected by phone format variations.
   const email =
     getByPath(payload, 'billing.email') ||
     getByPath(payload, 'email') ||
@@ -112,26 +130,36 @@ async function findOrCreateContact(supabase: any, phone: string, payload: any) {
     }
   }
 
-  // 2. Try all phone variants (with/without country code 55) so that a contact created
-  // via WhatsApp (5511957065883) is matched even when WooCommerce sends the local
-  // format without the country code (11957065883).
-  const variants = phoneVariants(phone);
-  for (const v of variants) {
-    const { data: byPhone } = await supabase
-      .from('contacts').select('id, name').eq('phone_number', v).maybeSingle();
-    if (byPhone) {
-      console.log(`[runner] findOrCreateContact: matched by phone_number=${v} id=${byPhone.id}`);
-      return byPhone;
+  // 2. Find ALL contacts that have any variant of this phone number in a single query.
+  //    When duplicates exist (e.g. 11999614268 vs 5511999614268), we prefer the contact
+  //    that already has an active conversation — that is the one with the real chat history.
+  const matchingIds = await contactIdsByPhone(supabase, phone);
+  if (matchingIds.length === 1) {
+    const { data: c } = await supabase.from('contacts').select('id, name').eq('id', matchingIds[0]).maybeSingle();
+    if (c) {
+      console.log(`[runner] findOrCreateContact: single match id=${c.id}`);
+      return c;
     }
-    const { data: byWa } = await supabase
-      .from('contacts').select('id, name').eq('whatsapp_id', v).maybeSingle();
-    if (byWa) {
-      console.log(`[runner] findOrCreateContact: matched by whatsapp_id=${v} id=${byWa.id}`);
-      return byWa;
+  }
+  if (matchingIds.length > 1) {
+    // Multiple duplicate contacts — pick the one with the most-recent active conversation.
+    const { data: convContact } = await supabase
+      .from('conversations')
+      .select('contact_id')
+      .in('contact_id', matchingIds)
+      .eq('is_active', true)
+      .order('last_message_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const preferredId = convContact?.contact_id ?? matchingIds[0];
+    const { data: c } = await supabase.from('contacts').select('id, name').eq('id', preferredId).maybeSingle();
+    if (c) {
+      console.log(`[runner] findOrCreateContact: preferred among ${matchingIds.length} duplicates id=${c.id}`);
+      return c;
     }
   }
 
-  // 3. Not found — create with canonical phone (includes country code for WhatsApp delivery)
+  // 3. Not found — create with canonical phone (includes country code for WhatsApp delivery).
   const canonical = canonicalPhone(phone);
   const name =
     [getByPath(payload, 'billing.first_name'), getByPath(payload, 'billing.last_name')]
@@ -148,33 +176,22 @@ async function findOrCreateContact(supabase: any, phone: string, payload: any) {
 /**
  * Find or create an active conversation for a contact.
  *
- * The `phone` parameter is used to look up *all* contacts that share any
- * variant of the same number (e.g. with/without country code 55).  This
- * handles the case where the database contains duplicate contact records
- * created before the phone-normalisation fix was deployed: instead of
- * always creating a new conversation, we reuse the most-recent active
- * conversation found across ALL contacts that map to the same phone number.
+ * The `phone` parameter expands the search to ALL contacts that share any
+ * variant of the same number. This handles legacy duplicate contact records:
+ * instead of creating a new conversation, we reuse the most-recent active
+ * conversation found across ALL contacts that map to the same phone.
  */
 async function findOrCreateConversation(supabase: any, contactId: string, phone?: string) {
-  // Collect all contact IDs that correspond to this phone number (any format).
-  // Start with the contact we already resolved.
+  // Collect all contact IDs for this phone number (any format).
   const contactIds = new Set<string>([contactId]);
-
   if (phone) {
-    const variants = phoneVariants(phone);
-    for (const v of variants) {
-      const { data: byP } = await supabase
-        .from('contacts').select('id').eq('phone_number', v).maybeSingle();
-      if (byP?.id) contactIds.add(byP.id);
-
-      const { data: byW } = await supabase
-        .from('contacts').select('id').eq('whatsapp_id', v).maybeSingle();
-      if (byW?.id) contactIds.add(byW.id);
-    }
+    const extras = await contactIdsByPhone(supabase, phone);
+    extras.forEach(id => contactIds.add(id));
   }
 
-  // Find the most-recent active conversation for any of those contacts.
   const ids = [...contactIds];
+
+  // Find the most-recent active conversation among all matching contacts.
   const { data: existing } = await supabase
     .from('conversations').select('id')
     .in('contact_id', ids)
@@ -184,11 +201,11 @@ async function findOrCreateConversation(supabase: any, contactId: string, phone?
     .maybeSingle();
 
   if (existing) {
-    console.log(`[runner] findOrCreateConversation: reusing conv=${existing.id} (searched ${ids.length} contact(s))`);
+    console.log(`[runner] findOrCreateConversation: reusing conv=${existing.id} (${ids.length} contact(s) searched)`);
     return existing;
   }
 
-  // No active conversation found — create one under the canonical contact.
+  // No active conversation — create one under the canonical contact.
   const { data: created, error } = await supabase
     .from('conversations')
     .insert({ contact_id: contactId, status: 'nina', queue: 'sales', is_active: true })
@@ -196,7 +213,7 @@ async function findOrCreateConversation(supabase: any, contactId: string, phone?
 
   if (error) {
     if ((error as any).code === '23505') {
-      // Race condition: another process just created one — fetch it.
+      // Race condition: another insert just won — fetch the winner.
       const { data: existing2 } = await supabase
         .from('conversations').select('id')
         .in('contact_id', ids).eq('is_active', true).maybeSingle();
