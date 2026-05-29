@@ -98,20 +98,40 @@ function renderTemplate(tpl: string, payload: any): string {
 }
 
 async function findOrCreateContact(supabase: any, phone: string, payload: any) {
-  // Try all phone variants (with/without country code 55) so that a contact created
+  // 1. Try by email first — most reliable identifier, unaffected by phone format differences.
+  const email =
+    getByPath(payload, 'billing.email') ||
+    getByPath(payload, 'email') ||
+    null;
+  if (email && typeof email === 'string' && email.includes('@')) {
+    const { data: byEmail } = await supabase
+      .from('contacts').select('id, name').eq('email', email).maybeSingle();
+    if (byEmail) {
+      console.log(`[runner] findOrCreateContact: matched by email=${email} id=${byEmail.id}`);
+      return byEmail;
+    }
+  }
+
+  // 2. Try all phone variants (with/without country code 55) so that a contact created
   // via WhatsApp (5511957065883) is matched even when WooCommerce sends the local
   // format without the country code (11957065883).
   const variants = phoneVariants(phone);
   for (const v of variants) {
     const { data: byPhone } = await supabase
       .from('contacts').select('id, name').eq('phone_number', v).maybeSingle();
-    if (byPhone) return byPhone;
+    if (byPhone) {
+      console.log(`[runner] findOrCreateContact: matched by phone_number=${v} id=${byPhone.id}`);
+      return byPhone;
+    }
     const { data: byWa } = await supabase
       .from('contacts').select('id, name').eq('whatsapp_id', v).maybeSingle();
-    if (byWa) return byWa;
+    if (byWa) {
+      console.log(`[runner] findOrCreateContact: matched by whatsapp_id=${v} id=${byWa.id}`);
+      return byWa;
+    }
   }
 
-  // Not found — create with canonical phone (includes country code for WhatsApp delivery)
+  // 3. Not found — create with canonical phone (includes country code for WhatsApp delivery)
   const canonical = canonicalPhone(phone);
   const name =
     [getByPath(payload, 'billing.first_name'), getByPath(payload, 'billing.last_name')]
@@ -121,25 +141,70 @@ async function findOrCreateContact(supabase: any, phone: string, payload: any) {
     .from('contacts').insert({ phone_number: canonical, name, whatsapp_id: canonical })
     .select('id, name').single();
   if (error) throw new Error(`contact insert: ${error.message}`);
+  console.log(`[runner] findOrCreateContact: created new contact id=${created.id} phone=${canonical}`);
   return created;
 }
 
-async function findOrCreateConversation(supabase: any, contactId: string) {
+/**
+ * Find or create an active conversation for a contact.
+ *
+ * The `phone` parameter is used to look up *all* contacts that share any
+ * variant of the same number (e.g. with/without country code 55).  This
+ * handles the case where the database contains duplicate contact records
+ * created before the phone-normalisation fix was deployed: instead of
+ * always creating a new conversation, we reuse the most-recent active
+ * conversation found across ALL contacts that map to the same phone number.
+ */
+async function findOrCreateConversation(supabase: any, contactId: string, phone?: string) {
+  // Collect all contact IDs that correspond to this phone number (any format).
+  // Start with the contact we already resolved.
+  const contactIds = new Set<string>([contactId]);
+
+  if (phone) {
+    const variants = phoneVariants(phone);
+    for (const v of variants) {
+      const { data: byP } = await supabase
+        .from('contacts').select('id').eq('phone_number', v).maybeSingle();
+      if (byP?.id) contactIds.add(byP.id);
+
+      const { data: byW } = await supabase
+        .from('contacts').select('id').eq('whatsapp_id', v).maybeSingle();
+      if (byW?.id) contactIds.add(byW.id);
+    }
+  }
+
+  // Find the most-recent active conversation for any of those contacts.
+  const ids = [...contactIds];
   const { data: existing } = await supabase
-    .from('conversations').select('id').eq('contact_id', contactId).eq('is_active', true)
-    .order('last_message_at', { ascending: false }).limit(1).maybeSingle();
-  if (existing) return existing;
+    .from('conversations').select('id')
+    .in('contact_id', ids)
+    .eq('is_active', true)
+    .order('last_message_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    console.log(`[runner] findOrCreateConversation: reusing conv=${existing.id} (searched ${ids.length} contact(s))`);
+    return existing;
+  }
+
+  // No active conversation found — create one under the canonical contact.
   const { data: created, error } = await supabase
-    .from('conversations').insert({ contact_id: contactId, status: 'nina', queue: 'sales', is_active: true })
+    .from('conversations')
+    .insert({ contact_id: contactId, status: 'nina', queue: 'sales', is_active: true })
     .select('id').single();
+
   if (error) {
     if ((error as any).code === '23505') {
+      // Race condition: another process just created one — fetch it.
       const { data: existing2 } = await supabase
-        .from('conversations').select('id').eq('contact_id', contactId).eq('is_active', true).maybeSingle();
+        .from('conversations').select('id')
+        .in('contact_id', ids).eq('is_active', true).maybeSingle();
       if (existing2) return existing2;
     }
     throw new Error(`conversation insert: ${error.message}`);
   }
+  console.log(`[runner] findOrCreateConversation: created new conv=${created.id}`);
   return created;
 }
 
@@ -181,7 +246,7 @@ async function actionWhatsapp(supabase: any, rule: any, event: any) {
   variablePaths.forEach((p, i) => { const v = getByPath(event.payload, p); vars[String(i + 1)] = v == null ? '' : String(v); });
 
   const contact = await findOrCreateContact(supabase, phone, event.payload);
-  const conversation = await findOrCreateConversation(supabase, contact.id);
+  const conversation = await findOrCreateConversation(supabase, contact.id, phone);
 
   const previewBody = (tpl.components || []).find((c: any) => (c.type || '').toUpperCase() === 'BODY')?.text || tpl.name;
   const previewText = String(previewBody).replace(/\{\{(\d+)\}\}/g, (_m, n) => vars[String(n)] ?? '');
