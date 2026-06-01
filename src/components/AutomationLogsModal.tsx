@@ -56,7 +56,7 @@ const AutomationLogsModal: React.FC<Props> = ({ isOpen, onClose, rule }) => {
           {STATUS_FILTERS.map(s => (
             <button key={s} onClick={() => setFilter(s)}
               className={`px-3 py-1 rounded-full text-xs font-medium ${
-                filter === s ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200'
+                filter === s ? 'bg-brand-gold-500/20 text-brand-gold-300' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200'
               }`}>
               {s === 'all' ? 'Todos' : s === 'success' ? 'Sucesso' : s === 'failed' ? 'Falhas' : 'Ignorados'}
             </button>
@@ -65,7 +65,7 @@ const AutomationLogsModal: React.FC<Props> = ({ isOpen, onClose, rule }) => {
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-5">
           {loading ? (
-            <div className="flex justify-center p-8"><Loader2 className="w-5 h-5 animate-spin text-cyan-400" /></div>
+            <div className="flex justify-center p-8"><Loader2 className="w-5 h-5 animate-spin text-brand-gold-400" /></div>
           ) : logs.length === 0 ? (
             <p className="text-center text-sm text-slate-500 py-8">Nenhuma execução ainda.</p>
           ) : (

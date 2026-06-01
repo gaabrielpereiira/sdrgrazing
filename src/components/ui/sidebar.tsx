@@ -117,12 +117,12 @@ export const DesktopSidebar = ({
         className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 
                    bg-slate-800 border border-slate-700 rounded-full 
                    hidden md:flex items-center justify-center
-                   hover:bg-slate-700 hover:border-cyan-500/50 
+                   hover:bg-slate-700 hover:border-brand-gold-500/50 
                    transition-all shadow-lg z-50 group"
       >
         <ChevronLeft 
           className={cn(
-            "w-4 h-4 text-slate-400 group-hover:text-cyan-400 transition-all duration-300",
+            "w-4 h-4 text-slate-400 group-hover:text-brand-gold-400 transition-all duration-300",
             !open && "rotate-180"
           )} 
         />
@@ -147,7 +147,7 @@ export const MobileSidebar = ({
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="p-3 -mr-2 text-slate-200 hover:text-cyan-400 transition-colors"
+          className="p-3 -mr-2 text-slate-200 hover:text-brand-gold-400 transition-colors"
           aria-label="Abrir menu"
         >
           <Menu className="w-6 h-6" />
@@ -157,7 +157,7 @@ export const MobileSidebar = ({
         <div className="md:hidden fixed inset-0 bg-slate-950 p-10 z-[200] flex flex-col justify-between">
           <button
             type="button"
-            className="absolute right-10 top-10 p-2 text-slate-200 hover:text-cyan-400 transition-colors"
+            className="absolute right-10 top-10 p-2 text-slate-200 hover:text-brand-gold-400 transition-colors"
             onClick={() => setOpen(false)}
             aria-label="Fechar menu"
           >
@@ -191,18 +191,18 @@ export const SidebarLink = ({
       className={cn(
         "flex items-center justify-start gap-3 group/sidebar py-3 px-3 rounded-xl transition-all duration-200 relative overflow-hidden",
         isActive
-          ? "bg-slate-800/80 text-cyan-400 shadow-lg shadow-black/20 ring-1 ring-slate-700/50"
+          ? "bg-slate-800/80 text-brand-gold-400 shadow-lg shadow-black/20 ring-1 ring-slate-700/50"
           : "text-slate-400 hover:bg-slate-800/40 hover:text-slate-200",
         className
       )}
       {...props}
     >
       {isActive && (
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-cyan-500 rounded-l-md shadow-[0_0_10px_rgba(6,182,212,0.5)]" />
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-gold-500 rounded-l-md shadow-[0_0_10px_rgba(6,182,212,0.5)]" />
       )}
       <span className={cn(
         "flex-shrink-0 transition-colors",
-        isActive ? "text-cyan-400" : "text-slate-500 group-hover/sidebar:text-slate-300"
+        isActive ? "text-brand-gold-400" : "text-slate-500 group-hover/sidebar:text-slate-300"
       )}>
         {link.icon}
       </span>
@@ -217,7 +217,7 @@ export const SidebarLink = ({
         }}
         className={cn(
           "text-sm font-medium group-hover/sidebar:translate-x-1 transition duration-150 whitespace-pre",
-          isActive && "text-cyan-50"
+          isActive && "text-brand-gold-50"
         )}
       >
         {link.label}

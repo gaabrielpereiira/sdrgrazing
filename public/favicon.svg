@@ -1,0 +1,24 @@
+<svg viewBox="0 0 56 82" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="56" height="82" rx="12" fill="#252A35"/>
+  <!-- U-bracket -->
+  <path d="M10 6 L10 46 C10 57 28 63 28 63 C28 63 46 57 46 46 L46 6"
+        stroke="#B3A369" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="28" y1="63" x2="28" y2="74"
+        stroke="#B3A369" stroke-width="4" stroke-linecap="round"/>
+  <!-- Stem -->
+  <line x1="28" y1="57" x2="28" y2="20"
+        stroke="#B3A369" stroke-width="2.2" stroke-linecap="round"/>
+  <!-- Lower leaves -->
+  <path d="M28 51 C23 44 18 40 18 35" stroke="#B3A369" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <path d="M28 51 C33 44 38 40 38 35" stroke="#B3A369" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <!-- Mid leaves -->
+  <path d="M28 41 C23 34 18 28 19 24" stroke="#B3A369" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <path d="M28 41 C33 34 38 28 37 24" stroke="#B3A369" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <!-- Upper leaves -->
+  <path d="M28 31 C24 24 22 18 23 14" stroke="#B3A369" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <path d="M28 31 C32 24 34 18 33 14" stroke="#B3A369" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <!-- Grain kernels -->
+  <path d="M28 21 C26 16 26 10 28 6 C30 10 30 16 28 21 Z" stroke="#B3A369" stroke-width="2" stroke-linejoin="round" fill="none"/>
+  <path d="M28 21 C24 17 22 11 24 7 C27 11 28 17 28 21 Z" stroke="#B3A369" stroke-width="2" stroke-linejoin="round" fill="none"/>
+  <path d="M28 21 C32 17 34 11 32 7 C29 11 28 17 28 21 Z" stroke="#B3A369" stroke-width="2" stroke-linejoin="round" fill="none"/>
+</svg>

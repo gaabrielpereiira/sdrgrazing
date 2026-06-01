@@ -157,7 +157,7 @@ export const TemplatePickerModal: React.FC<Props> = ({ open, onClose, onSend }) 
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Buscar template..."
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-cyan-500/40"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-brand-gold-500/40"
                 />
               </div>
               <div className="flex gap-1.5 flex-wrap">
@@ -167,7 +167,7 @@ export const TemplatePickerModal: React.FC<Props> = ({ open, onClose, onSend }) 
                     onClick={() => setCategory(c)}
                     className={`text-[11px] px-2.5 py-1 rounded-full border transition ${
                       category === c
-                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
+                        ? 'bg-brand-gold-500/20 text-brand-gold-300 border-brand-gold-500/50'
                         : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
                     }`}
                   >
@@ -189,7 +189,7 @@ export const TemplatePickerModal: React.FC<Props> = ({ open, onClose, onSend }) 
                   <Link
                     to="/templates"
                     onClick={onClose}
-                    className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300"
+                    className="inline-flex items-center gap-1.5 text-xs text-brand-gold-400 hover:text-brand-gold-300"
                   >
                     Ir para Templates WhatsApp <ExternalLink className="w-3 h-3" />
                   </Link>
@@ -206,7 +206,7 @@ export const TemplatePickerModal: React.FC<Props> = ({ open, onClose, onSend }) 
                             setVariables({});
                           }}
                           className={`w-full text-left px-4 py-3 transition ${
-                            isActive ? 'bg-cyan-500/10' : 'hover:bg-slate-800/50'
+                            isActive ? 'bg-brand-gold-500/10' : 'hover:bg-slate-800/50'
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -273,7 +273,7 @@ export const TemplatePickerModal: React.FC<Props> = ({ open, onClose, onSend }) 
                                 setVariables((v) => ({ ...v, [String(n)]: e.target.value }))
                               }
                               placeholder={`Valor para {{${n}}}`}
-                              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-cyan-500/40"
+                              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-brand-gold-500/40"
                             />
                           </div>
                         ))}

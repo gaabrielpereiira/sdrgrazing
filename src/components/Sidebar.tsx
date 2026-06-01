@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
 import { LayoutDashboard, MessageSquare, Users, Settings as SettingsIcon, LogOut, ShieldCheck, Calendar, Kanban, FileText, Zap } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { useAuth } from '@/hooks/useAuth';
 import { Sidebar, SidebarBody, SidebarLink, useSidebar } from '@/components/ui/sidebar';
-import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import viaIcon from '@/assets/icon-via.png';
-import viaLogoWhite from '@/assets/logo-via-white.png';
+import { BrandLogo, GrazingMark } from '@/components/BrandLogo';
 import { NotificationsBell } from '@/components/NotificationsBell';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -26,43 +23,22 @@ const menuItems: { id: string; label: string; icon: any; roles: MenuRole[] }[] =
   { id: 'settings', label: 'Configurações', icon: SettingsIcon, roles: ['admin'] },
 ];
 
-const Logo = ({ companyName }: { companyName: string }) => {
-  return (
-    <Link to="/dashboard" className="flex items-center space-x-3 py-1">
-      <div className="relative w-10 h-10 flex items-center justify-center flex-shrink-0">
-        <div className="absolute inset-0 bg-primary/20 blur-lg rounded-full" />
-        <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20 p-1.5">
-          <img src={viaIcon} alt="Logo" className="w-full h-full object-contain" />
-        </div>
-      </div>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.2 }}
-        className="flex flex-col overflow-hidden"
-      >
-        <span className="font-bold text-lg tracking-tight text-foreground whitespace-nowrap">{companyName || 'Minha Empresa'}</span>
-        <span className="text-[10px] uppercase tracking-wider text-primary font-semibold">Workspace</span>
-      </motion.div>
-    </Link>
-  );
-};
+const Logo = () => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    transition={{ duration: 0.2 }}
+    className="py-1"
+  >
+    <BrandLogo variant="full" size={36} />
+  </motion.div>
+);
 
-const LogoIcon = () => {
-  return (
-    <Link to="/dashboard" className="flex items-center py-1">
-      <div className="relative w-10 h-10 flex items-center justify-center flex-shrink-0">
-        <div className="absolute inset-0 bg-primary/20 blur-lg rounded-full" />
-        <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20 p-1.5">
-          <img src={viaIcon} alt="Logo" className="w-full h-full object-contain" />
-        </div>
-      </div>
-    </Link>
-  );
-};
+const LogoIcon = () => (
+  <BrandLogo variant="icon" size={36} className="py-1" />
+);
 
 const SidebarContent = () => {
-  const { companyName } = useCompanySettings();
   const { user, signOut, role } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -108,7 +84,7 @@ const SidebarContent = () => {
     <>
       <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
         <div className="mb-6">
-          {open ? <Logo companyName={companyName} /> : <LogoIcon />}
+          {open ? <Logo /> : <LogoIcon />}
         </div>
         
         <nav className="flex flex-col gap-1.5">
@@ -126,26 +102,10 @@ const SidebarContent = () => {
         </nav>
       </div>
 
-      {/* VIA Logo - Footer */}
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-          className="py-4 flex justify-center"
-        >
-          <img 
-            src={viaLogoWhite} 
-            alt="VIA" 
-            className="h-6 opacity-60 hover:opacity-100 transition-opacity"
-          />
-        </motion.div>
-      )}
-
       {/* User Footer */}
       <div className="border-t border-border/50 pt-4">
         <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer group">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary/20 to-secondary flex items-center justify-center text-xs font-bold text-primary border border-border ring-2 ring-transparent group-hover:ring-primary/20 transition-all flex-shrink-0">
+          <div className="w-9 h-9 rounded-full bg-brand-gold-900/50 flex items-center justify-center text-xs font-bold text-brand-gold-400 border border-brand-gold-700/40 ring-2 ring-transparent group-hover:ring-brand-gold-500/20 transition-all flex-shrink-0">
             {getUserInitials()}
           </div>
           <motion.div

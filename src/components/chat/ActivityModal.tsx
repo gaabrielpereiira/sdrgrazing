@@ -105,7 +105,7 @@ export const ActivityModal: React.FC<Props> = ({ open, onOpenChange, conversatio
                     onClick={() => setType(t.value)}
                     className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-xs transition-colors ${
                       active
-                        ? 'border-cyan-500 bg-cyan-500/10 text-cyan-300'
+                        ? 'border-brand-gold-500 bg-brand-gold-500/10 text-brand-gold-300'
                         : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-600'
                     }`}
                   >
@@ -166,7 +166,7 @@ export const ActivityModal: React.FC<Props> = ({ open, onOpenChange, conversatio
             <select
               value={assignedTo}
               onChange={e => setAssignedTo(e.target.value)}
-              className="w-full h-10 rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              className="w-full h-10 rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold-500"
             >
               <option value="">— Ninguém —</option>
               {members.map(m => (
@@ -179,7 +179,7 @@ export const ActivityModal: React.FC<Props> = ({ open, onOpenChange, conversatio
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving || !title.trim()} className="bg-cyan-600 hover:bg-cyan-500 text-white">
+            <Button type="submit" disabled={saving || !title.trim()} className="bg-brand-gold-600 hover:bg-brand-gold-500 text-white">
               {saving ? 'Salvando…' : 'Agendar'}
             </Button>
           </DialogFooter>

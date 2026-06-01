@@ -85,7 +85,7 @@ const WebhookEndpointCard: React.FC<Props> = ({ onSimulate }) => {
   if (loading) {
     return (
       <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/50 p-6 flex items-center justify-center">
-        <Loader2 className="w-5 h-5 animate-spin text-cyan-500" />
+        <Loader2 className="w-5 h-5 animate-spin text-brand-gold-500" />
       </div>
     );
   }
@@ -99,7 +99,7 @@ const WebhookEndpointCard: React.FC<Props> = ({ onSimulate }) => {
         className="w-full flex items-center justify-between p-4 hover:bg-slate-900/80 transition-colors"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0">
+          <div className="p-2 rounded-lg bg-brand-gold-500/10 text-brand-gold-400 shrink-0">
             <Webhook className="w-5 h-5" />
           </div>
           <div className="text-left min-w-0">
@@ -134,7 +134,7 @@ const WebhookEndpointCard: React.FC<Props> = ({ onSimulate }) => {
                 readOnly
                 value={webhookUrl}
                 onClick={(e) => (e.target as HTMLInputElement).select()}
-                className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 font-mono focus:outline-none focus:border-cyan-500"
+                className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 font-mono focus:outline-none focus:border-brand-gold-500"
               />
               <Button variant="ghost" size="sm" onClick={copyUrl} className="gap-2 shrink-0">
                 {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -152,7 +152,7 @@ const WebhookEndpointCard: React.FC<Props> = ({ onSimulate }) => {
                   value={secret}
                   onChange={(e) => setSecret(e.target.value)}
                   placeholder="Gere ou cole o mesmo Secret usado no site"
-                  className="w-full px-3 py-2 pr-10 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono focus:outline-none focus:border-cyan-500"
+                  className="w-full px-3 py-2 pr-10 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono focus:outline-none focus:border-brand-gold-500"
                 />
                 <button
                   type="button"

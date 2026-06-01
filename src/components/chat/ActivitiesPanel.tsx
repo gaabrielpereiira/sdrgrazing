@@ -57,7 +57,7 @@ const ActivityItem: React.FC<{
       <div className="flex items-start gap-2">
         <div
           className={`w-7 h-7 shrink-0 rounded-md flex items-center justify-center ${
-            isDone ? 'bg-slate-700/50 text-slate-500' : overdue ? 'bg-rose-500/20 text-rose-400' : 'bg-cyan-500/15 text-cyan-400'
+            isDone ? 'bg-slate-700/50 text-slate-500' : overdue ? 'bg-rose-500/20 text-rose-400' : 'bg-brand-gold-500/15 text-brand-gold-400'
           }`}
         >
           <Icon className="w-3.5 h-3.5" />
@@ -151,7 +151,7 @@ export const ActivitiesPanel: React.FC<Props> = ({ conversationId, contactId, co
         </span>
         <button
           onClick={() => setModalOpen(true)}
-          className="text-cyan-500 hover:text-cyan-400 transition-colors"
+          className="text-brand-gold-500 hover:text-brand-gold-400 transition-colors"
           title="Nova atividade"
         >
           <Plus className="w-4 h-4" />
@@ -166,7 +166,7 @@ export const ActivitiesPanel: React.FC<Props> = ({ conversationId, contactId, co
           >
             Nenhuma atividade agendada.
             <br />
-            <span className="text-cyan-500">+ Criar lembrete</span>
+            <span className="text-brand-gold-500">+ Criar lembrete</span>
           </button>
         ) : (
           <>

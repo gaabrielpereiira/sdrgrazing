@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "check-grazing",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "cd /Users/gabrielpereira/Documents/taskshark && /Users/gabrielpereira/.bun/bin/bun run dev"],
+      "port": 8080
+    }
+  ]
+}

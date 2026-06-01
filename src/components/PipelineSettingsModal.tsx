@@ -28,7 +28,7 @@ interface PipelineSettingsModalProps {
 
 const STAGE_COLORS = [
   { value: 'border-slate-500', label: 'Cinza', preview: 'bg-slate-500' },
-  { value: 'border-cyan-500', label: 'Ciano', preview: 'bg-cyan-500' },
+  { value: 'border-brand-gold-500', label: 'Ciano', preview: 'bg-brand-gold-500' },
   { value: 'border-violet-500', label: 'Violeta', preview: 'bg-violet-500' },
   { value: 'border-orange-500', label: 'Laranja', preview: 'bg-orange-500' },
   { value: 'border-emerald-500', label: 'Verde', preview: 'bg-emerald-500' },

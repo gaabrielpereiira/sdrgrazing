@@ -68,7 +68,7 @@ const WooWebhookSettings: React.FC = () => {
   if (loading) {
     return (
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 flex items-center justify-center">
-        <Loader2 className="w-5 h-5 animate-spin text-cyan-500" />
+        <Loader2 className="w-5 h-5 animate-spin text-brand-gold-500" />
       </div>
     );
   }
@@ -79,7 +79,7 @@ const WooWebhookSettings: React.FC = () => {
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <ShoppingCart className="w-5 h-5 text-cyan-400" />
+          <ShoppingCart className="w-5 h-5 text-brand-gold-400" />
           <h3 className="font-semibold text-white">WooCommerce Webhook</h3>
         </div>
         <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
@@ -123,7 +123,7 @@ const WooWebhookSettings: React.FC = () => {
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
               placeholder="Cole o mesmo Secret configurado no WooCommerce"
-              className="w-full px-3 py-2 pr-10 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono focus:outline-none focus:border-cyan-500"
+              className="w-full px-3 py-2 pr-10 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono focus:outline-none focus:border-brand-gold-500"
             />
             <button
               type="button"

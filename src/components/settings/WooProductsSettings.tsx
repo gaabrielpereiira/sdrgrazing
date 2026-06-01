@@ -86,7 +86,7 @@ const WooProductsSettings: React.FC = () => {
   if (loading) {
     return (
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 flex items-center justify-center">
-        <Loader2 className="w-5 h-5 animate-spin text-cyan-500" />
+        <Loader2 className="w-5 h-5 animate-spin text-brand-gold-500" />
       </div>
     );
   }
@@ -97,7 +97,7 @@ const WooProductsSettings: React.FC = () => {
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Package className="w-5 h-5 text-cyan-400" />
+          <Package className="w-5 h-5 text-brand-gold-400" />
           <h3 className="font-semibold text-white">WooCommerce — Catálogo de Produtos</h3>
         </div>
         <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
@@ -121,7 +121,7 @@ const WooProductsSettings: React.FC = () => {
             value={siteUrl}
             onChange={(e) => setSiteUrl(e.target.value)}
             placeholder="https://sualoja.com.br"
-            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono focus:outline-none focus:border-cyan-500"
+            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono focus:outline-none focus:border-brand-gold-500"
           />
         </div>
 
@@ -132,7 +132,7 @@ const WooProductsSettings: React.FC = () => {
             value={consumerKey}
             onChange={(e) => setConsumerKey(e.target.value)}
             placeholder="ck_xxxxxxxxxxxxxxxxxxxxxxxx"
-            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono focus:outline-none focus:border-cyan-500"
+            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono focus:outline-none focus:border-brand-gold-500"
           />
         </div>
 
@@ -144,7 +144,7 @@ const WooProductsSettings: React.FC = () => {
               value={consumerSecret}
               onChange={(e) => setConsumerSecret(e.target.value)}
               placeholder="cs_xxxxxxxxxxxxxxxxxxxxxxxx"
-              className="w-full px-3 py-2 pr-10 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono focus:outline-none focus:border-cyan-500"
+              className="w-full px-3 py-2 pr-10 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 font-mono focus:outline-none focus:border-brand-gold-500"
             />
             <button
               type="button"
@@ -161,7 +161,7 @@ const WooProductsSettings: React.FC = () => {
             type="checkbox"
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-cyan-500 focus:ring-cyan-500"
+            className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-brand-gold-500 focus:ring-brand-gold-500"
           />
           <span className="text-sm text-slate-300">
             Permitir que a Nina consulte produtos durante as conversas

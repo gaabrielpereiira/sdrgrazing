@@ -114,7 +114,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
       <SheetContent className="overflow-y-auto w-full sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <Wand2 className="w-5 h-5 text-cyan-400" />
+            <Wand2 className="w-5 h-5 text-brand-gold-400" />
             Gerador de Prompt com IA
           </SheetTitle>
           <SheetDescription>
@@ -125,7 +125,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
         <div className="space-y-6 mt-6">
           {/* Informações Básicas */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-cyan-400 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-brand-gold-400 flex items-center gap-2">
               📋 Informações Básicas
             </h3>
             <div className="grid grid-cols-2 gap-4">
@@ -138,7 +138,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                   value={formData.sdr_name}
                   onChange={(e) => setFormData({ ...formData, sdr_name: e.target.value })}
                   placeholder="ex: Assistente"
-                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
                 />
               </div>
               <div className="space-y-2">
@@ -150,7 +150,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                   placeholder="ex: SDR, Closer, CS"
-                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
                 />
               </div>
             </div>
@@ -164,7 +164,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                   value={formData.company_name}
                   onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
                   placeholder="ex: Minha Empresa"
-                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
                 />
               </div>
               <div className="space-y-2">
@@ -176,7 +176,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                   value={formData.paper_type}
                   onChange={(e) => setFormData({ ...formData, paper_type: e.target.value })}
                   placeholder="ex: consultor amigo"
-                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
                 />
               </div>
             </div>
@@ -196,7 +196,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                 onChange={(e) => setFormData({ ...formData, personality: e.target.value })}
                 placeholder="ex: Profissional, consultivo, empático"
                 rows={2}
-                className="flex w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none"
+                className="flex w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 resize-none"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -205,7 +205,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                 <select
                   value={formData.tone}
                   onChange={(e) => setFormData({ ...formData, tone: e.target.value })}
-                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
                 >
                   <option value="formal">Formal</option>
                   <option value="informal">Informal</option>
@@ -221,7 +221,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                   value={formData.prohibited_terms}
                   onChange={(e) => setFormData({ ...formData, prohibited_terms: e.target.value })}
                   placeholder="ex: gírias, jargões"
-                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
                 />
               </div>
             </div>
@@ -239,14 +239,14 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                 value={formData.philosophy_name}
                 onChange={(e) => setFormData({ ...formData, philosophy_name: e.target.value })}
                 placeholder="ex: Venda Consultiva"
-                className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-300 flex justify-between">
                   <span>Lead fala</span>
-                  <span className="text-cyan-400 font-mono">{formData.lead_talk_percentage}%</span>
+                  <span className="text-brand-gold-400 font-mono">{formData.lead_talk_percentage}%</span>
                 </label>
                 <input
                   type="range"
@@ -261,7 +261,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-300 flex justify-between">
                   <span>Máximo de linhas</span>
-                  <span className="text-cyan-400 font-mono">{formData.max_lines}</span>
+                  <span className="text-brand-gold-400 font-mono">{formData.max_lines}</span>
                 </label>
                 <input
                   type="range"
@@ -290,7 +290,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                 onChange={(e) => setFormData({ ...formData, products: e.target.value })}
                 placeholder="ex: - Produto A: Valor X a Y (Prazo Z). Uso: [Casos de Uso]&#10;- Produto B: Valor X a Y. Benefício principal: [Benefício]"
                 rows={4}
-                className="flex w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none font-mono"
+                className="flex w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 resize-none font-mono"
               />
             </div>
             <div className="space-y-2">
@@ -302,7 +302,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                 onChange={(e) => setFormData({ ...formData, differentials: e.target.value })}
                 placeholder="ex: - Diferencial 1: [Descrição]&#10;- Diferencial 2: [Descrição]"
                 rows={3}
-                className="flex w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none font-mono"
+                className="flex w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 resize-none font-mono"
               />
             </div>
           </div>
@@ -318,7 +318,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                 <select
                   value={formData.conversion_action}
                   onChange={(e) => setFormData({ ...formData, conversion_action: e.target.value })}
-                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
                 >
                   <option value="Agendar reunião">Agendar reunião</option>
                   <option value="Agendar Demo">Agendar Demo</option>
@@ -333,7 +333,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                   value={formData.tools}
                   onChange={(e) => setFormData({ ...formData, tools: e.target.value })}
                   placeholder="ex: agendamento, reagendamento"
-                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  className="flex h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
                 />
               </div>
             </div>
@@ -344,7 +344,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
             <Button
               onClick={handleGenerate}
               disabled={loading}
-              className="w-full shadow-lg shadow-cyan-500/20"
+              className="w-full shadow-lg shadow-brand-gold-500/20"
               size="lg"
             >
               {loading ? (
@@ -365,7 +365,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
           {generatedPrompt && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-cyan-400">📝 Prompt Gerado</h3>
+                <h3 className="text-sm font-semibold text-brand-gold-400">📝 Prompt Gerado</h3>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -379,7 +379,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                 value={generatedPrompt}
                 onChange={(e) => setGeneratedPrompt(e.target.value)}
                 rows={12}
-                className="flex w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none font-mono"
+                className="flex w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 resize-none font-mono"
               />
               <div className="flex gap-3">
                 <Button
@@ -391,7 +391,7 @@ const PromptGeneratorSheet: React.FC<PromptGeneratorSheetProps> = ({
                 </Button>
                 <Button
                   onClick={handleUsePrompt}
-                  className="flex-1 shadow-lg shadow-cyan-500/20"
+                  className="flex-1 shadow-lg shadow-brand-gold-500/20"
                 >
                   ✅ Usar este prompt
                 </Button>

@@ -122,7 +122,7 @@ export function NotificationsBell({ collapsed = false }: NotificationsBellProps)
                         !n.is_read
                           ? isUrgent
                             ? 'bg-rose-500 animate-pulse'
-                            : 'bg-cyan-400'
+                            : 'bg-brand-gold-400'
                           : 'bg-slate-700'
                       }`}
                     />
@@ -145,7 +145,7 @@ export function NotificationsBell({ collapsed = false }: NotificationsBellProps)
                         </p>
                       )}
                       {n.conversation_id && (
-                        <div className="flex items-center gap-1 mt-1.5 text-[11px] text-cyan-400">
+                        <div className="flex items-center gap-1 mt-1.5 text-[11px] text-brand-gold-400">
                           <MessageSquare className="w-3 h-3" />
                           Abrir conversa
                         </div>

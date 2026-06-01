@@ -237,13 +237,13 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
           <div>
             <label className="text-xs font-medium text-slate-300 mb-1 block">Nome</label>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Confirmar pedido criado"
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 focus:outline-none focus:border-cyan-500" />
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50 focus:outline-none focus:border-brand-gold-500" />
           </div>
 
           {/* Quando */}
           <div className="border border-slate-800 rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 bg-cyan-500/10 text-cyan-400 text-xs rounded font-medium">QUANDO</span>
+              <span className="px-2 py-0.5 bg-brand-gold-500/10 text-brand-gold-400 text-xs rounded font-medium">QUANDO</span>
               <span className="text-sm text-slate-300">o evento ocorrer</span>
             </div>
             <select value={trigger} onChange={e => setTrigger(e.target.value)}
@@ -308,7 +308,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
             </Button>
             {conditions.some(c => c.operator === 'changed_to') && (
               <p className="text-xs text-slate-500">
-                <span className="text-cyan-400">mudou para</span> só dispara no momento exato em que o pedido entra
+                <span className="text-brand-gold-400">mudou para</span> só dispara no momento exato em que o pedido entra
                 naquele status. Reentregas do mesmo webhook não disparam de novo.
               </p>
             )}
@@ -343,9 +343,9 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
               <div className="space-y-3 pt-2">
                 {/* Pipeline trigger context hint */}
                 {isPipeline && (
-                  <div className="flex items-start gap-2 px-3 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
-                    <span className="text-cyan-400 text-lg leading-none mt-0.5">🏆</span>
-                    <p className="text-xs text-cyan-300">
+                  <div className="flex items-start gap-2 px-3 py-2 bg-brand-gold-500/10 border border-brand-gold-500/20 rounded-lg">
+                    <span className="text-brand-gold-400 text-lg leading-none mt-0.5">🏆</span>
+                    <p className="text-xs text-brand-gold-300">
                       Esta automação dispara quando um deal é movido para <strong>Ganho</strong>.
                       O WhatsApp será enviado para o contato vinculado ao deal.
                       Use os campos <span className="font-mono">contact.*</span> e <span className="font-mono">deal.*</span> nas variáveis abaixo.
@@ -392,7 +392,7 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
                     </label>
                     {templatePlaceholderCount > 0 && (
                       <button onClick={autoFillVariables}
-                        className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
+                        className="text-xs text-brand-gold-400 hover:text-brand-gold-300 flex items-center gap-1">
                         <Wand2 className="w-3 h-3" /> Auto-preencher
                       </button>
                     )}

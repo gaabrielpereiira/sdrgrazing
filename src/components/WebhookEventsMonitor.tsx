@@ -59,7 +59,7 @@ const WebhookEventsMonitor: React.FC = () => {
           {(['all', 'pending', 'processed', 'error'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-3 py-1 rounded-full text-xs font-medium ${
-                filter === f ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200'
+                filter === f ? 'bg-brand-gold-500/20 text-brand-gold-300' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200'
               }`}>
               {f === 'all' ? 'Todos' : f === 'pending' ? 'Pendentes' : f === 'processed' ? 'Processados' : 'Com erro'}
             </button>
@@ -71,7 +71,7 @@ const WebhookEventsMonitor: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="flex justify-center p-8"><Loader2 className="w-5 h-5 animate-spin text-cyan-400" /></div>
+        <div className="flex justify-center p-8"><Loader2 className="w-5 h-5 animate-spin text-brand-gold-400" /></div>
       ) : events.length === 0 ? (
         <div className="text-center py-12 border border-dashed border-slate-800 rounded-xl text-slate-500 text-sm">
           Nenhum evento {filter !== 'all' ? 'nesse filtro' : 'recebido ainda'}.

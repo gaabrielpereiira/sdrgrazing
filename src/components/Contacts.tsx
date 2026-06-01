@@ -139,7 +139,7 @@ const Contacts: React.FC = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'customer': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-      case 'lead': return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20';
+      case 'lead': return 'bg-brand-gold-500/10 text-brand-gold-400 border-brand-gold-500/20';
       case 'churned': return 'bg-slate-800 text-slate-400 border-slate-700';
       default: return 'bg-slate-800 text-slate-400';
     }
@@ -168,7 +168,7 @@ const Contacts: React.FC = () => {
           <p className="text-sm text-slate-400 mt-1">Gerencie sua base de leads e clientes com inteligência.</p>
         </div>
         <Button 
-          className="w-full sm:w-auto shadow-lg shadow-cyan-500/20"
+          className="w-full sm:w-auto shadow-lg shadow-brand-gold-500/20"
           onClick={() => setShowCreate(true)}
         >
           <UserPlus className="w-4 h-4 mr-2" />
@@ -185,7 +185,7 @@ const Contacts: React.FC = () => {
             placeholder="Buscar por nome, email ou telefone"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600 transition-all"
+            className="w-full pl-9 pr-4 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 placeholder:text-slate-600 transition-all"
           />
         </div>
         <Button 
@@ -203,7 +203,7 @@ const Contacts: React.FC = () => {
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 backdrop-blur-sm shadow-xl overflow-hidden min-h-[400px]">
         {loading ? (
            <div className="flex flex-col items-center justify-center h-80">
-             <Loader2 className="h-10 w-10 animate-spin text-cyan-500 mb-3" />
+             <Loader2 className="h-10 w-10 animate-spin text-brand-gold-500 mb-3" />
              <span className="text-sm text-slate-400 animate-pulse">Carregando base de dados...</span>
            </div>
         ) : filteredContacts.length === 0 ? (
@@ -220,7 +220,7 @@ const Contacts: React.FC = () => {
             <div className="md:hidden divide-y divide-slate-800/50">
               {filteredContacts.map((contact) => (
                 <div key={contact.id} className="p-4 flex items-start gap-3">
-                  <div className="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-700 flex items-center justify-center text-sm font-bold text-cyan-400">
+                  <div className="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-700 flex items-center justify-center text-sm font-bold text-brand-gold-400">
                     {(contact.name || contact.phone || '?').substring(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -228,7 +228,7 @@ const Contacts: React.FC = () => {
                       <div className="font-semibold text-slate-200 truncate flex items-center gap-1.5">
                         <span className="truncate">{contact.name || 'Sem nome'}</span>
                         {contact.isBusiness && (
-                          <span title="Pessoa Jurídica" className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-cyan-500/30 text-cyan-300 bg-cyan-500/10">
+                          <span title="Pessoa Jurídica" className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-brand-gold-500/30 text-brand-gold-300 bg-brand-gold-500/10">
                             <Building2 className="w-2.5 h-2.5" />PJ
                           </span>
                         )}
@@ -238,7 +238,7 @@ const Contacts: React.FC = () => {
                       </span>
                     </div>
                     {contact.isBusiness && contact.companyName && (
-                      <div className="text-xs text-cyan-300/80 mt-0.5 flex items-center gap-1.5 truncate"><Building2 className="w-3 h-3" />{contact.companyName}</div>
+                      <div className="text-xs text-brand-gold-300/80 mt-0.5 flex items-center gap-1.5 truncate"><Building2 className="w-3 h-3" />{contact.companyName}</div>
                     )}
                     <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5"><Phone className="w-3 h-3" />{contact.phone}</div>
                     {contact.email && (
@@ -276,20 +276,20 @@ const Contacts: React.FC = () => {
                   <tr key={contact.id} className="hover:bg-slate-800/40 transition-colors group">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-700 flex items-center justify-center text-sm font-bold text-cyan-400 shadow-inner">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-700 flex items-center justify-center text-sm font-bold text-brand-gold-400 shadow-inner">
                           {(contact.name || contact.phone || '?').substring(0, 2).toUpperCase()}
                         </div>
                         <div>
-                            <div className="font-semibold text-slate-200 group-hover:text-cyan-400 transition-colors flex items-center gap-1.5">
+                            <div className="font-semibold text-slate-200 group-hover:text-brand-gold-400 transition-colors flex items-center gap-1.5">
                               <span className="truncate">{contact.name || 'Sem nome'}</span>
                               {contact.isBusiness && (
-                                <span title="Pessoa Jurídica" className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-cyan-500/30 text-cyan-300 bg-cyan-500/10">
+                                <span title="Pessoa Jurídica" className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-brand-gold-500/30 text-brand-gold-300 bg-brand-gold-500/10">
                                   <Building2 className="w-2.5 h-2.5" />PJ
                                 </span>
                               )}
                             </div>
                             {contact.isBusiness && contact.companyName && (
-                              <div className="text-xs text-cyan-300/80 flex items-center gap-1.5 truncate"><Building2 className="w-3 h-3" />{contact.companyName}</div>
+                              <div className="text-xs text-brand-gold-300/80 flex items-center gap-1.5 truncate"><Building2 className="w-3 h-3" />{contact.companyName}</div>
                             )}
                             <div className="text-xs text-slate-500">{contact.phone}</div>
                         </div>
@@ -345,7 +345,7 @@ const Contacts: React.FC = () => {
                         <Button 
                           size="sm" 
                           variant="ghost" 
-                          className="h-8 w-8 p-0 rounded-lg text-slate-400 hover:text-cyan-400"
+                          className="h-8 w-8 p-0 rounded-lg text-slate-400 hover:text-brand-gold-400"
                           title="Editar contato"
                           onClick={() => openEdit(contact)}
                         >
@@ -399,7 +399,7 @@ const Contacts: React.FC = () => {
                     type="button"
                     onClick={() => setForm({ ...form, isBusiness: false })}
                     className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                      !form.isBusiness ? 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
+                      !form.isBusiness ? 'bg-brand-gold-500/15 text-brand-gold-300 ring-1 ring-brand-gold-500/30' : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
                     <User className="w-4 h-4" /> Pessoa Física
@@ -408,7 +408,7 @@ const Contacts: React.FC = () => {
                     type="button"
                     onClick={() => setForm({ ...form, isBusiness: true })}
                     className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                      form.isBusiness ? 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
+                      form.isBusiness ? 'bg-brand-gold-500/15 text-brand-gold-300 ring-1 ring-brand-gold-500/30' : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
                     <Building2 className="w-4 h-4" /> Pessoa Jurídica
@@ -424,7 +424,7 @@ const Contacts: React.FC = () => {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="Ex: João Silva"
-                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 placeholder:text-slate-600"
                 />
               </div>
               {form.isBusiness && (
@@ -437,7 +437,7 @@ const Contacts: React.FC = () => {
                     value={form.companyName}
                     onChange={(e) => setForm({ ...form, companyName: e.target.value })}
                     placeholder="Ex: Acme Ltda."
-                    className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                    className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 placeholder:text-slate-600"
                   />
                 </div>
               )}
@@ -450,7 +450,7 @@ const Contacts: React.FC = () => {
                     <PopoverTrigger asChild>
                       <button
                         type="button"
-                        className="flex items-center gap-1.5 px-2.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 hover:border-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 shrink-0"
+                        className="flex items-center gap-1.5 px-2.5 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 hover:border-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 shrink-0"
                       >
                         <span className="text-base leading-none">{getCountry(form.countryCode).flag}</span>
                         <span className="text-slate-300">+{getCountry(form.countryCode).dial}</span>
@@ -464,7 +464,7 @@ const Contacts: React.FC = () => {
                           value={countrySearch}
                           onChange={(e) => setCountrySearch(e.target.value)}
                           placeholder="Buscar país ou código…"
-                          className="w-full px-2.5 py-2 rounded-md bg-slate-900 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 placeholder:text-slate-600"
+                          className="w-full px-2.5 py-2 rounded-md bg-slate-900 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-gold-500/50 placeholder:text-slate-600"
                         />
                       </div>
                       <div className="max-h-64 overflow-y-auto py-1">
@@ -486,7 +486,7 @@ const Contacts: React.FC = () => {
                               setCountrySearch('');
                             }}
                             className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-900 ${
-                              form.countryCode === c.code ? 'bg-slate-900 text-cyan-300' : 'text-slate-200'
+                              form.countryCode === c.code ? 'bg-slate-900 text-brand-gold-300' : 'text-slate-200'
                             }`}
                           >
                             <span className="text-base leading-none">{c.flag}</span>
@@ -503,7 +503,7 @@ const Contacts: React.FC = () => {
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                     placeholder="DDD + número (ex: 11999998888)"
-                    className="flex-1 min-w-0 px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                    className="flex-1 min-w-0 px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 placeholder:text-slate-600"
                   />
                 </div>
                 <p className="mt-1.5 text-[11px] text-slate-500">
@@ -517,7 +517,7 @@ const Contacts: React.FC = () => {
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   placeholder="contato@empresa.com"
-                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 placeholder:text-slate-600"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
@@ -573,7 +573,7 @@ const Contacts: React.FC = () => {
                     type="button"
                     onClick={() => setEditForm({ ...editForm, isBusiness: false })}
                     className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                      !editForm.isBusiness ? 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
+                      !editForm.isBusiness ? 'bg-brand-gold-500/15 text-brand-gold-300 ring-1 ring-brand-gold-500/30' : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
                     <User className="w-4 h-4" /> Pessoa Física
@@ -582,7 +582,7 @@ const Contacts: React.FC = () => {
                     type="button"
                     onClick={() => setEditForm({ ...editForm, isBusiness: true })}
                     className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                      editForm.isBusiness ? 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
+                      editForm.isBusiness ? 'bg-brand-gold-500/15 text-brand-gold-300 ring-1 ring-brand-gold-500/30' : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
                     <Building2 className="w-4 h-4" /> Pessoa Jurídica
@@ -598,7 +598,7 @@ const Contacts: React.FC = () => {
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                   placeholder="Ex: João Silva"
-                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 placeholder:text-slate-600"
                   autoFocus
                 />
               </div>
@@ -612,7 +612,7 @@ const Contacts: React.FC = () => {
                     value={editForm.companyName}
                     onChange={(e) => setEditForm({ ...editForm, companyName: e.target.value })}
                     placeholder="Ex: Acme Ltda."
-                    className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                    className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 placeholder:text-slate-600"
                   />
                 </div>
               )}
@@ -633,7 +633,7 @@ const Contacts: React.FC = () => {
                   value={editForm.email}
                   onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                   placeholder="contato@empresa.com"
-                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 placeholder:text-slate-600"
+                  className="w-full px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 placeholder:text-slate-600"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">

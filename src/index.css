@@ -1,71 +1,79 @@
+/* Grazing Table & Co — brand font */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Force Dark Mode as default - App is 100% dark themed */
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 217 33% 12%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 187 85% 53%;
-    --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    /* ── Grazing Table & Co brand palette ────────────────────────
+       Navy deep  #1D1F2A  → 230 18% 14%
+       Navy       #252A35  → 222 19% 18%
+       Gold       #B3A369  →  47 29% 56%
+       Gold light #BFB07B  →  47 31% 61%
+    ──────────────────────────────────────────────────────────── */
+    --background: 230 18% 11%;
+    --foreground: 40 30% 92%;
+    --card: 224 19% 16%;
+    --card-foreground: 40 30% 92%;
+    --popover: 224 19% 18%;
+    --popover-foreground: 40 30% 92%;
+    --primary: 47 29% 56%;
+    --primary-foreground: 230 18% 10%;
+    --secondary: 222 19% 21%;
+    --secondary-foreground: 40 20% 88%;
+    --muted: 222 19% 21%;
+    --muted-foreground: 215 15% 58%;
     --accent: 263 70% 50%;
-    --accent-foreground: 210 40% 98%;
+    --accent-foreground: 40 30% 92%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 22%;
-    --ring: 187 85% 53%;
+    --destructive-foreground: 40 30% 92%;
+    --border: 222 19% 22%;
+    --input: 222 19% 24%;
+    --ring: 47 29% 56%;
     --radius: 0.5rem;
-    
-    /* Sidebar - Dark themed */
-    --sidebar-background: 222.2 84% 4.9%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 187 85% 53%;
-    --sidebar-primary-foreground: 222.2 84% 4.9%;
-    --sidebar-accent: 217.2 32.6% 17.5%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 217.2 32.6% 17.5%;
-    --sidebar-ring: 187 85% 53%;
+
+    /* Sidebar */
+    --sidebar-background: 230 18% 11%;
+    --sidebar-foreground: 40 20% 88%;
+    --sidebar-primary: 47 29% 56%;
+    --sidebar-primary-foreground: 230 18% 10%;
+    --sidebar-accent: 222 19% 21%;
+    --sidebar-accent-foreground: 40 20% 88%;
+    --sidebar-border: 222 19% 20%;
+    --sidebar-ring: 47 29% 56%;
   }
 
-  /* Dark class for compatibility - same values */
+  /* Dark class for compatibility */
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 217 33% 12%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 187 85% 53%;
-    --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --background: 230 18% 11%;
+    --foreground: 40 30% 92%;
+    --card: 224 19% 16%;
+    --card-foreground: 40 30% 92%;
+    --popover: 224 19% 18%;
+    --popover-foreground: 40 30% 92%;
+    --primary: 47 29% 56%;
+    --primary-foreground: 230 18% 10%;
+    --secondary: 222 19% 21%;
+    --secondary-foreground: 40 20% 88%;
+    --muted: 222 19% 21%;
+    --muted-foreground: 215 15% 58%;
     --accent: 263 70% 50%;
-    --accent-foreground: 210 40% 98%;
+    --accent-foreground: 40 30% 92%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 22%;
-    --ring: 187 85% 53%;
-    --sidebar-background: 222.2 84% 4.9%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 187 85% 53%;
-    --sidebar-primary-foreground: 222.2 84% 4.9%;
-    --sidebar-accent: 217.2 32.6% 17.5%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 217.2 32.6% 17.5%;
-    --sidebar-ring: 187 85% 53%;
+    --destructive-foreground: 40 30% 92%;
+    --border: 222 19% 22%;
+    --input: 222 19% 24%;
+    --ring: 47 29% 56%;
+    --sidebar-background: 230 18% 11%;
+    --sidebar-foreground: 40 20% 88%;
+    --sidebar-primary: 47 29% 56%;
+    --sidebar-primary-foreground: 230 18% 10%;
+    --sidebar-accent: 222 19% 21%;
+    --sidebar-accent-foreground: 40 20% 88%;
+    --sidebar-border: 222 19% 20%;
+    --sidebar-ring: 47 29% 56%;
   }
 }
 
@@ -90,14 +98,14 @@
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent; 
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(217.2 32.6% 25%);
+  background: hsl(47 20% 30%);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(217.2 32.6% 35%);
+  background: hsl(47 29% 44%);
 }
 
 /* Focus ring styling */

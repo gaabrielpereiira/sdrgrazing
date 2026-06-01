@@ -292,7 +292,7 @@ const Kanban: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full bg-slate-950">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-brand-gold-500" />
       </div>
     );
   }
@@ -313,7 +313,7 @@ const Kanban: React.FC = () => {
                 placeholder="Buscar oportunidade..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none placeholder:text-slate-600"
+                className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:ring-1 focus:ring-brand-gold-500 outline-none placeholder:text-slate-600"
              />
           </div>
           <Button 
@@ -324,7 +324,7 @@ const Kanban: React.FC = () => {
             <Settings className="w-4 h-4 mr-2" />
             Configurar
           </Button>
-          <Button className="shadow-lg shadow-cyan-500/20" onClick={() => setIsCreateModalOpen(true)}>
+          <Button className="shadow-lg shadow-brand-gold-500/20" onClick={() => setIsCreateModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Novo Deal
           </Button>
@@ -367,7 +367,7 @@ const Kanban: React.FC = () => {
                     }`}>
                       {column.isAiManaged && (
                         <span title="Gerenciado pela IA">
-                          <Bot className="w-3 h-3 text-cyan-400" />
+                          <Bot className="w-3 h-3 text-brand-gold-400" />
                         </span>
                       )}
                       {column.title}
@@ -394,7 +394,7 @@ const Kanban: React.FC = () => {
                       onDragStart={(e) => onDragStart(e, deal.id)}
                       onDragEnd={onDragEnd}
                       onClick={() => setSelectedDeal(deal)}
-                      className="bg-slate-900 border border-slate-800 rounded-lg p-3 shadow-sm cursor-grab active:cursor-grabbing hover:border-cyan-500/50 hover:shadow-cyan-500/10 transition-all group relative"
+                      className="bg-slate-900 border border-slate-800 rounded-lg p-3 shadow-sm cursor-grab active:cursor-grabbing hover:border-brand-gold-500/50 hover:shadow-brand-gold-500/10 transition-all group relative"
                     >
                       <div className="flex justify-between items-start mb-1.5">
                         <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${getPriorityColor(deal.priority)}`}>
@@ -420,7 +420,7 @@ const Kanban: React.FC = () => {
                         const st = deal.lastOrder.status;
                         const tone =
                           st === 'completed' ? 'bg-emerald-900/40 text-emerald-300 border-emerald-800/60' :
-                          st === 'processing' ? 'bg-cyan-900/40 text-cyan-300 border-cyan-800/60' :
+                          st === 'processing' ? 'bg-brand-gold-900/40 text-brand-gold-300 border-brand-gold-800/60' :
                           st === 'cancelled' || st === 'failed' || st === 'refunded' || st === 'negado' ? 'bg-red-900/40 text-red-300 border-red-800/60' :
                           st === 'on-hold' || st === 'pending' || st === 'checkout-draft' ? 'bg-amber-900/40 text-amber-300 border-amber-800/60' :
                           'bg-slate-800 text-slate-300 border-slate-700';
@@ -536,7 +536,7 @@ const Kanban: React.FC = () => {
                                         key={col.id} 
                                         className={`flex-1 h-8 flex items-center justify-center px-2 relative cursor-pointer group transition-all first:rounded-l-md last:rounded-r-md 
                                             ${isCompleted ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : 
-                                              isActive ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-500/20' : 
+                                              isActive ? 'bg-brand-gold-600 text-white shadow-lg shadow-brand-gold-500/20' : 
                                               'bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-slate-300'}
                                         `}
                                         onClick={async () => {
@@ -590,9 +590,9 @@ const Kanban: React.FC = () => {
                         <div className="flex gap-4 mb-4">
                             <button 
                                 onClick={() => setActiveTab('note')}
-                                className={`flex items-center gap-2 text-sm font-medium transition-colors ${activeTab === 'note' ? 'text-cyan-400' : 'text-slate-400 hover:text-white'}`}
+                                className={`flex items-center gap-2 text-sm font-medium transition-colors ${activeTab === 'note' ? 'text-brand-gold-400' : 'text-slate-400 hover:text-white'}`}
                             >
-                                <div className={`p-2 rounded-full ${activeTab === 'note' ? 'bg-cyan-500/10' : 'bg-slate-800'}`}>
+                                <div className={`p-2 rounded-full ${activeTab === 'note' ? 'bg-brand-gold-500/10' : 'bg-slate-800'}`}>
                                     <FileText className="w-4 h-4" />
                                 </div>
                                 Nota
@@ -617,7 +617,7 @@ const Kanban: React.FC = () => {
                             </button>
                         </div>
 
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden focus-within:ring-1 focus-within:ring-cyan-500/50 transition-all shadow-inner">
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden focus-within:ring-1 focus-within:ring-brand-gold-500/50 transition-all shadow-inner">
                             <input 
                                 type="text"
                                 className="w-full bg-transparent p-3 text-sm text-slate-200 placeholder:text-slate-600 outline-none border-b border-slate-800"
@@ -637,7 +637,7 @@ const Kanban: React.FC = () => {
                             />
                             <div className="px-3 py-2 bg-slate-950/50 border-t border-slate-800 flex justify-between items-center">
                                 <div className="flex gap-2">
-                                    <button className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-cyan-400 transition-colors"><Paperclip className="w-4 h-4" /></button>
+                                    <button className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-brand-gold-400 transition-colors"><Paperclip className="w-4 h-4" /></button>
                                 </div>
                                 <Button size="sm" className="h-8" onClick={handleCreateActivity} disabled={!newActivityTitle.trim()}>
                                     Salvar
@@ -654,7 +654,7 @@ const Kanban: React.FC = () => {
                         
                         {loadingActivities ? (
                           <div className="flex justify-center py-8">
-                            <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
+                            <Loader2 className="w-6 h-6 animate-spin text-brand-gold-500" />
                           </div>
                         ) : activities.length === 0 ? (
                           <div className="text-center py-8 text-slate-500 text-sm">
@@ -670,7 +670,7 @@ const Kanban: React.FC = () => {
                                                    FileText;
                               const activityColor = activity.type === 'call' ? 'text-amber-500 bg-amber-500/10' :
                                                     activity.type === 'email' ? 'text-violet-500 bg-violet-500/10' :
-                                                    activity.type === 'meeting' ? 'text-cyan-500 bg-cyan-500/10' :
+                                                    activity.type === 'meeting' ? 'text-brand-gold-500 bg-brand-gold-500/10' :
                                                     activity.type === 'task' ? 'text-emerald-500 bg-emerald-500/10' :
                                                     'text-slate-500 bg-slate-500/10';
                               const ActivityIcon = activityIcon;
@@ -727,13 +727,13 @@ const Kanban: React.FC = () => {
                           <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-xs text-slate-400">Score de Qualificação</span>
-                              <span className="text-sm font-bold text-cyan-400">
+                              <span className="text-sm font-bold text-brand-gold-400">
                                 {selectedDeal.clientMemory.lead_profile.qualification_score || 0}%
                               </span>
                             </div>
                             <div className="w-full bg-slate-800 rounded-full h-1.5">
                               <div 
-                                className="bg-gradient-to-r from-cyan-500 to-violet-500 h-1.5 rounded-full transition-all"
+                                className="bg-gradient-to-r from-brand-gold-500 to-violet-500 h-1.5 rounded-full transition-all"
                                 style={{ width: `${selectedDeal.clientMemory.lead_profile.qualification_score || 0}%` }}
                               />
                             </div>
@@ -742,7 +742,7 @@ const Kanban: React.FC = () => {
                           {/* Next Best Action */}
                           <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
                             <span className="text-xs text-slate-400">Próxima Ação Sugerida</span>
-                            <p className="text-sm text-cyan-400 mt-1 font-medium">
+                            <p className="text-sm text-brand-gold-400 mt-1 font-medium">
                               {selectedDeal.clientMemory.sales_intelligence.next_best_action === 'qualify' ? '📋 Qualificar lead' :
                                selectedDeal.clientMemory.sales_intelligence.next_best_action === 'demo' ? '🎯 Agendar demonstração' :
                                selectedDeal.clientMemory.sales_intelligence.next_best_action === 'follow_up' ? '📞 Fazer follow-up' :
@@ -802,13 +802,13 @@ const Kanban: React.FC = () => {
                     {selectedDeal.conversationId && (
                       <div className="p-6 border-t border-slate-800">
                         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                          <MessageSquare className="w-4 h-4 text-cyan-500" /> 
+                          <MessageSquare className="w-4 h-4 text-brand-gold-500" /> 
                           Últimas Mensagens ({conversationMessages.length})
                         </h4>
                         
                         {loadingMessages ? (
                           <div className="flex justify-center py-4">
-                            <Loader2 className="w-5 h-5 animate-spin text-cyan-500" />
+                            <Loader2 className="w-5 h-5 animate-spin text-brand-gold-500" />
                           </div>
                         ) : conversationMessages.length === 0 ? (
                           <div className="text-center py-4 text-slate-500 text-sm">
@@ -823,7 +823,7 @@ const Kanban: React.FC = () => {
                                   msg.from_type === 'user' 
                                     ? 'bg-slate-800 text-slate-200 ml-0 mr-8' 
                                     : msg.from_type === 'nina'
-                                      ? 'bg-cyan-900/30 text-cyan-100 ml-8 mr-0'
+                                      ? 'bg-brand-gold-900/30 text-brand-gold-100 ml-8 mr-0'
                                       : 'bg-emerald-900/30 text-emerald-100 ml-8 mr-0'
                                 }`}
                               >

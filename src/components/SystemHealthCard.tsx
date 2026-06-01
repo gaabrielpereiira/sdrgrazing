@@ -122,7 +122,7 @@ export const SystemHealthCard: React.FC = () => {
     return (
       <div className={`rounded-2xl border bg-gradient-to-br from-slate-800/50 to-slate-900/50 border-slate-700/50 p-6`}>
         <div className="flex items-center justify-center gap-3">
-          <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+          <Loader2 className="w-5 h-5 animate-spin text-brand-gold-400" />
           <span className="text-sm text-slate-400">Verificando sistema...</span>
         </div>
       </div>

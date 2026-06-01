@@ -74,7 +74,7 @@ const Settings: React.FC = () => {
               <span className="sm:hidden">Onboarding</span>
             </Button>
           )}
-          <span className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs rounded-full font-mono flex items-center">
+          <span className="px-3 py-1 bg-brand-gold-500/10 border border-brand-gold-500/20 text-brand-gold-400 text-xs rounded-full font-mono flex items-center">
             {isAdmin ? (
               <>
                 <Shield className="w-3 h-3 mr-1" /> Admin

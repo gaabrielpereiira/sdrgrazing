@@ -66,14 +66,14 @@ const Dashboard: React.FC = () => {
 
   const getIcon = (label: string) => {
     if (label.includes('Conversões')) return <DollarSign className="h-5 w-5 text-emerald-400" />;
-    if (label.includes('Atendimentos')) return <MessageSquare className="h-5 w-5 text-cyan-400" />;
+    if (label.includes('Atendimentos')) return <MessageSquare className="h-5 w-5 text-brand-gold-400" />;
     if (label.includes('Leads')) return <Users className="h-5 w-5 text-violet-400" />;
     return <Activity className="h-5 w-5 text-orange-400" />;
   };
 
   const getGradient = (label: string) => {
     if (label.includes('Conversões')) return 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/20';
-    if (label.includes('Atendimentos')) return 'from-cyan-500/20 to-cyan-500/5 border-cyan-500/20';
+    if (label.includes('Atendimentos')) return 'from-brand-gold-500/20 to-brand-gold-500/5 border-brand-gold-500/20';
     if (label.includes('Leads')) return 'from-violet-500/20 to-violet-500/5 border-violet-500/20';
     return 'from-orange-500/20 to-orange-500/5 border-orange-500/20';
   };
@@ -93,8 +93,8 @@ const Dashboard: React.FC = () => {
       <div className="flex items-center justify-center h-full bg-slate-950">
         <div className="flex flex-col items-center gap-4">
           <div className="relative">
-             <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-full"></div>
-             <Loader2 className="h-10 w-10 animate-spin text-cyan-400 relative z-10" />
+             <div className="absolute inset-0 bg-brand-gold-500/20 blur-xl rounded-full"></div>
+             <Loader2 className="h-10 w-10 animate-spin text-brand-gold-400 relative z-10" />
           </div>
           <p className="text-sm text-slate-400 font-medium animate-pulse">Carregando insights...</p>
         </div>
@@ -238,7 +238,7 @@ const Dashboard: React.FC = () => {
                   Interações da IA {period === 'today' ? 'hoje' : `nos últimos ${periodDays[period]} dias`}
                 </p>
             </div>
-            <button className="text-cyan-400 hover:text-cyan-300 transition-colors p-2 hover:bg-cyan-950/30 rounded-lg">
+            <button className="text-brand-gold-400 hover:text-brand-gold-300 transition-colors p-2 hover:bg-brand-gold-950/30 rounded-lg">
                 <ArrowUpRight className="w-5 h-5" />
             </button>
           </div>
@@ -296,11 +296,11 @@ const Dashboard: React.FC = () => {
               <div key={i} className="group">
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-slate-300">{day.name}</span>
-                    <span className="text-sm font-bold text-white group-hover:text-cyan-400 transition-colors">{day.sales} conv.</span>
+                    <span className="text-sm font-bold text-white group-hover:text-brand-gold-400 transition-colors">{day.sales} conv.</span>
                 </div>
                 <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-gradient-to-r from-cyan-600 to-teal-500 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.3)] transition-all duration-1000 ease-out group-hover:shadow-[0_0_15px_rgba(6,182,212,0.6)]" 
+                    className="h-full bg-gradient-to-r from-brand-gold-600 to-teal-500 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.3)] transition-all duration-1000 ease-out group-hover:shadow-[0_0_15px_rgba(6,182,212,0.6)]" 
                     style={{ width: `${Math.min((day.sales / Math.max(...chartData.map(d => d.sales), 1)) * 100, 100)}%` }} 
                   />
                 </div>

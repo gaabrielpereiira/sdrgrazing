@@ -96,7 +96,7 @@ const AutomationsDashboard: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
+        <Loader2 className="w-6 h-6 animate-spin text-brand-gold-500" />
       </div>
     );
   }
@@ -111,7 +111,7 @@ const AutomationsDashboard: React.FC = () => {
           <button key={r.value} onClick={() => setRange(r.value as any)}
             className={`px-3 py-1 rounded-md text-xs font-medium transition ${
               range === r.value
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                ? 'bg-brand-gold-500/15 text-brand-gold-300 border border-brand-gold-500/30'
                 : 'text-slate-400 hover:text-slate-200 border border-transparent'
             }`}>
             {r.label}
@@ -172,7 +172,7 @@ const AutomationsDashboard: React.FC = () => {
                     <span className="text-slate-400 font-medium">{t.count}</span>
                   </div>
                   <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                    <div className="h-full bg-cyan-500/70" style={{ width: `${t.pct}%` }} />
+                    <div className="h-full bg-brand-gold-500/70" style={{ width: `${t.pct}%` }} />
                   </div>
                 </div>
               ))}
@@ -186,7 +186,7 @@ const AutomationsDashboard: React.FC = () => {
 
 const KpiCard: React.FC<{ icon: React.ReactNode; label: string; value: number | string; accent: string }> = ({ icon, label, value, accent }) => {
   const cls: Record<string, string> = {
-    cyan: 'text-cyan-400 bg-cyan-500/10',
+    cyan: 'text-brand-gold-400 bg-brand-gold-500/10',
     emerald: 'text-emerald-400 bg-emerald-500/10',
     red: 'text-red-400 bg-red-500/10',
     amber: 'text-amber-400 bg-amber-500/10',

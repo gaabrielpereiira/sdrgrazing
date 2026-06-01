@@ -49,7 +49,7 @@ const SimulateWebhookModal: React.FC<Props> = ({ isOpen, onClose }) => {
         className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl">
         <div className="flex items-center justify-between p-5 border-b border-slate-800">
           <h2 className="text-lg font-semibold text-slate-50 flex items-center gap-2">
-            <FlaskConical className="w-5 h-5 text-cyan-400" /> Simular evento WooCommerce
+            <FlaskConical className="w-5 h-5 text-brand-gold-400" /> Simular evento WooCommerce
           </h2>
           <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-200">
             <X className="w-5 h-5" />
@@ -58,30 +58,30 @@ const SimulateWebhookModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
         <div className="p-5 space-y-4">
           <p className="text-xs text-slate-400">
-            Cria um evento de teste em <code className="text-cyan-300">webhook_events</code> e dispara o runner — sem precisar do WooCommerce real.
+            Cria um evento de teste em <code className="text-brand-gold-300">webhook_events</code> e dispara o runner — sem precisar do WooCommerce real.
           </p>
 
           <Field label="Tipo de evento">
             <select value={topic} onChange={e => setTopic(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-50 focus:outline-none focus:border-cyan-500">
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-50 focus:outline-none focus:border-brand-gold-500">
               {TRIGGER_TOPICS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </Field>
 
           <Field label="Telefone (billing.phone)">
             <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="5511999990001"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-50 focus:outline-none focus:border-cyan-500" />
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-50 focus:outline-none focus:border-brand-gold-500" />
           </Field>
 
           <Field label="Nome (billing.first_name)">
             <input value={firstName} onChange={e => setFirstName(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-50 focus:outline-none focus:border-cyan-500" />
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-50 focus:outline-none focus:border-brand-gold-500" />
           </Field>
 
           {topic.startsWith('order.') && (
             <Field label="Valor total">
               <input value={total} onChange={e => setTotal(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-50 focus:outline-none focus:border-cyan-500" />
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-50 focus:outline-none focus:border-brand-gold-500" />
             </Field>
           )}
         </div>

@@ -72,20 +72,20 @@ const EditableRow: React.FC<EditableRowProps> = ({
             }}
             disabled={isSaving}
             placeholder={placeholder}
-            className="bg-slate-950/60 border border-cyan-500/40 rounded px-2 py-1 text-sm text-slate-100 outline-none focus:ring-1 focus:ring-cyan-500/60"
+            className="bg-slate-950/60 border border-brand-gold-500/40 rounded px-2 py-1 text-sm text-slate-100 outline-none focus:ring-1 focus:ring-brand-gold-500/60"
           />
         ) : (
           <button
             type="button"
             onClick={onStart}
-            className="flex items-center gap-1.5 text-left text-slate-200 font-medium truncate hover:text-cyan-300 transition-colors"
+            className="flex items-center gap-1.5 text-left text-slate-200 font-medium truncate hover:text-brand-gold-300 transition-colors"
           >
             <span className="truncate">{value || <span className="text-slate-500 italic font-normal">{placeholder}</span>}</span>
             <Pencil className="w-3 h-3 opacity-0 group-hover/row:opacity-60 transition-opacity flex-shrink-0" />
           </button>
         )}
       </div>
-      {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-500" />}
+      {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-gold-500" />}
     </div>
   );
 };
@@ -777,8 +777,8 @@ const ChatInterface: React.FC = () => {
     const el = document.querySelector(`[data-msg-id="${messageId}"]`);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('ring-2', 'ring-cyan-400');
-      setTimeout(() => el.classList.remove('ring-2', 'ring-cyan-400'), 1500);
+      el.classList.add('ring-2', 'ring-brand-gold-400');
+      setTimeout(() => el.classList.remove('ring-2', 'ring-brand-gold-400'), 1500);
     }
   };
 
@@ -1042,8 +1042,8 @@ const ChatInterface: React.FC = () => {
             disabled={!msg.mediaUrl}
             className={`flex items-center justify-center w-9 h-9 rounded-full transition-all shadow-md ${
               msg.direction === MessageDirection.OUTGOING 
-                ? 'bg-white text-cyan-600 hover:bg-cyan-50 disabled:opacity-50' 
-                : 'bg-cyan-500 text-white hover:bg-cyan-400 disabled:opacity-50'
+                ? 'bg-white text-brand-gold-600 hover:bg-brand-gold-50 disabled:opacity-50' 
+                : 'bg-brand-gold-500 text-white hover:bg-brand-gold-400 disabled:opacity-50'
             }`}
           >
             {isPlaying ? (
@@ -1069,13 +1069,13 @@ const ChatInterface: React.FC = () => {
             >
               <div 
                 className={`h-full rounded-full transition-all ${
-                  msg.direction === MessageDirection.OUTGOING ? 'bg-white' : 'bg-cyan-400'
+                  msg.direction === MessageDirection.OUTGOING ? 'bg-white' : 'bg-brand-gold-400'
                 }`}
                 style={{ width: `${duration ? (progress / duration) * 100 : 0}%` }}
               />
             </div>
             <span className={`text-[10px] font-medium ${
-              msg.direction === MessageDirection.OUTGOING ? 'text-cyan-100' : 'text-slate-400'
+              msg.direction === MessageDirection.OUTGOING ? 'text-brand-gold-100' : 'text-slate-400'
             }`}>
               {formatAudioTime(progress)} / {formatAudioTime(duration)}
             </span>
@@ -1098,7 +1098,7 @@ const ChatInterface: React.FC = () => {
             }`}
           >
             <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${
-              msg.direction === MessageDirection.OUTGOING ? 'bg-white/20' : 'bg-cyan-500/20'
+              msg.direction === MessageDirection.OUTGOING ? 'bg-white/20' : 'bg-brand-gold-500/20'
             }`}>
               <FileText className="w-4 h-4" />
             </div>
@@ -1118,7 +1118,7 @@ const ChatInterface: React.FC = () => {
     return (
       <div className="flex h-full bg-slate-950 items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-brand-gold-500" />
           <p className="text-sm text-slate-500">Sincronizando conversas...</p>
         </div>
       </div>
@@ -1139,7 +1139,7 @@ const ChatInterface: React.FC = () => {
               className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border flex items-center gap-1 ${
                 mainTab === 'finalizadas'
                   ? 'bg-slate-500/15 text-slate-300 border-slate-500/40'
-                  : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
+                  : 'bg-brand-gold-500/15 text-brand-gold-300 border-brand-gold-500/40'
               }`}
             >
               {mainTab === 'finalizadas'
@@ -1151,7 +1151,7 @@ const ChatInterface: React.FC = () => {
             <TabsList className="grid grid-cols-2 w-full h-10 p-1">
               <TabsTrigger
                 value="geral"
-                className="text-xs gap-1.5 data-[state=active]:bg-cyan-500/15 data-[state=active]:text-cyan-300 data-[state=active]:shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
+                className="text-xs gap-1.5 data-[state=active]:bg-brand-gold-500/15 data-[state=active]:text-brand-gold-300 data-[state=active]:shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
               >
                 <Bot className="w-3.5 h-3.5" />
                 Geral
@@ -1159,7 +1159,7 @@ const ChatInterface: React.FC = () => {
                   {tabCounts.activeSales + tabCounts.activeSupport}
                 </span>
                 {(queueUnread.sales + queueUnread.support) > 0 && (
-                  <span className={`ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold text-white ${queueUnread.support > 0 ? 'bg-red-500 animate-pulse' : 'bg-cyan-500'}`}>
+                  <span className={`ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold text-white ${queueUnread.support > 0 ? 'bg-red-500 animate-pulse' : 'bg-brand-gold-500'}`}>
                     {(queueUnread.sales + queueUnread.support) > 99 ? '99+' : (queueUnread.sales + queueUnread.support)}
                   </span>
                 )}
@@ -1178,13 +1178,13 @@ const ChatInterface: React.FC = () => {
           </Tabs>
 
           <div className="relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-brand-gold-400 transition-colors" />
             <input 
               type="text" 
               placeholder="Buscar conversa..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 bg-slate-950/50 border border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 outline-none text-slate-200 placeholder:text-slate-600 transition-all"
+              className="w-full pl-9 pr-4 py-2.5 bg-slate-950/50 border border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 outline-none text-slate-200 placeholder:text-slate-600 transition-all"
             />
           </div>
         </div>
@@ -1204,7 +1204,7 @@ const ChatInterface: React.FC = () => {
                 onClick={() => { userNavigatedBackRef.current = false; setSelectedChatId(chat.id); }}
                 className={`flex items-center p-4 cursor-pointer transition-all duration-200 border-b border-slate-800/30 hover:bg-slate-800/50 ${
                   selectedChatId === chat.id 
-                    ? 'bg-slate-800/80 border-l-2 border-l-cyan-500' 
+                    ? 'bg-slate-800/80 border-l-2 border-l-brand-gold-500' 
                     : 'border-l-2 border-l-transparent'
                 }`}
               >
@@ -1217,7 +1217,7 @@ const ChatInterface: React.FC = () => {
                     />
                   </div>
                   {chat.unreadCount > 0 ? (
-                    <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-cyan-500 border-2 border-slate-900 rounded-full animate-pulse"></span>
+                    <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-brand-gold-500 border-2 border-slate-900 rounded-full animate-pulse"></span>
                   ) : (
                     <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-slate-600 border-2 border-slate-900 rounded-full"></span>
                   )}
@@ -1231,7 +1231,7 @@ const ChatInterface: React.FC = () => {
                     <span className="text-[10px] text-slate-500 font-medium">{chat.lastMessageAt ? formatRelativeTime(chat.lastMessageAt) : chat.lastMessageTime}</span>
                   </div>
                   {chat.isBusiness && chat.companyName && (
-                    <p className="text-[10px] text-cyan-300/70 truncate flex items-center gap-1 -mt-0.5 mb-0.5">
+                    <p className="text-[10px] text-brand-gold-300/70 truncate flex items-center gap-1 -mt-0.5 mb-0.5">
                       <Building2 className="w-2.5 h-2.5 shrink-0" />
                       <span className="truncate">{chat.companyName}</span>
                     </p>
@@ -1301,7 +1301,7 @@ const ChatInterface: React.FC = () => {
                       </span>
                     ))}
                     {chat.unreadCount > 0 && (
-                      <span className="ml-auto bg-gradient-to-r from-cyan-600 to-teal-600 text-white text-[10px] font-bold px-1.5 h-4 min-w-[1rem] flex items-center justify-center rounded-full shadow-lg shadow-cyan-500/20">
+                      <span className="ml-auto bg-gradient-to-r from-brand-gold-600 to-teal-600 text-white text-[10px] font-bold px-1.5 h-4 min-w-[1rem] flex items-center justify-center rounded-full shadow-lg shadow-brand-gold-500/20">
                         {chat.unreadCount}
                       </span>
                     )}
@@ -1328,10 +1328,10 @@ const ChatInterface: React.FC = () => {
 
             {/* Drag overlay */}
             {isDraggingFile && (
-              <div className="absolute inset-0 z-30 bg-cyan-500/10 backdrop-blur-sm border-4 border-dashed border-cyan-400/60 rounded-lg flex flex-col items-center justify-center pointer-events-none">
-                <Upload className="w-12 h-12 text-cyan-300 mb-3 animate-bounce" />
-                <p className="text-lg font-semibold text-cyan-200">Solte para enviar</p>
-                <p className="text-xs text-cyan-300/70 mt-1">Imagens, áudios ou documentos</p>
+              <div className="absolute inset-0 z-30 bg-brand-gold-500/10 backdrop-blur-sm border-4 border-dashed border-brand-gold-400/60 rounded-lg flex flex-col items-center justify-center pointer-events-none">
+                <Upload className="w-12 h-12 text-brand-gold-300 mb-3 animate-bounce" />
+                <p className="text-lg font-semibold text-brand-gold-200">Solte para enviar</p>
+                <p className="text-xs text-brand-gold-300/70 mt-1">Imagens, áudios ou documentos</p>
               </div>
             )}
 
@@ -1370,14 +1370,14 @@ const ChatInterface: React.FC = () => {
                           if (e.key === 'Escape') { setIsEditingName(false); }
                         }}
                         disabled={savingName}
-                        className="bg-slate-950 border border-cyan-500/50 rounded-md px-2 py-0.5 text-sm text-slate-100 outline-none focus:ring-1 focus:ring-cyan-500/50 min-w-[160px]"
+                        className="bg-slate-950 border border-brand-gold-500/50 rounded-md px-2 py-0.5 text-sm text-slate-100 outline-none focus:ring-1 focus:ring-brand-gold-500/50 min-w-[160px]"
                       />
                     ) : (
                       <button
                         type="button"
                         onClick={startEditName}
                         title="Clique para editar o nome do contato"
-                        className="inline-flex items-center gap-1.5 hover:text-cyan-300 transition-colors truncate max-w-[140px] md:max-w-none"
+                        className="inline-flex items-center gap-1.5 hover:text-brand-gold-300 transition-colors truncate max-w-[140px] md:max-w-none"
                       >
                         <span className="truncate">{activeChat.contactName}</span>
                         <Pencil className="w-3 h-3 opacity-0 group-hover/header:opacity-60 transition-opacity flex-shrink-0" />
@@ -1397,7 +1397,7 @@ const ChatInterface: React.FC = () => {
                       )}
                       {assignedMember ? (
                         <span
-                          className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-cyan-500/10 text-cyan-300 border-cyan-500/30 flex items-center gap-1"
+                          className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border bg-brand-gold-500/10 text-brand-gold-300 border-brand-gold-500/30 flex items-center gap-1"
                           title={`Atendente responsável: ${assignedMember.name}`}
                         >
                           <img src={assignedMember.avatar} alt={assignedMember.name} className="w-3.5 h-3.5 rounded-full" />
@@ -1414,7 +1414,7 @@ const ChatInterface: React.FC = () => {
                       ) : null}
                     </span>
                   </h2>
-                  <p className="text-xs text-cyan-500 font-medium truncate">{activeChat.contactPhone}</p>
+                  <p className="text-xs text-brand-gold-500 font-medium truncate">{activeChat.contactPhone}</p>
                 </div>
               </div>
               {/* Botões de ação — ocultos no mobile, visíveis no desktop */}
@@ -1487,7 +1487,7 @@ const ChatInterface: React.FC = () => {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-slate-400 hover:text-cyan-400 text-xs px-2"
+                      className="text-slate-400 hover:text-brand-gold-400 text-xs px-2"
                       title="Mover para Atendimento"
                       onClick={async () => {
                         try {
@@ -1571,7 +1571,7 @@ const ChatInterface: React.FC = () => {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className={`text-slate-400 hover:text-white ${showProfileInfo ? 'bg-slate-800 text-cyan-400' : ''}`} 
+                  className={`text-slate-400 hover:text-white ${showProfileInfo ? 'bg-slate-800 text-brand-gold-400' : ''}`} 
                   onClick={() => setShowProfileInfo(!showProfileInfo)} 
                   title="Ver Informações"
                 >
@@ -1672,7 +1672,7 @@ const ChatInterface: React.FC = () => {
                                         isOutgoing
                                           ? msg.fromType === 'nina'
                                             ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-tr-sm shadow-violet-900/20'
-                                            : 'bg-gradient-to-br from-cyan-600 to-teal-700 text-white rounded-tr-sm shadow-cyan-900/20'
+                                            : 'bg-gradient-to-br from-brand-gold-600 to-teal-700 text-white rounded-tr-sm shadow-brand-gold-900/20'
                                           : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700/50'
                                       }`
                                 } ${msg.status === 'failed' ? 'ring-1 ring-red-500/60' : ''}`}
@@ -1681,7 +1681,7 @@ const ChatInterface: React.FC = () => {
                                   const sName = senderNameFor(msg);
                                   if (!sName) return null;
                                   return (
-                                    <p className="text-[11px] font-semibold text-cyan-100 mb-1 leading-tight">
+                                    <p className="text-[11px] font-semibold text-brand-gold-100 mb-1 leading-tight">
                                       {sName}
                                     </p>
                                   );
@@ -1689,7 +1689,7 @@ const ChatInterface: React.FC = () => {
                                 {msg.metadata?.template?.name && (
                                   <div className="mb-2 flex flex-col gap-1">
                                     <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide w-fit ${
-                                      isOutgoing ? 'bg-white/15 text-white/90' : 'bg-slate-900/60 text-cyan-300'
+                                      isOutgoing ? 'bg-white/15 text-white/90' : 'bg-slate-900/60 text-brand-gold-300'
                                     }`}>
                                       <LayoutTemplate className="w-3 h-3" />
                                       Template · {msg.metadata.template.name}
@@ -1702,7 +1702,7 @@ const ChatInterface: React.FC = () => {
                                       if (failed) {
                                         const errTitle = meta.whatsapp_error?.errors?.[0]?.title || meta.whatsapp_error?.title || meta.error_message || 'erro Meta';
                                         label = `Falhou · ${errTitle}`; cls = 'text-red-300';
-                                      } else if (msg.status === 'read') { label = 'Lido pelo destinatário'; cls = 'text-cyan-200'; }
+                                      } else if (msg.status === 'read') { label = 'Lido pelo destinatário'; cls = 'text-brand-gold-200'; }
                                       else if (msg.status === 'delivered') { label = 'Entregue ao WhatsApp'; cls = 'text-emerald-300'; }
                                       else if (msg.status === 'sent') { label = 'Enviado à Meta · aguardando entrega'; cls = 'text-slate-300'; }
                                       return (
@@ -1727,11 +1727,11 @@ const ChatInterface: React.FC = () => {
                                     className={`mb-2 w-full text-left px-2.5 py-1.5 rounded-md border-l-2 text-xs transition ${
                                       isOutgoing
                                         ? 'bg-white/10 border-white/60 hover:bg-white/15'
-                                        : 'bg-slate-900/60 border-cyan-400 hover:bg-slate-900'
+                                        : 'bg-slate-900/60 border-brand-gold-400 hover:bg-slate-900'
                                     }`}
                                     title="Ir para mensagem original"
                                   >
-                                    <p className={`font-semibold text-[11px] mb-0.5 ${isOutgoing ? 'text-white/90' : 'text-cyan-300'}`}>
+                                    <p className={`font-semibold text-[11px] mb-0.5 ${isOutgoing ? 'text-white/90' : 'text-brand-gold-300'}`}>
                                       {authorFor(replied)}
                                     </p>
                                     <p className={`truncate ${isOutgoing ? 'text-white/80' : 'text-slate-400'}`}>
@@ -1740,7 +1740,7 @@ const ChatInterface: React.FC = () => {
                                   </button>
                                 )}
                                 {msg.metadata?.interactive && (
-                                  <div className={`mb-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium border ${isOutgoing ? 'bg-white/10 border-white/20 text-white/80' : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'}`}>
+                                  <div className={`mb-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium border ${isOutgoing ? 'bg-white/10 border-white/20 text-white/80' : 'bg-brand-gold-500/10 border-brand-gold-500/30 text-brand-gold-300'}`}>
                                     <CornerDownLeft className="w-3 h-3" />
                                     {msg.metadata.interactive.kind === 'list_reply' ? 'Resposta de lista' : 'Resposta de botão'}
                                   </div>
@@ -1751,8 +1751,8 @@ const ChatInterface: React.FC = () => {
                                     {msg.metadata.buttons.map((btn: any, bi: number) => {
                                       const label = btn.text || '';
                                       const baseCls = `flex items-center justify-center gap-1.5 px-3 py-2 text-[13px] font-medium ${bi > 0 ? (isOutgoing ? 'border-t border-white/15' : 'border-t border-slate-700/60') : ''}`;
-                                      const linkCls = `${baseCls} ${isOutgoing ? 'text-white hover:bg-white/10' : 'text-cyan-400 hover:bg-slate-800/60'} transition-colors cursor-pointer`;
-                                      const passiveCls = `${baseCls} ${isOutgoing ? 'text-white/90' : 'text-cyan-400'}`;
+                                      const linkCls = `${baseCls} ${isOutgoing ? 'text-white hover:bg-white/10' : 'text-brand-gold-400 hover:bg-slate-800/60'} transition-colors cursor-pointer`;
+                                      const passiveCls = `${baseCls} ${isOutgoing ? 'text-white/90' : 'text-brand-gold-400'}`;
                                       if (btn.type === 'URL' && btn.url) {
                                         return (
                                           <a key={bi} href={btn.url} target="_blank" rel="noreferrer" className={linkCls}>
@@ -1799,7 +1799,7 @@ const ChatInterface: React.FC = () => {
                                   <Bot className="w-3 h-3 text-violet-400" />
                                 )}
                                 {isOutgoing && msg.fromType === 'human' && (
-                                  <User className="w-3 h-3 text-cyan-400" />
+                                  <User className="w-3 h-3 text-brand-gold-400" />
                                 )}
                                 <span className="text-[10px] text-slate-500 font-medium">{msg.timestamp}</span>
                                 {isOutgoing && (
@@ -1812,7 +1812,7 @@ const ChatInterface: React.FC = () => {
                                       <span>Não entregue{msg.errorMessage ? ` — ${msg.errorMessage}` : ''}</span>
                                     </span>
                                   ) :
-                                  msg.status === 'read' ? <CheckCheck className="w-3.5 h-3.5 text-cyan-500" /> :
+                                  msg.status === 'read' ? <CheckCheck className="w-3.5 h-3.5 text-brand-gold-500" /> :
                                   msg.status === 'delivered' ? <CheckCheck className="w-3.5 h-3.5 text-slate-500" /> :
                                   <Check className="w-3.5 h-3.5 text-slate-500" />
                                 )}
@@ -1826,7 +1826,7 @@ const ChatInterface: React.FC = () => {
                                   requestAnimationFrame(() => messageInputRef.current?.focus());
                                 }}
                                 title="Responder esta mensagem"
-                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-brand-gold-300 border border-slate-700"
                               >
                                 <Reply className="w-3.5 h-3.5" />
                               </button>
@@ -1888,7 +1888,7 @@ const ChatInterface: React.FC = () => {
 
                 {/* Attachment preview card */}
                 {pendingAttachment && (
-                  <div className="max-w-4xl mx-auto mb-3 p-3 rounded-xl border border-cyan-500/30 bg-slate-950/80 flex items-center gap-3">
+                  <div className="max-w-4xl mx-auto mb-3 p-3 rounded-xl border border-brand-gold-500/30 bg-slate-950/80 flex items-center gap-3">
                     {pendingAttachment.mediaType === 'image' ? (
                       <img
                         src={pendingAttachment.previewUrl}
@@ -1896,7 +1896,7 @@ const ChatInterface: React.FC = () => {
                         className="w-16 h-16 rounded-lg object-cover border border-slate-700"
                       />
                     ) : (
-                      <div className="w-16 h-16 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400">
+                      <div className="w-16 h-16 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-brand-gold-400">
                         {pendingAttachment.mediaType === 'audio' ? <Music className="w-6 h-6" /> : <FileText className="w-6 h-6" />}
                       </div>
                     )}
@@ -1911,7 +1911,7 @@ const ChatInterface: React.FC = () => {
                           value={attachmentCaption}
                           onChange={(e) => setAttachmentCaption(e.target.value)}
                           placeholder="Adicionar legenda (opcional)…"
-                          className="mt-1.5 w-full bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-xs text-slate-200 outline-none focus:border-cyan-500/60"
+                          className="mt-1.5 w-full bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-xs text-slate-200 outline-none focus:border-brand-gold-500/60"
                         />
                       )}
                     </div>
@@ -1930,7 +1930,7 @@ const ChatInterface: React.FC = () => {
                       type="button"
                       onClick={handleSendAttachment}
                       disabled={isUploading}
-                      className="rounded-full px-4 h-10 text-sm bg-cyan-500 hover:bg-cyan-400"
+                      className="rounded-full px-4 h-10 text-sm bg-brand-gold-500 hover:bg-brand-gold-400"
                     >
                       {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                       <span className="ml-2">Enviar</span>
@@ -1941,9 +1941,9 @@ const ChatInterface: React.FC = () => {
                 {/* Reply preview banner */}
                 {replyingTo && (
                   <div className="max-w-4xl mx-auto mb-2 flex items-stretch gap-0 rounded-lg overflow-hidden border border-slate-800 bg-slate-950/80">
-                    <div className="w-1 bg-cyan-400" />
+                    <div className="w-1 bg-brand-gold-400" />
                     <div className="flex-1 px-3 py-2 min-w-0">
-                      <p className="text-[11px] font-semibold text-cyan-300 flex items-center gap-1.5">
+                      <p className="text-[11px] font-semibold text-brand-gold-300 flex items-center gap-1.5">
                         <Reply className="w-3 h-3" />
                         Respondendo a {replyingTo.fromType === 'user' ? activeChat.contactName : replyingTo.fromType === 'nina' ? sdrName : 'Você'}
                       </p>
@@ -1975,7 +1975,7 @@ const ChatInterface: React.FC = () => {
                           variant="ghost"
                           size="icon"
                           title="Inserir emoji"
-                          className="text-slate-300 hover:text-cyan-400 rounded-full"
+                          className="text-slate-300 hover:text-brand-gold-400 rounded-full"
                         >
                           <Smile className="w-5 h-5" />
                         </Button>
@@ -2004,7 +2004,7 @@ const ChatInterface: React.FC = () => {
                           variant="ghost" 
                           size="icon"
                           title="Anexar arquivo"
-                          className="text-slate-300 hover:text-cyan-400 rounded-full"
+                          className="text-slate-300 hover:text-brand-gold-400 rounded-full"
                         >
                           <Paperclip className="w-5 h-5" />
                         </Button>
@@ -2015,7 +2015,7 @@ const ChatInterface: React.FC = () => {
                           onClick={() => handlePickAttachment('image')}
                           className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-slate-200 hover:bg-slate-800 transition"
                         >
-                          <ImageIcon className="w-4 h-4 text-cyan-400" />
+                          <ImageIcon className="w-4 h-4 text-brand-gold-400" />
                           Imagem
                           <span className="ml-auto text-[10px] text-slate-500">5MB</span>
                         </button>
@@ -2046,7 +2046,7 @@ const ChatInterface: React.FC = () => {
                       title={activeChat.status === 'nina' ? 'Assuma o atendimento para enviar templates' : 'Enviar template do WhatsApp'}
                       disabled={activeChat.status === 'nina'}
                       onClick={() => setTemplatePickerOpen(true)}
-                      className="text-slate-300 hover:text-cyan-400 rounded-full disabled:opacity-40"
+                      className="text-slate-300 hover:text-brand-gold-400 rounded-full disabled:opacity-40"
                     >
                       <LayoutTemplate className="w-5 h-5" />
                     </Button>
@@ -2067,7 +2067,7 @@ const ChatInterface: React.FC = () => {
                       <span className="text-xs text-slate-500 ml-auto">Gravando... (máx 2min)</span>
                     </div>
                   ) : (
-                    <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500/50 transition-all shadow-inner">
+                    <div className="flex-1 bg-slate-950 rounded-2xl border border-slate-800 focus-within:ring-2 focus-within:ring-brand-gold-500/30 focus-within:border-brand-gold-500/50 transition-all shadow-inner">
                       <textarea
                         ref={messageInputRef}
                         value={inputText}
@@ -2098,7 +2098,7 @@ const ChatInterface: React.FC = () => {
                   ) : inputText.trim() ? (
                     <Button
                       type="submit"
-                      className="rounded-full w-12 h-12 p-0 transition-all shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95"
+                      className="rounded-full w-12 h-12 p-0 transition-all shadow-lg shadow-brand-gold-500/20 hover:scale-105 active:scale-95"
                     >
                       <Send className="w-5 h-5 ml-0.5" />
                     </Button>
@@ -2108,7 +2108,7 @@ const ChatInterface: React.FC = () => {
                       onClick={startRecording}
                       title="Gravar áudio"
                       disabled={activeChat.status === 'nina'}
-                      className="rounded-full w-12 h-12 p-0 transition-all shadow-lg shadow-cyan-500/20 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="rounded-full w-12 h-12 p-0 transition-all shadow-lg shadow-brand-gold-500/20 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Mic className="w-5 h-5" />
                     </Button>
@@ -2138,7 +2138,7 @@ const ChatInterface: React.FC = () => {
               <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
                 {/* Identity */}
                 <div className="flex flex-col items-center text-center">
-                  <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-cyan-500 to-teal-600 shadow-xl mb-4">
+                  <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-brand-gold-500 to-teal-600 shadow-xl mb-4">
                     <img src={activeChat.contactAvatar} alt={activeChat.contactName} className="w-full h-full rounded-full object-cover border-2 border-slate-900" />
                   </div>
                   <h3 className="text-xl font-bold text-white mb-1">{activeChat.contactName}</h3>
@@ -2210,7 +2210,7 @@ const ChatInterface: React.FC = () => {
                       disabled={savingBusinessToggle}
                       onClick={() => toggleIsBusiness(!activeChat.isBusiness)}
                       className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${
-                        activeChat.isBusiness ? 'bg-cyan-500' : 'bg-slate-700'
+                        activeChat.isBusiness ? 'bg-brand-gold-500' : 'bg-slate-700'
                       }`}
                     >
                       <span
@@ -2295,7 +2295,7 @@ const ChatInterface: React.FC = () => {
                       assignConversation(activeChat.id, userId);
                       toast.success('Conversa atribuída. Deal atualizado automaticamente.');
                     }}
-                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 outline-none transition-all"
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 focus:ring-1 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 outline-none transition-all"
                   >
                     <option value="">Não atribuído</option>
                     {teamMembers.map(member => (
@@ -2323,7 +2323,7 @@ const ChatInterface: React.FC = () => {
                     Tags
                     <Popover open={isTagSelectorOpen} onOpenChange={setIsTagSelectorOpen}>
                       <PopoverTrigger asChild>
-                        <button className="text-cyan-500 hover:text-cyan-400 transition-colors">
+                        <button className="text-brand-gold-500 hover:text-brand-gold-400 transition-colors">
                           <Plus className="w-4 h-4" />
                         </button>
                       </PopoverTrigger>
@@ -2370,10 +2370,10 @@ const ChatInterface: React.FC = () => {
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                     Notas Internas
-                    {isSavingNotes && <Loader2 className="w-3 h-3 animate-spin text-cyan-500" />}
+                    {isSavingNotes && <Loader2 className="w-3 h-3 animate-spin text-brand-gold-500" />}
                   </h4>
                   <textarea 
-                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 outline-none resize-none transition-all"
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 placeholder:text-slate-600 focus:ring-1 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 outline-none resize-none transition-all"
                     rows={4}
                     placeholder="Adicione observações sobre este lead..."
                     value={notesValue}
@@ -2391,8 +2391,8 @@ const ChatInterface: React.FC = () => {
           <div className="absolute inset-0 bg-gradient-to-b from-slate-900/20 to-transparent"></div>
           <div className="relative z-10 flex flex-col items-center p-8 text-center max-w-md">
             <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center mb-6 shadow-2xl border border-slate-800 relative group">
-              <div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-xl group-hover:bg-cyan-500/30 transition-all duration-1000"></div>
-              <MessageSquare className="w-10 h-10 text-cyan-500" />
+              <div className="absolute inset-0 bg-brand-gold-500/20 rounded-full blur-xl group-hover:bg-brand-gold-500/30 transition-all duration-1000"></div>
+              <MessageSquare className="w-10 h-10 text-brand-gold-500" />
             </div>
             <h2 className="text-2xl font-bold text-white mb-2">{companyName} Workspace</h2>
             <p className="text-slate-400 text-sm leading-relaxed">

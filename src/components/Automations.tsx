@@ -69,7 +69,7 @@ const Automations: React.FC = () => {
       <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-3">
-            <Zap className="w-7 h-7 text-cyan-400" />
+            <Zap className="w-7 h-7 text-brand-gold-400" />
             Automações
           </h2>
           <p className="text-sm text-slate-400 mt-1">
@@ -114,19 +114,19 @@ const Automations: React.FC = () => {
       <div className="flex gap-1 mb-6 border-b border-slate-800 overflow-x-auto">
         <button onClick={() => setTab('rules')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
-            tab === 'rules' ? 'border-cyan-400 text-cyan-300' : 'border-transparent text-slate-400 hover:text-slate-200'
+            tab === 'rules' ? 'border-brand-gold-400 text-brand-gold-300' : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}>
           <Zap className="w-4 h-4" /> Regras
         </button>
         <button onClick={() => setTab('dashboard')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
-            tab === 'dashboard' ? 'border-cyan-400 text-cyan-300' : 'border-transparent text-slate-400 hover:text-slate-200'
+            tab === 'dashboard' ? 'border-brand-gold-400 text-brand-gold-300' : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}>
           <BarChart3 className="w-4 h-4" /> Painel
         </button>
         <button onClick={() => setTab('events')}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
-            tab === 'events' ? 'border-cyan-400 text-cyan-300' : 'border-transparent text-slate-400 hover:text-slate-200'
+            tab === 'events' ? 'border-brand-gold-400 text-brand-gold-300' : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}>
           <Inbox className="w-4 h-4" /> Eventos recebidos
         </button>
@@ -144,12 +144,12 @@ const Automations: React.FC = () => {
         <div className="mb-4 relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..."
-            className="w-full pl-10 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-50 focus:outline-none focus:border-cyan-500" />
+            className="w-full pl-10 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-50 focus:outline-none focus:border-brand-gold-500" />
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center p-12">
-            <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
+            <Loader2 className="w-6 h-6 animate-spin text-brand-gold-500" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-slate-800 rounded-xl">
@@ -189,11 +189,11 @@ const Automations: React.FC = () => {
                       </td>
                       <td className="p-3 text-right">
                         <button onClick={() => setLogsRule(r)} title="Ver logs"
-                          className="p-1.5 text-slate-400 hover:text-cyan-400">
+                          className="p-1.5 text-slate-400 hover:text-brand-gold-400">
                           <FileClock className="w-4 h-4" />
                         </button>
                         <button onClick={() => { setEditing(r); setModalOpen(true); }}
-                          className="p-1.5 text-slate-400 hover:text-cyan-400">
+                          className="p-1.5 text-slate-400 hover:text-brand-gold-400">
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => remove(r)} className="p-1.5 text-slate-400 hover:text-red-400">

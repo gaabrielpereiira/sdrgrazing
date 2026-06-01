@@ -112,7 +112,7 @@ const StepCircle = ({
       {/* Outer glow ring for active step */}
       {isActive && (
         <motion.div
-          className="absolute inset-0 rounded-full bg-cyan-500/30"
+          className="absolute inset-0 rounded-full bg-brand-gold-500/30"
           animate={{
             scale: [1, 1.5, 1],
             opacity: [0.5, 0, 0.5],
@@ -132,9 +132,9 @@ const StepCircle = ({
           relative flex items-center justify-center w-8 h-8 rounded-full 
           border-2 transition-colors duration-300
           ${isCompleted 
-            ? 'bg-gradient-to-br from-cyan-400 to-cyan-600 border-cyan-400 text-white shadow-lg shadow-cyan-500/40' 
+            ? 'bg-gradient-to-br from-brand-gold-400 to-brand-gold-600 border-brand-gold-400 text-white shadow-lg shadow-brand-gold-500/40' 
             : isActive 
-              ? 'border-cyan-500 text-cyan-400 bg-cyan-500/10 shadow-lg shadow-cyan-500/20' 
+              ? 'border-brand-gold-500 text-brand-gold-400 bg-brand-gold-500/10 shadow-lg shadow-brand-gold-500/20' 
               : isOptional
                 ? 'border-slate-600 text-slate-500 bg-slate-800/50 border-dashed'
                 : 'border-slate-700 text-slate-500 bg-slate-800/50'
@@ -175,7 +175,7 @@ const StepCircle = ({
 const ConnectingLine = ({ isCompleted }: { isCompleted: boolean }) => (
   <div className="relative flex-1 h-0.5 mx-1 bg-slate-700/50 rounded-full overflow-hidden self-center min-w-[12px]">
     <motion.div
-      className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-cyan-500"
+      className="absolute inset-0 bg-gradient-to-r from-brand-gold-400 to-brand-gold-500"
       initial={{ scaleX: 0 }}
       animate={{ scaleX: isCompleted ? 1 : 0 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
@@ -731,7 +731,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
               {/* Gradient Progress Bar at top */}
               <div className="absolute top-0 left-0 right-0 h-1 bg-slate-800">
                 <motion.div
-                  className="h-full bg-gradient-to-r from-cyan-500 via-violet-500 to-fuchsia-500"
+                  className="h-full bg-gradient-to-r from-brand-gold-500 via-violet-500 to-fuchsia-500"
                   initial={{ width: '0%' }}
                   animate={{ width: `${progressPercentage}%` }}
                   transition={{ duration: 0.5, ease: "easeOut" }}
@@ -742,7 +742,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
               <div className="flex items-center justify-between p-6 pt-7 border-b border-slate-800/50">
                 <div className="flex items-center gap-3">
                   <motion.div
-                    className="p-2 rounded-lg bg-gradient-to-br from-cyan-500/20 to-violet-500/20 border border-cyan-500/30"
+                    className="p-2 rounded-lg bg-gradient-to-br from-brand-gold-500/20 to-violet-500/20 border border-brand-gold-500/30"
                     animate={{ 
                       boxShadow: [
                         '0 0 0px rgba(6,182,212,0.3)',
@@ -752,7 +752,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
                     }}
                     transition={{ duration: 2, repeat: Infinity }}
                   >
-                    <Settings2 className="w-5 h-5 text-cyan-400" />
+                    <Settings2 className="w-5 h-5 text-brand-gold-400" />
                   </motion.div>
                   <div>
                     <h2 className="text-xl font-semibold text-white">Configuração Inicial</h2>
@@ -762,7 +762,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
                         key={activeStep}
                         initial={{ y: 10, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
-                        className="text-sm font-semibold text-cyan-400"
+                        className="text-sm font-semibold text-brand-gold-400"
                       >
                         {activeStep + 1}
                       </motion.span>
@@ -806,7 +806,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
                     key={activeStep}
                     initial={{ opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="text-sm font-medium text-cyan-400"
+                    className="text-sm font-medium text-brand-gold-400"
                   >
                     {currentStepData?.title}
                     {showSkipButton && (
@@ -824,7 +824,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
                       animate={{ rotate: 360 }}
                       transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
                     >
-                      <Loader2 className="w-8 h-8 text-cyan-500" />
+                      <Loader2 className="w-8 h-8 text-brand-gold-500" />
                     </motion.div>
                     <div className="text-center">
                       <p className="text-slate-300 font-medium">Preparando sistema...</p>
@@ -875,7 +875,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
                         animate={{ x: [0, -3, 0] }}
                         transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 1 }}
                       >
-                        <ChevronLeft className="w-4 h-4 group-hover:text-cyan-400 transition-colors" />
+                        <ChevronLeft className="w-4 h-4 group-hover:text-brand-gold-400 transition-colors" />
                       </motion.div>
                       Anterior
                     </Button>
@@ -932,7 +932,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ isOpen, onCl
                         variant="primary"
                         onClick={handleNext}
                         disabled={isSaving}
-                        className="gap-2 group bg-gradient-to-r from-cyan-600 to-violet-600 hover:from-cyan-500 hover:to-violet-500 border-0 shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40 transition-all"
+                        className="gap-2 group bg-gradient-to-r from-brand-gold-600 to-violet-600 hover:from-brand-gold-500 hover:to-violet-500 border-0 shadow-lg shadow-brand-gold-500/20 hover:shadow-brand-gold-500/40 transition-all"
                       >
                         Próximo
                         <motion.div

@@ -273,7 +273,7 @@ const Team: React.FC = () => {
             <Settings className="w-4 h-4 mr-2" />
             Configurar
           </Button>
-          <Button onClick={() => setShowModal(true)} className="shadow-lg shadow-cyan-500/20 bg-slate-100 text-slate-900 hover:bg-white hover:text-black w-full sm:w-auto">
+          <Button onClick={() => setShowModal(true)} className="shadow-lg shadow-brand-gold-500/20 bg-slate-100 text-slate-900 hover:bg-white hover:text-black w-full sm:w-auto">
             <UserPlus className="w-4 h-4 mr-2" />
             Convidar Usuário
           </Button>
@@ -346,7 +346,7 @@ const Team: React.FC = () => {
 
         {loading ? (
              <div className="flex flex-col items-center justify-center p-12">
-                <Loader2 className="h-8 w-8 animate-spin text-cyan-500 mb-3" />
+                <Loader2 className="h-8 w-8 animate-spin text-brand-gold-500 mb-3" />
                 <span className="text-sm text-slate-400">Carregando dados...</span>
            </div>
         ) : members.length === 0 ? (

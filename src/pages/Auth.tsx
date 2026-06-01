@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
+import { BrandLogo } from '@/components/BrandLogo';
 
 // Validation schemas
 const emailSchema = z.string().email('Email inválido');
@@ -116,39 +117,26 @@ const Auth: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-[#1D1F2A] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-gold-500" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Effects */}
-      <div className="fixed top-0 left-0 w-[500px] h-[500px] bg-primary/20 rounded-full blur-[128px] pointer-events-none -translate-x-1/2 -translate-y-1/2 z-0" />
-      <div className="fixed bottom-0 right-0 w-[500px] h-[500px] bg-accent/10 rounded-full blur-[128px] pointer-events-none translate-x-1/2 translate-y-1/2 z-0" />
-      
+    <div className="min-h-screen bg-[#1D1F2A] flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Subtle brand glow */}
+      <div className="fixed top-0 left-0 w-[600px] h-[600px] bg-brand-gold-500/5 rounded-full blur-[160px] pointer-events-none -translate-x-1/3 -translate-y-1/3 z-0" />
+      <div className="fixed bottom-0 right-0 w-[600px] h-[600px] bg-brand-gold-600/5 rounded-full blur-[160px] pointer-events-none translate-x-1/3 translate-y-1/3 z-0" />
+
       <div className="w-full max-w-md relative z-10">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent mb-4">
-            <img 
-              src="/src/assets/icon-via.png" 
-              alt="Logo" 
-              className="w-10 h-10"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground">
-            {isLogin ? 'Bem-vindo de volta' : 'Crie sua conta'}
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            {isLogin 
+        <div className="flex flex-col items-center mb-10">
+          <BrandLogo variant="stacked" size={56} asLink={false} />
+          <p className="text-muted-foreground mt-6 text-sm">
+            {isLogin
               ? 'Entre para acessar sua plataforma'
-              : 'Configure sua assistente de vendas em minutos'
-            }
+              : 'Configure sua assistente de vendas em minutos'}
           </p>
         </div>
 
@@ -237,7 +225,7 @@ const Auth: React.FC = () => {
                     setIsLogin(!isLogin);
                     setErrors({});
                   }}
-                  className="ml-1 text-primary hover:text-primary/80 font-medium transition-colors"
+                  className="ml-1 text-brand-gold-400 hover:text-brand-gold-300 font-medium transition-colors"
                 >
                   {isLogin ? 'Criar conta' : 'Fazer login'}
                 </button>

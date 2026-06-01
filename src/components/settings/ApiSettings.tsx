@@ -453,7 +453,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-gold-500" />
       </div>
     );
   }
@@ -464,7 +464,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <MessageSquare className="w-5 h-5 text-cyan-400" />
+            <MessageSquare className="w-5 h-5 text-brand-gold-400" />
             <h3 className="font-semibold text-white">WhatsApp Cloud API</h3>
           </div>
           <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
@@ -479,7 +479,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
 
         {/* Mini-guia de configuração */}
         <details className="mb-4">
-          <summary className="text-xs text-cyan-400 cursor-pointer hover:text-cyan-300 flex items-center gap-2 py-2">
+          <summary className="text-xs text-brand-gold-400 cursor-pointer hover:text-brand-gold-300 flex items-center gap-2 py-2">
             <HelpCircle className="w-4 h-4" />
             Como obter as credenciais do WhatsApp?
           </summary>
@@ -487,7 +487,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
             <div className="space-y-2">
               <p className="text-white font-medium">📋 Passo a passo:</p>
               <ol className="list-decimal list-inside space-y-1.5 text-slate-400">
-                <li>Acesse o <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Meta for Developers</a></li>
+                <li>Acesse o <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-brand-gold-400 hover:underline">Meta for Developers</a></li>
                 <li>Crie ou selecione um App do tipo "Business"</li>
                 <li>Adicione o produto "WhatsApp" ao app</li>
                 <li>Na seção "API Setup", copie o <strong className="text-white">Access Token</strong> temporário (ou gere um permanente)</li>
@@ -497,7 +497,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
             </div>
             <div className="pt-2 border-t border-slate-700">
               <p className="text-slate-500">
-                📚 <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Documentação oficial do WhatsApp Cloud API</a>
+                📚 <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener noreferrer" className="text-brand-gold-400 hover:underline">Documentação oficial do WhatsApp Cloud API</a>
               </p>
             </div>
           </div>
@@ -514,7 +514,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
                 value={settings.whatsapp_access_token || ''}
                 onChange={(e) => setSettings({ ...settings, whatsapp_access_token: e.target.value })}
                 placeholder="EAAxxxxxxxxxxxxxxx..."
-                className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 pr-10 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 pr-10 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
               />
               <button
                 type="button"
@@ -535,7 +535,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
               value={settings.whatsapp_phone_number_id || ''}
               onChange={(e) => setSettings({ ...settings, whatsapp_phone_number_id: e.target.value })}
               placeholder="123456789012345"
-              className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
             />
           </div>
         </div>
@@ -572,7 +572,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
                 type="text"
                 value={settings.whatsapp_verify_token || ''}
                 onChange={(e) => setSettings({ ...settings, whatsapp_verify_token: e.target.value })}
-                className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
               />
             </div>
           </Collapsible.Content>
@@ -866,7 +866,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
                   value={testPhone}
                   onChange={(e) => setTestPhone(e.target.value)}
                   placeholder="+5511999999999"
-                  className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
                 />
               </div>
 
@@ -877,7 +877,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
                   value={testMessage}
                   onChange={(e) => setTestMessage(e.target.value)}
                   placeholder="Mensagem de teste..."
-                  className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50"
                 />
               </div>
             </div>
@@ -886,7 +886,7 @@ const ApiSettings = forwardRef<ApiSettingsRef>((props, ref) => {
               <Button
                 onClick={handleTestMessage}
                 disabled={testSending}
-                className="shadow-lg shadow-cyan-500/20"
+                className="shadow-lg shadow-brand-gold-500/20"
               >
                 {testSending ? (
                   <>

@@ -19,7 +19,29 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        serif: ['Cormorant Garamond', 'Georgia', 'serif'],
+      },
       colors: {
+        'brand-gold': {
+          50:  '#FAF8F0',
+          100: '#F0EAD4',
+          200: '#DDD1A9',
+          300: '#CBBC83',
+          400: '#BFB07B',
+          500: '#B3A369',
+          600: '#9A8B55',
+          700: '#7A6D41',
+          800: '#5A5030',
+          900: '#3A3320',
+          950: '#1D1910',
+          DEFAULT: '#B3A369',
+        },
+        'brand-navy': {
+          DEFAULT: '#252A35',
+          deep:    '#1D1F2A',
+        },
+        'brand-cream': '#F9F6E7',
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

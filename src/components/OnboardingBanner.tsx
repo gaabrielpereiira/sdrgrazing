@@ -13,17 +13,17 @@ export const OnboardingBanner: React.FC<OnboardingBannerProps> = ({ onOpenWizard
   if (loading || isComplete) return null;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-r from-cyan-500/10 via-slate-900/50 to-violet-500/10 p-6 mb-8">
+    <div className="relative overflow-hidden rounded-2xl border border-brand-gold-500/20 bg-gradient-to-r from-brand-gold-500/10 via-slate-900/50 to-violet-500/10 p-6 mb-8">
       {/* Background Glow */}
-      <div className="absolute -top-20 -right-20 w-40 h-40 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-20 -right-20 w-40 h-40 bg-brand-gold-500/20 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-violet-500/20 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative z-10">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center">
-                <Rocket className="w-5 h-5 text-cyan-400" />
+              <div className="w-10 h-10 rounded-xl bg-brand-gold-500/20 border border-brand-gold-500/30 flex items-center justify-center">
+                <Rocket className="w-5 h-5 text-brand-gold-400" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-white">Complete a configuração do sistema</h3>
@@ -35,11 +35,11 @@ export const OnboardingBanner: React.FC<OnboardingBannerProps> = ({ onOpenWizard
             <div className="mb-4">
               <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
                 <span>Progresso</span>
-                <span className="text-cyan-400 font-medium">{completionPercentage}% concluído</span>
+                <span className="text-brand-gold-400 font-medium">{completionPercentage}% concluído</span>
               </div>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-cyan-500 to-violet-500 rounded-full transition-all duration-500"
+                  className="h-full bg-gradient-to-r from-brand-gold-500 to-violet-500 rounded-full transition-all duration-500"
                   style={{ width: `${completionPercentage}%` }}
                 />
               </div>

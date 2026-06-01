@@ -174,7 +174,7 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
             onClick={() => setActiveTab('teams')}
             className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${
               activeTab === 'teams'
-                ? 'text-white border-b-2 border-cyan-500 bg-slate-800/50'
+                ? 'text-white border-b-2 border-brand-gold-500 bg-slate-800/50'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -184,7 +184,7 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
             onClick={() => setActiveTab('functions')}
             className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${
               activeTab === 'functions'
-                ? 'text-white border-b-2 border-cyan-500 bg-slate-800/50'
+                ? 'text-white border-b-2 border-brand-gold-500 bg-slate-800/50'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -196,7 +196,7 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
         <div className="p-6 overflow-y-auto max-h-[50vh] custom-scrollbar">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-cyan-500" />
+              <Loader2 className="h-6 w-6 animate-spin text-brand-gold-500" />
             </div>
           ) : activeTab === 'teams' ? (
             <div className="space-y-3">

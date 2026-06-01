@@ -32,7 +32,7 @@ const STATUS_STYLES: Record<string, string> = {
   REJECTED: 'bg-red-500/10 text-red-400 border-red-500/30',
   PAUSED: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
   DISABLED: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
-  draft: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+  draft: 'bg-brand-gold-500/10 text-brand-gold-400 border-brand-gold-500/30',
 };
 
 const WhatsAppTemplates: React.FC = () => {

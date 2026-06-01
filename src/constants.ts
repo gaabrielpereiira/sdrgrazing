@@ -158,7 +158,7 @@ export const MOCK_APPOINTMENTS: Appointment[] = [
 
 export const MOCK_KANBAN_COLUMNS: KanbanColumn[] = [
   { id: 'new', title: 'Novos Leads', color: 'border-slate-500', position: 0, isSystem: false, isActive: true, isAiManaged: false, aiTriggerCriteria: null },
-  { id: 'qualification', title: 'Qualificação', color: 'border-cyan-500', position: 1, isSystem: false, isActive: true, isAiManaged: false, aiTriggerCriteria: null },
+  { id: 'qualification', title: 'Qualificação', color: 'border-brand-gold-500', position: 1, isSystem: false, isActive: true, isAiManaged: false, aiTriggerCriteria: null },
   { id: 'presentation', title: 'Apresentação', color: 'border-violet-500', position: 2, isSystem: false, isActive: true, isAiManaged: false, aiTriggerCriteria: null },
   { id: 'negotiation', title: 'Negociação', color: 'border-orange-500', position: 3, isSystem: false, isActive: true, isAiManaged: false, aiTriggerCriteria: null },
   { id: 'won', title: 'Fechado / Ganho', color: 'border-emerald-500', position: 4, isSystem: true, isActive: true, isAiManaged: false, aiTriggerCriteria: null },

@@ -237,7 +237,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-gold-500" />
       </div>
     );
   }
@@ -256,7 +256,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <Bot className="w-5 h-5 text-cyan-400" />
+              <Bot className="w-5 h-5 text-brand-gold-400" />
               <h3 className="font-semibold text-white">Prompt do Sistema</h3>
             </div>
             <div className="flex gap-2">
@@ -273,7 +273,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsGeneratorOpen(true)}
-                className="text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10"
+                className="text-brand-gold-400 hover:text-brand-gold-300 hover:bg-brand-gold-500/10"
               >
                 <Wand2 className="w-4 h-4 mr-2" />
                 Gerar com IA
@@ -297,19 +297,19 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
             onChange={(e) => setSettings({ ...settings, system_prompt_override: e.target.value || null })}
             placeholder="Cole ou escreva o prompt do agente aqui..."
             rows={12}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-y font-mono custom-scrollbar"
+            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 resize-y font-mono custom-scrollbar"
           />
           <details className="mt-3">
-            <summary className="text-xs text-cyan-400 cursor-pointer hover:text-cyan-300 flex items-center gap-2">
+            <summary className="text-xs text-brand-gold-400 cursor-pointer hover:text-brand-gold-300 flex items-center gap-2">
               <span>📋</span> Variáveis dinâmicas disponíveis
             </summary>
             <div className="mt-2 p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono space-y-1">
-              <div><span className="text-cyan-400">{"{{ data_hora }}"}</span> → Data e hora atual (ex: 29/11/2024 14:35:22)</div>
-              <div><span className="text-cyan-400">{"{{ data }}"}</span> → Apenas data (ex: 29/11/2024)</div>
-              <div><span className="text-cyan-400">{"{{ hora }}"}</span> → Apenas hora (ex: 14:35:22)</div>
-              <div><span className="text-cyan-400">{"{{ dia_semana }}"}</span> → Dia da semana por extenso (ex: sexta-feira)</div>
-              <div><span className="text-cyan-400">{"{{ cliente_nome }}"}</span> → Nome do cliente na conversa</div>
-              <div><span className="text-cyan-400">{"{{ cliente_telefone }}"}</span> → Telefone do cliente</div>
+              <div><span className="text-brand-gold-400">{"{{ data_hora }}"}</span> → Data e hora atual (ex: 29/11/2024 14:35:22)</div>
+              <div><span className="text-brand-gold-400">{"{{ data }}"}</span> → Apenas data (ex: 29/11/2024)</div>
+              <div><span className="text-brand-gold-400">{"{{ hora }}"}</span> → Apenas hora (ex: 14:35:22)</div>
+              <div><span className="text-brand-gold-400">{"{{ dia_semana }}"}</span> → Dia da semana por extenso (ex: sexta-feira)</div>
+              <div><span className="text-brand-gold-400">{"{{ cliente_nome }}"}</span> → Nome do cliente na conversa</div>
+              <div><span className="text-brand-gold-400">{"{{ cliente_telefone }}"}</span> → Telefone do cliente</div>
             </div>
           </details>
         </div>
@@ -546,7 +546,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
                   onChange={(e) => setSettings({ ...settings, is_active: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
+                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-gold-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-gold-500"></div>
               </label>
             </div>
 
@@ -569,7 +569,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
                   onChange={(e) => setSettings({ ...settings, auto_response_enabled: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
+                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-gold-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-gold-500"></div>
               </label>
             </div>
 
@@ -592,7 +592,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
                   onChange={(e) => setSettings({ ...settings, message_breaking_enabled: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
+                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-gold-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-gold-500"></div>
               </label>
             </div>
 
@@ -615,7 +615,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
                   onChange={(e) => setSettings({ ...settings, ai_scheduling_enabled: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
+                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-gold-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-gold-500"></div>
               </label>
             </div>
           </div>

@@ -337,7 +337,7 @@ const Scheduling: React.FC = () => {
       return 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20';
     }
     switch (type) {
-        case 'demo': return 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20 hover:bg-cyan-500/20';
+        case 'demo': return 'bg-brand-gold-500/10 text-brand-gold-300 border-brand-gold-500/20 hover:bg-brand-gold-500/20';
         case 'meeting': return 'bg-violet-500/10 text-violet-300 border-violet-500/20 hover:bg-violet-500/20';
         case 'support': return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20';
         case 'followup': return 'bg-orange-500/10 text-orange-300 border-orange-500/20 hover:bg-orange-500/20';
@@ -368,9 +368,9 @@ const Scheduling: React.FC = () => {
                     <div 
                         key={day} 
                         onClick={() => handleDateClick(day)}
-                        className={`border-b border-r border-slate-800/50 p-2 min-h-[120px] cursor-pointer transition-colors hover:bg-slate-800/30 group relative ${isToday ? 'bg-cyan-950/10' : ''}`}
+                        className={`border-b border-r border-slate-800/50 p-2 min-h-[120px] cursor-pointer transition-colors hover:bg-slate-800/30 group relative ${isToday ? 'bg-brand-gold-950/10' : ''}`}
                     >
-                        <span className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full mb-2 ${isToday ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/40' : 'text-slate-400 group-hover:text-white'}`}>
+                        <span className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full mb-2 ${isToday ? 'bg-brand-gold-500 text-white shadow-lg shadow-brand-gold-500/40' : 'text-slate-400 group-hover:text-white'}`}>
                             {day}
                         </span>
                         <div className="space-y-1">
@@ -381,7 +381,7 @@ const Scheduling: React.FC = () => {
                                     onClick={(e) => handleAppointmentClick(app, e)}
                                 >
                                     {app.metadata?.source === 'nina_ai' && (
-                                      <Bot className="w-2.5 h-2.5 inline-block mr-0.5 text-cyan-400" />
+                                      <Bot className="w-2.5 h-2.5 inline-block mr-0.5 text-brand-gold-400" />
                                     )}
                                     {app.time} - {app.title}
                                 </div>
@@ -415,11 +415,11 @@ const Scheduling: React.FC = () => {
                 {weekDays.map((day, i) => {
                      const isToday = formatDateStr(new Date()) === formatDateStr(day);
                      return (
-                        <div key={i} className={`p-2 text-center border-r border-slate-800/50 ${isToday ? 'bg-cyan-950/20' : ''}`}>
-                            <div className={`text-xs uppercase font-semibold ${isToday ? 'text-cyan-400' : 'text-slate-500'}`}>
+                        <div key={i} className={`p-2 text-center border-r border-slate-800/50 ${isToday ? 'bg-brand-gold-950/20' : ''}`}>
+                            <div className={`text-xs uppercase font-semibold ${isToday ? 'text-brand-gold-400' : 'text-slate-500'}`}>
                                 {day.toLocaleDateString('pt-BR', { weekday: 'short' })}
                             </div>
-                            <div className={`text-xl font-bold ${isToday ? 'text-cyan-500' : 'text-slate-300'}`}>
+                            <div className={`text-xl font-bold ${isToday ? 'text-brand-gold-500' : 'text-slate-300'}`}>
                                 {day.getDate()}
                             </div>
                         </div>
@@ -450,7 +450,7 @@ const Scheduling: React.FC = () => {
                                     <div 
                                         key={i} 
                                         onClick={() => handleSlotClick(dateStr, timeStr)}
-                                        className={`border-r border-b border-slate-800/50 relative p-1 transition-colors hover:bg-slate-800/20 group cursor-pointer ${isToday ? 'bg-cyan-950/5' : ''}`}
+                                        className={`border-r border-b border-slate-800/50 relative p-1 transition-colors hover:bg-slate-800/20 group cursor-pointer ${isToday ? 'bg-brand-gold-950/5' : ''}`}
                                     >
                                         {/* Add Button on Hover */}
                                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
@@ -466,7 +466,7 @@ const Scheduling: React.FC = () => {
                                             >
                                                 <div className="font-bold truncate flex items-center gap-1">
                                                     {app.metadata?.source === 'nina_ai' && (
-                                                      <Bot className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                                                      <Bot className="w-3 h-3 text-brand-gold-400 flex-shrink-0" />
                                                     )}
                                                     {app.title}
                                                 </div>
@@ -524,7 +524,7 @@ const Scheduling: React.FC = () => {
                                         <div>
                                             <div className="font-bold text-sm flex items-center gap-1.5">
                                                 {app.metadata?.source === 'nina_ai' && (
-                                                  <Bot className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                                                  <Bot className="w-3.5 h-3.5 text-brand-gold-400 flex-shrink-0" />
                                                 )}
                                                 {app.title}
                                             </div>
@@ -551,7 +551,7 @@ const Scheduling: React.FC = () => {
       <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-4 sm:mb-6 gap-4">
         <div>
            <h2 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-2">
-            <CalendarIcon className="w-7 h-7 sm:w-8 sm:h-8 text-cyan-500" />
+            <CalendarIcon className="w-7 h-7 sm:w-8 sm:h-8 text-brand-gold-500" />
             Agendamentos
            </h2>
            <p className="text-slate-400 text-sm mt-1">Gerencie demos, reuniões e suporte técnico.</p>
@@ -607,7 +607,7 @@ const Scheduling: React.FC = () => {
       <div className="flex-1 bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col relative">
         {loading ? (
              <div className="flex-1 flex items-center justify-center">
-                 <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+                 <Loader2 className="w-8 h-8 animate-spin text-brand-gold-500" />
              </div>
         ) : (
             <div className="flex-1 overflow-auto">
@@ -646,7 +646,7 @@ const Scheduling: React.FC = () => {
                     <div className="space-y-2">
                          <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">Data Selecionada</label>
                          <div className="flex items-center gap-2 text-white font-medium bg-slate-950 p-3 rounded-lg border border-slate-800">
-                            <CalendarIcon className="w-4 h-4 text-cyan-500" />
+                            <CalendarIcon className="w-4 h-4 text-brand-gold-500" />
                             {selectedDate?.split('-').reverse().join('/')}
                          </div>
                     </div>
@@ -658,7 +658,7 @@ const Scheduling: React.FC = () => {
                                 <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                                 <input 
                                     type="time" 
-                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none"
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none"
                                     value={formData.time}
                                     onChange={e => setFormData({...formData, time: e.target.value})}
                                 />
@@ -667,7 +667,7 @@ const Scheduling: React.FC = () => {
                         <div className="space-y-2">
                              <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">Duração</label>
                              <select 
-                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none appearance-none"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none appearance-none"
                                 value={formData.duration}
                                 onChange={e => setFormData({...formData, duration: parseInt(e.target.value)})}
                              >
@@ -684,7 +684,7 @@ const Scheduling: React.FC = () => {
                     <div className="space-y-2">
                          <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">Tipo</label>
                          <select 
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none appearance-none"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none appearance-none"
                             value={formData.type}
                             onChange={e => setFormData({...formData, type: e.target.value})}
                          >
@@ -700,7 +700,7 @@ const Scheduling: React.FC = () => {
                         <input 
                             required
                             type="text" 
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none placeholder:text-slate-600"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none placeholder:text-slate-600"
                             placeholder="Ex: Apresentação para Cliente X"
                             value={formData.title}
                             onChange={(e) => setFormData({...formData, title: e.target.value})}
@@ -712,7 +712,7 @@ const Scheduling: React.FC = () => {
                         <div className="relative">
                             <AlignLeft className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
                             <textarea 
-                                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-3 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none placeholder:text-slate-600 resize-none h-24"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-3 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none placeholder:text-slate-600 resize-none h-24"
                                 placeholder="Detalhes adicionais..."
                                 value={formData.description}
                                 onChange={(e) => setFormData({...formData, description: e.target.value})}
@@ -727,7 +727,7 @@ const Scheduling: React.FC = () => {
                             <select 
                                 value={selectedContactId || ''}
                                 onChange={(e) => setSelectedContactId(e.target.value || null)}
-                                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none appearance-none"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none appearance-none"
                             >
                                 <option value="">Selecionar contato (opcional)</option>
                                 {contacts.map(contact => (
@@ -747,7 +747,7 @@ const Scheduling: React.FC = () => {
                             <input 
                                 type="text" 
                                 name="attendees"
-                                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none placeholder:text-slate-600"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none placeholder:text-slate-600"
                                 placeholder="Ex: João Silva, Maria Santos"
                             />
                         </div>
@@ -781,7 +781,7 @@ const Scheduling: React.FC = () => {
                                     {selectedAppointment.type}
                                 </span>
                                 {selectedAppointment.metadata?.source === 'nina_ai' && (
-                                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase border bg-cyan-500/10 text-cyan-300 border-cyan-500/30 flex items-center gap-1">
+                                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase border bg-brand-gold-500/10 text-brand-gold-300 border-brand-gold-500/30 flex items-center gap-1">
                                         <Bot className="w-3 h-3" />
                                         Criado por IA
                                     </span>
@@ -794,11 +794,11 @@ const Scheduling: React.FC = () => {
                         <h3 className="text-2xl font-bold text-white mb-2">{selectedAppointment.title}</h3>
                          <div className="flex items-center gap-4 text-sm text-slate-300">
                             <div className="flex items-center gap-1.5">
-                                <Clock className="w-4 h-4 text-cyan-500" />
+                                <Clock className="w-4 h-4 text-brand-gold-500" />
                                 {selectedAppointment.time} - {calculateEndTime(selectedAppointment.time, selectedAppointment.duration)} ({selectedAppointment.duration}min)
                             </div>
                             <div className="flex items-center gap-1.5">
-                                <CalendarIcon className="w-4 h-4 text-cyan-500" />
+                                <CalendarIcon className="w-4 h-4 text-brand-gold-500" />
                                 {selectedAppointment.date.split('-').reverse().join('/')}
                             </div>
                         </div>
@@ -820,7 +820,7 @@ const Scheduling: React.FC = () => {
                          <div className="space-y-2">
                              <h4 className="text-xs font-bold uppercase text-slate-500 tracking-wider">Contato Vinculado</h4>
                              <div className="flex items-center gap-2 bg-slate-800 px-3 py-2 rounded-lg border border-slate-700">
-                                 <UserCircle className="w-5 h-5 text-cyan-500" />
+                                 <UserCircle className="w-5 h-5 text-brand-gold-500" />
                                  <div className="flex-1">
                                      <span className="text-sm text-white font-medium">
                                          {selectedAppointment.contact?.name || 'Contato'}
@@ -839,7 +839,7 @@ const Scheduling: React.FC = () => {
                              {selectedAppointment.attendees && selectedAppointment.attendees.length > 0 ? (
                                  selectedAppointment.attendees.map((attendee, i) => (
                                      <div key={i} className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700">
-                                         <div className="w-5 h-5 rounded-full bg-cyan-600 flex items-center justify-center text-[10px] text-white font-bold">
+                                         <div className="w-5 h-5 rounded-full bg-brand-gold-600 flex items-center justify-center text-[10px] text-white font-bold">
                                              {attendee.charAt(0)}
                                          </div>
                                          <span className="text-xs text-slate-200">{attendee}</span>
@@ -875,7 +875,7 @@ const Scheduling: React.FC = () => {
                           </div>
                           
                           <Button 
-                             className="w-full shadow-lg shadow-cyan-500/20 py-3" 
+                             className="w-full shadow-lg shadow-brand-gold-500/20 py-3" 
                              size="lg"
                              onClick={() => {
                                  navigate(`/meeting/${selectedAppointment.id}`);
@@ -949,10 +949,10 @@ const Scheduling: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-800 bg-gradient-to-r from-cyan-950/30 to-slate-900">
+            <div className="flex items-center justify-between p-6 border-b border-slate-800 bg-gradient-to-r from-brand-gold-950/30 to-slate-900">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-cyan-500/10 rounded-lg">
-                  <Pencil className="w-5 h-5 text-cyan-400" />
+                <div className="p-2 bg-brand-gold-500/10 rounded-lg">
+                  <Pencil className="w-5 h-5 text-brand-gold-400" />
                 </div>
                 <h2 className="text-lg font-bold text-white">Editar Agendamento</h2>
               </div>
@@ -977,7 +977,7 @@ const Scheduling: React.FC = () => {
                     <input 
                       type="date" 
                       required
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none"
                       value={editFormData.date}
                       onChange={e => setEditFormData({...editFormData, date: e.target.value})}
                     />
@@ -989,7 +989,7 @@ const Scheduling: React.FC = () => {
                     <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                     <input 
                       type="time" 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none"
                       value={editFormData.time}
                       onChange={e => setEditFormData({...editFormData, time: e.target.value})}
                     />
@@ -1001,7 +1001,7 @@ const Scheduling: React.FC = () => {
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">Duração</label>
                   <select 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none appearance-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none appearance-none"
                     value={editFormData.duration}
                     onChange={e => setEditFormData({...editFormData, duration: parseInt(e.target.value)})}
                   >
@@ -1016,7 +1016,7 @@ const Scheduling: React.FC = () => {
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">Tipo</label>
                   <select 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none appearance-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none appearance-none"
                     value={editFormData.type}
                     onChange={e => setEditFormData({...editFormData, type: e.target.value})}
                   >
@@ -1033,7 +1033,7 @@ const Scheduling: React.FC = () => {
                 <input 
                   required
                   type="text" 
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none placeholder:text-slate-600"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none placeholder:text-slate-600"
                   placeholder="Ex: Apresentação para Cliente X"
                   value={editFormData.title}
                   onChange={(e) => setEditFormData({...editFormData, title: e.target.value})}
@@ -1045,7 +1045,7 @@ const Scheduling: React.FC = () => {
                 <div className="relative">
                   <AlignLeft className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
                   <textarea 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-3 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none placeholder:text-slate-600 resize-none h-24"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-3 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none placeholder:text-slate-600 resize-none h-24"
                     placeholder="Detalhes adicionais..."
                     value={editFormData.description}
                     onChange={(e) => setEditFormData({...editFormData, description: e.target.value})}
@@ -1060,7 +1060,7 @@ const Scheduling: React.FC = () => {
                   <select 
                     value={editContactId || ''}
                     onChange={(e) => setEditContactId(e.target.value || null)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none appearance-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none appearance-none"
                   >
                     <option value="">Selecionar contato (opcional)</option>
                     {contacts.map(contact => (
@@ -1078,7 +1078,7 @@ const Scheduling: React.FC = () => {
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   <input 
                     type="text" 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-cyan-500 outline-none placeholder:text-slate-600"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:ring-1 focus:ring-brand-gold-500 outline-none placeholder:text-slate-600"
                     placeholder="Ex: João Silva, Maria Santos"
                     value={editFormData.attendees}
                     onChange={(e) => setEditFormData({...editFormData, attendees: e.target.value})}
