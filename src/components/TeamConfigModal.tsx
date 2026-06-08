@@ -127,7 +127,7 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
   };
 
   const handleDeleteTeam = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este time?')) return;
+    if (!confirm('Tem certeza que deseja excluir este departamento?')) return;
     try {
       await api.deleteTeam(id);
       onUpdate();
@@ -178,7 +178,7 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            🏢 Times
+            🏢 Departamentos
           </button>
           <button
             onClick={() => setActiveTab('functions')}
@@ -205,7 +205,7 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
                   <input
                     type="text"
-                    placeholder="Nome do time"
+                    placeholder="Nome do departamento"
                     value={editForm.name}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
@@ -237,7 +237,7 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
                   className="w-full bg-slate-800/30 border border-dashed border-slate-700 rounded-lg p-4 text-slate-400 hover:text-white hover:border-slate-600 transition-colors flex items-center justify-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
-                  Novo Time
+                  Novo Departamento
                 </button>
               )}
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { UserPlus, Search, Loader2, X, Check, Edit2, Users, Settings, Trash2, ShieldCheck, RefreshCw, Link2 } from 'lucide-react';
 import { Button } from './Button';
 import { api } from '../services/api';
-import { TeamMember, type Team as TeamType, type TeamFunction } from '../types';
+import { TeamMember, type Team as TeamType } from '../types';
 import { supabase } from '@/integrations/supabase/client';
 import TeamConfigModal from './TeamConfigModal';
 import { toast } from 'sonner';
@@ -12,17 +12,14 @@ import { Label } from '@/components/ui/label';
 const Team: React.FC = () => {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [teams, setTeams] = useState<TeamType[]>([]);
-  const [functions, setFunctions] = useState<TeamFunction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [formData, setFormData] = useState({ 
-    name: '', 
-    email: '', 
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
     role: 'agent',
     team_id: '',
-    function_id: '',
-    weight: 1
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
@@ -37,8 +34,6 @@ const Team: React.FC = () => {
     role: 'agent',
     status: 'invited' as 'active' | 'invited' | 'disabled',
     team_id: '',
-    function_id: '',
-    weight: 1
   });
 
   useEffect(() => {
@@ -50,14 +45,12 @@ const Team: React.FC = () => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [membersData, teamsData, functionsData] = await Promise.all([
+      const [membersData, teamsData] = await Promise.all([
         api.fetchTeam(),
         api.fetchTeams(),
-        api.fetchTeamFunctions()
       ]);
       setMembers(membersData);
       setTeams(teamsData);
-      setFunctions(functionsData);
 
       // Load registration setting
       const { data: settingsData } = await supabase
@@ -141,13 +134,11 @@ const Team: React.FC = () => {
         email: formData.email,
         role: formData.role as 'agent' | 'admin' | 'manager',
         team_id: formData.team_id || undefined,
-        function_id: formData.function_id || undefined,
-        weight: formData.weight
       });
 
       toast.success('Membro convidado com sucesso!');
       setShowModal(false);
-      setFormData({ name: '', email: '', role: 'agent', team_id: '', function_id: '', weight: 1 });
+      setFormData({ name: '', email: '', role: 'agent', team_id: '' });
       await loadAllData();
     } catch (error) {
       console.error('Erro ao convidar membro:', error);
@@ -190,8 +181,6 @@ const Team: React.FC = () => {
       role: member.role,
       status: member.status,
       team_id: member.team_id || '',
-      function_id: member.function_id || '',
-      weight: member.weight || 1
     });
     setShowEditModal(true);
   };
@@ -206,8 +195,6 @@ const Team: React.FC = () => {
       role: editFormData.role as 'admin' | 'manager' | 'agent',
       status: editFormData.status,
       team_id: editFormData.team_id || null,
-      function_id: editFormData.function_id || null,
-      weight: editFormData.weight,
     };
     const snapshot = members;
     setMembers(prev => prev.map(m => m.id === editingMember.id ? { ...m, ...updates } as any : m));
@@ -239,12 +226,10 @@ const Team: React.FC = () => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     const teamName = teams.find(t => t.id === m.team_id)?.name || '';
-    const funcName = functions.find(f => f.id === m.function_id)?.name || '';
     return (
       m.name.toLowerCase().includes(term) ||
       m.email.toLowerCase().includes(term) ||
-      teamName.toLowerCase().includes(term) ||
-      funcName.toLowerCase().includes(term)
+      teamName.toLowerCase().includes(term)
     );
   });
 
@@ -262,7 +247,7 @@ const Team: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Equipe</h2>
-          <p className="text-sm text-slate-400 mt-1">Gerencie usuários e times da organização</p>
+          <p className="text-sm text-slate-400 mt-1">Gerencie usuários e departamentos da organização</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
           <Button onClick={handleSyncUsers} variant="outline" className="border-slate-700 flex-1 sm:flex-none" disabled={syncing}>
@@ -320,7 +305,7 @@ const Team: React.FC = () => {
             <div className="text-3xl font-bold text-white">{loading ? '-' : stats.members}</div>
         </div>
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 shadow-sm">
-            <div className="text-sm font-medium text-slate-400 mb-2">Times Ativos</div>
+            <div className="text-sm font-medium text-slate-400 mb-2">Departamentos Ativos</div>
             <div className="text-3xl font-bold text-white">{stats.teams}</div>
         </div>
       </div>
@@ -330,7 +315,7 @@ const Team: React.FC = () => {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
         <input 
             type="text" 
-            placeholder="Buscar por nome, email, time ou função..." 
+            placeholder="Buscar por nome, email ou departamento..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full sm:w-96 pl-10 pr-4 py-2 bg-slate-900/50 border border-slate-800 rounded-lg text-sm text-slate-200 focus:ring-1 focus:ring-slate-700 outline-none placeholder:text-slate-600 transition-all"
@@ -341,7 +326,7 @@ const Team: React.FC = () => {
       <div className="bg-slate-900/30 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
         <div className="p-6 border-b border-slate-800">
             <h3 className="text-lg font-bold text-white">Usuários da Equipe</h3>
-            <p className="text-sm text-slate-500 mt-1">Gerencie roles e times dos usuários</p>
+            <p className="text-sm text-slate-500 mt-1">Gerencie cargos e departamentos dos usuários</p>
         </div>
 
         {loading ? (
@@ -365,10 +350,8 @@ const Team: React.FC = () => {
                         <tr className="border-b border-slate-800/50">
                             <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Usuário</th>
                             <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Email</th>
-                            <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Role</th>
-                            <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Time</th>
-                            <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Função</th>
-                            <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Peso</th>
+                            <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Cargo</th>
+                            <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Departamento</th>
                             <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider text-center">Status</th>
                             <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider text-center">Ações</th>
                         </tr>
@@ -411,44 +394,18 @@ const Team: React.FC = () => {
                                     </select>
                                 </td>
 
-                                {/* Time Selector */}
+                                {/* Departamento Selector */}
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <select
                                         value={member.team_id || ''}
                                         onChange={(e) => handleUpdateMember(member.id, 'team_id', e.target.value || null)}
-                                        className="w-32 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-md text-sm text-slate-300 cursor-pointer hover:border-slate-600 transition-colors"
+                                        className="w-40 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-md text-sm text-slate-300 cursor-pointer hover:border-slate-600 transition-colors"
                                     >
-                                        <option value="">Sem time</option>
+                                        <option value="">Sem departamento</option>
                                         {teams.map(team => (
                                             <option key={team.id} value={team.id}>{team.name}</option>
                                         ))}
                                     </select>
-                                </td>
-
-                                {/* Function Selector */}
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <select
-                                        value={member.function_id || ''}
-                                        onChange={(e) => handleUpdateMember(member.id, 'function_id', e.target.value || null)}
-                                        className="w-32 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-md text-sm text-slate-300 cursor-pointer hover:border-slate-600 transition-colors"
-                                    >
-                                        <option value="">Sem função</option>
-                                        {functions.map(func => (
-                                            <option key={func.id} value={func.id}>{func.name}</option>
-                                        ))}
-                                    </select>
-                                </td>
-
-                                {/* Weight */}
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max="10"
-                                        value={member.weight || 1}
-                                        onChange={(e) => handleUpdateMember(member.id, 'weight', parseInt(e.target.value))}
-                                        className="w-16 px-2 py-1 bg-slate-950 border border-slate-800 rounded-md text-sm text-slate-300 text-center"
-                                    />
                                 </td>
 
                                 {/* Status */}
@@ -538,43 +495,17 @@ const Team: React.FC = () => {
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-300">Time (opcional)</label>
+                        <label className="text-sm font-medium text-slate-300">Departamento (opcional)</label>
                         <select
                             value={formData.team_id}
                             onChange={(e) => setFormData({...formData, team_id: e.target.value})}
                             className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white"
                         >
-                            <option value="">Sem time</option>
+                            <option value="">Sem departamento</option>
                             {teams.map(team => (
                                 <option key={team.id} value={team.id}>{team.name}</option>
                             ))}
                         </select>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-300">Função (opcional)</label>
-                        <select
-                            value={formData.function_id}
-                            onChange={(e) => setFormData({...formData, function_id: e.target.value})}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white"
-                        >
-                            <option value="">Sem função</option>
-                            {functions.map(func => (
-                                <option key={func.id} value={func.id}>{func.name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-300">Peso (para distribuição)</label>
-                        <input
-                            type="number"
-                            min="1"
-                            max="10"
-                            value={formData.weight}
-                            onChange={(e) => setFormData({...formData, weight: parseInt(e.target.value)})}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white"
-                        />
                     </div>
 
                     <div className="pt-4 flex gap-3">
@@ -659,43 +590,17 @@ const Team: React.FC = () => {
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-300">Time</label>
+                        <label className="text-sm font-medium text-slate-300">Departamento</label>
                         <select
                             value={editFormData.team_id}
                             onChange={(e) => setEditFormData({...editFormData, team_id: e.target.value})}
                             className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white"
                         >
-                            <option value="">Sem time</option>
+                            <option value="">Sem departamento</option>
                             {teams.map(team => (
                                 <option key={team.id} value={team.id}>{team.name}</option>
                             ))}
                         </select>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-300">Função</label>
-                        <select
-                            value={editFormData.function_id}
-                            onChange={(e) => setEditFormData({...editFormData, function_id: e.target.value})}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white"
-                        >
-                            <option value="">Sem função</option>
-                            {functions.map(func => (
-                                <option key={func.id} value={func.id}>{func.name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-300">Peso</label>
-                        <input
-                            type="number"
-                            min="1"
-                            max="10"
-                            value={editFormData.weight}
-                            onChange={(e) => setEditFormData({...editFormData, weight: parseInt(e.target.value)})}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white"
-                        />
                     </div>
 
                     <div className="pt-4 flex gap-3">
