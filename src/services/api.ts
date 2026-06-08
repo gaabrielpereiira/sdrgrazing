@@ -648,7 +648,7 @@ export const api = {
   },
 
   /**
-   * Create team member
+   * Create team member and send invitation email via Supabase Auth.
    */
   createTeamMember: async (member: {
     name: string;
@@ -657,9 +657,10 @@ export const api = {
     team_id?: string;
     function_id?: string;
     weight?: number;
+    redirectTo?: string;
   }): Promise<TeamMember> => {
     const userId = await getCurrentUserId();
-    
+
     const { data, error } = await supabase
       .from('team_members')
       .insert({
@@ -670,7 +671,7 @@ export const api = {
         function_id: member.function_id,
         weight: member.weight || 1,
         status: 'invited',
-        user_id: null
+        user_id: null,
       })
       .select()
       .single();
@@ -678,6 +679,19 @@ export const api = {
     if (error) {
       console.error('[API] Error creating team member:', error);
       throw error;
+    }
+
+    // Send invitation email — best-effort (don't block on failure)
+    try {
+      const redirectTo = member.redirectTo ?? (typeof window !== 'undefined' ? `${window.location.origin}/auth` : undefined);
+      const { error: inviteErr } = await supabase.functions.invoke('invite-user', {
+        body: { memberId: data.id, redirectTo },
+      });
+      if (inviteErr) {
+        console.warn('[API] invite-user function warning:', inviteErr.message);
+      }
+    } catch (inviteEx) {
+      console.warn('[API] invite-user call failed (non-blocking):', inviteEx);
     }
 
     return {
@@ -689,7 +703,7 @@ export const api = {
       avatar: data.avatar || `https://ui-avatars.com/api/?name=${data.name.replace(' ', '+')}&background=random`,
       team_id: data.team_id,
       function_id: data.function_id,
-      weight: data.weight ?? undefined
+      weight: data.weight ?? undefined,
     };
   },
 
