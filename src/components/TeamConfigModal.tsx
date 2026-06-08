@@ -137,7 +137,7 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
   };
 
   const handleDeleteFunction = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta função?')) return;
+    if (!confirm('Tem certeza que deseja excluir este cargo?')) return;
     try {
       await api.deleteTeamFunction(id);
       onUpdate();
@@ -188,7 +188,7 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            💼 Funções
+            💼 Cargos
           </button>
         </div>
 
@@ -224,7 +224,7 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
                       onChange={(e) => setEditForm({ ...editForm, color: e.target.value })}
                       className="w-12 h-8 rounded cursor-pointer"
                     />
-                    <span className="text-xs text-slate-400">Cor do time</span>
+                    <span className="text-xs text-slate-400">Cor do departamento</span>
                   </div>
                   <div className="flex gap-2">
                     <Button onClick={handleCreateTeam} className="flex-1">Salvar</Button>
@@ -306,12 +306,12 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
             </div>
           ) : (
             <div className="space-y-3">
-              {/* Create New Function */}
+              {/* Create New Cargo */}
               {isCreating ? (
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
                   <input
                     type="text"
-                    placeholder="Nome da função"
+                    placeholder="Nome do cargo"
                     value={editForm.name}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
@@ -334,11 +334,11 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
                   className="w-full bg-slate-800/30 border border-dashed border-slate-700 rounded-lg p-4 text-slate-400 hover:text-white hover:border-slate-600 transition-colors flex items-center justify-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
-                  Nova Função
+                  Novo Cargo
                 </button>
               )}
 
-              {/* Functions List */}
+              {/* Cargos List */}
               {functions.map((func) => (
                 <div key={func.id} className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                   {editingId === func.id ? (
