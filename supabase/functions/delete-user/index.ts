@@ -43,8 +43,24 @@ Deno.serve(async (req) => {
 
     const userId: string | null = member.user_id ?? null;
 
+    // ── 1. Nullify FK references to this team_member ──────────────────────
+    // deals.owner_id and deal_activities.created_by both reference
+    // team_members(id) without ON DELETE CASCADE/SET NULL, so we must
+    // clear them before deleting the row to avoid FK violation errors.
+    const { error: dealsErr } = await admin
+      .from('deals')
+      .update({ owner_id: null })
+      .eq('owner_id', memberId);
+    if (dealsErr) console.warn('[delete-user] deals SET NULL warning:', dealsErr.message);
+
+    const { error: activitiesErr } = await admin
+      .from('deal_activities')
+      .update({ created_by: null })
+      .eq('created_by', memberId);
+    if (activitiesErr) console.warn('[delete-user] deal_activities SET NULL warning:', activitiesErr.message);
+
+    // ── 2. Delete auth user and dependent rows (if linked) ────────────────
     if (userId) {
-      // Delete dependent rows first (no FK cascade guaranteed)
       await admin.from('user_roles').delete().eq('user_id', userId);
       await admin.from('profiles').delete().eq('user_id', userId);
 
@@ -55,6 +71,7 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── 3. Delete the team_member row ─────────────────────────────────────
     const { error: delErr } = await admin
       .from('team_members')
       .delete()
