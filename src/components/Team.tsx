@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { UserPlus, Search, Loader2, X, Check, Edit2, Users, Settings, Trash2, ShieldCheck, RefreshCw, Link2 } from 'lucide-react';
 import { Button } from './Button';
 import { api } from '../services/api';
-import { TeamMember, type Team as TeamType } from '../types';
+import { TeamMember, type Team as TeamType, type TeamFunction } from '../types';
 import { supabase } from '@/integrations/supabase/client';
 import TeamConfigModal from './TeamConfigModal';
 import { toast } from 'sonner';
@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 const Team: React.FC = () => {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [teams, setTeams] = useState<TeamType[]>([]);
+  const [cargos, setCargos] = useState<TeamFunction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -20,6 +21,7 @@ const Team: React.FC = () => {
     email: '',
     role: 'agent',
     team_id: '',
+    function_id: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
@@ -34,6 +36,7 @@ const Team: React.FC = () => {
     role: 'agent',
     status: 'invited' as 'active' | 'invited' | 'disabled',
     team_id: '',
+    function_id: '',
   });
 
   useEffect(() => {
@@ -45,12 +48,14 @@ const Team: React.FC = () => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [membersData, teamsData] = await Promise.all([
+      const [membersData, teamsData, cargosData] = await Promise.all([
         api.fetchTeam(),
         api.fetchTeams(),
+        api.fetchTeamFunctions(),
       ]);
       setMembers(membersData);
       setTeams(teamsData);
+      setCargos(cargosData);
 
       // Load registration setting
       const { data: settingsData } = await supabase
@@ -134,11 +139,12 @@ const Team: React.FC = () => {
         email: formData.email,
         role: formData.role as 'agent' | 'admin' | 'manager',
         team_id: formData.team_id || undefined,
+        function_id: formData.function_id || undefined,
       });
 
       toast.success('Membro convidado com sucesso!');
       setShowModal(false);
-      setFormData({ name: '', email: '', role: 'agent', team_id: '' });
+      setFormData({ name: '', email: '', role: 'agent', team_id: '', function_id: '' });
       await loadAllData();
     } catch (error) {
       console.error('Erro ao convidar membro:', error);
@@ -181,6 +187,7 @@ const Team: React.FC = () => {
       role: member.role,
       status: member.status,
       team_id: member.team_id || '',
+      function_id: member.function_id || '',
     });
     setShowEditModal(true);
   };
@@ -195,6 +202,7 @@ const Team: React.FC = () => {
       role: editFormData.role as 'admin' | 'manager' | 'agent',
       status: editFormData.status,
       team_id: editFormData.team_id || null,
+      function_id: editFormData.function_id || null,
     };
     const snapshot = members;
     setMembers(prev => prev.map(m => m.id === editingMember.id ? { ...m, ...updates } as any : m));
@@ -352,6 +360,7 @@ const Team: React.FC = () => {
                             <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Email</th>
                             <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Cargo</th>
                             <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Departamento</th>
+                            <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Permissão</th>
                             <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider text-center">Status</th>
                             <th className="px-6 py-4 text-xs font-medium text-slate-500 uppercase tracking-wider text-center">Ações</th>
                         </tr>
@@ -381,16 +390,17 @@ const Team: React.FC = () => {
                                     <span className="text-sm text-slate-400">{member.email}</span>
                                 </td>
 
-                                {/* Role Selector */}
+                                {/* Cargo Selector (function_id) */}
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <select
-                                        value={member.role}
-                                        onChange={(e) => handleUpdateMember(member.id, 'role', e.target.value)}
-                                        className="w-32 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-md text-sm text-slate-300 cursor-pointer hover:border-slate-600 transition-colors"
+                                        value={member.function_id || ''}
+                                        onChange={(e) => handleUpdateMember(member.id, 'function_id', e.target.value || null)}
+                                        className="w-36 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-md text-sm text-slate-300 cursor-pointer hover:border-slate-600 transition-colors"
                                     >
-                                        <option value="agent">Atendente</option>
-                                        <option value="manager">Gerente</option>
-                                        <option value="admin">Admin</option>
+                                        <option value="">Sem cargo</option>
+                                        {cargos.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
                                     </select>
                                 </td>
 
@@ -405,6 +415,19 @@ const Team: React.FC = () => {
                                         {teams.map(team => (
                                             <option key={team.id} value={team.id}>{team.name}</option>
                                         ))}
+                                    </select>
+                                </td>
+
+                                {/* Permissão Selector (system role) */}
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                    <select
+                                        value={member.role}
+                                        onChange={(e) => handleUpdateMember(member.id, 'role', e.target.value)}
+                                        className="w-32 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-md text-sm text-slate-300 cursor-pointer hover:border-slate-600 transition-colors"
+                                    >
+                                        <option value="agent">Atendente</option>
+                                        <option value="manager">Gerente</option>
+                                        <option value="admin">Admin</option>
                                     </select>
                                 </td>
 
@@ -492,6 +515,20 @@ const Team: React.FC = () => {
                                 </div>
                             ))}
                         </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-300">Cargo (opcional)</label>
+                        <select
+                            value={formData.function_id}
+                            onChange={(e) => setFormData({...formData, function_id: e.target.value})}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white"
+                        >
+                            <option value="">Sem cargo</option>
+                            {cargos.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
                     </div>
 
                     <div className="space-y-2">
@@ -586,6 +623,20 @@ const Team: React.FC = () => {
                             <option value="active">Ativo</option>
                             <option value="invited">Pendente</option>
                             <option value="disabled">Inativo</option>
+                        </select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-300">Cargo</label>
+                        <select
+                            value={editFormData.function_id}
+                            onChange={(e) => setEditFormData({...editFormData, function_id: e.target.value})}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white"
+                        >
+                            <option value="">Sem cargo</option>
+                            {cargos.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
                         </select>
                     </div>
 
