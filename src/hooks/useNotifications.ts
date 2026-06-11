@@ -90,6 +90,9 @@ export function useNotifications() {
           seenIdsRef.current.add(n.id);
           console.info('[Notifications] 🔔 INSERT:', n.title);
           setNotifications((prev) => [n, ...prev].slice(0, 50));
+          if (n.type === 'handoff_urgent' || n.type === 'handoff_requested') {
+            playHandoffChime(n.type === 'handoff_urgent');
+          }
           toast(n.title, { description: n.body || undefined });
         }
       )
