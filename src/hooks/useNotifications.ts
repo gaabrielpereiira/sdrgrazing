@@ -2,6 +2,39 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+// Play a short two-tone chime via Web Audio API (no asset needed).
+// Wrapped in try/catch — autoplay policies may block until first user gesture.
+let _audioCtx: AudioContext | null = null;
+function playHandoffChime(urgent = false) {
+  try {
+    const AC = (window.AudioContext || (window as any).webkitAudioContext);
+    if (!AC) return;
+    if (!_audioCtx) _audioCtx = new AC();
+    const ctx = _audioCtx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+    const now = ctx.currentTime;
+    const tones = urgent ? [880, 1175, 880] : [660, 990];
+    tones.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const start = now + i * 0.18;
+      const dur = 0.16;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(urgent ? 0.35 : 0.22, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + dur + 0.02);
+    });
+  } catch (err) {
+    console.debug('[Notifications] chime failed (likely autoplay policy):', err);
+  }
+}
+
+
 export type PlatformNotification = {
   id: string;
   type: string;
