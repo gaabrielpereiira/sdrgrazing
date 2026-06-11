@@ -996,6 +996,12 @@ async function processQueueItem(
     processedPrompt = `${processedPrompt}\n\n${resumptionSystemNote}`;
   }
 
+  // Inject business-hours awareness so the AI can decide handoff correctly.
+  const businessHoursBlock = buildBusinessHoursBlock(settings);
+  if (businessHoursBlock) {
+    processedPrompt = `${processedPrompt}\n\n${businessHoursBlock}`;
+  }
+
   console.log('[Nina] Calling Lovable AI...');
 
   // Get AI model settings based on user configuration
