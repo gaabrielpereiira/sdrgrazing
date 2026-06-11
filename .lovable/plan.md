@@ -1,81 +1,53 @@
-## Diagnóstico
-
-Olhando os logs e os eventos, o WooCommerce dispara `order.updated` **a cada micro-alteração** do pedido (mudança de status, nota interna, e‑mail enviado, pagamento, etc.). Hoje o `automation-runner`:
-
-1. Roda **todas as regras** com `trigger_topic = order.updated` em **toda** chamada.
-2. O filtro só compara o `status` **atual** do payload (`status eq processing`), sem saber se houve **transição**. Se o pedido fica em `processing` por horas, qualquer outro `order.updated` durante esse tempo dispara a regra de novo.
-3. `cooldown_hours = 0` nas regras → nada barra o reenvio.
-4. Não existe chave de idempotência por (regra + pedido + status-alvo), então a mesma transição pode logar várias vezes (ex.: webhook reenviado pelo Woo, retry, race).
-5. A regra `Pedido atualizado | Retirado` casa com `status = retirado-entrega`, mas a mensagem "Pedido feito" (`PEDIDO_FEITO`) que aparece no print é da regra `Pedido atualizado | Pago` — ela continua disparando porque o status do payload anterior já era `processing`/`completed` e o webhook foi reentregue, dando a sensação de "mensagem errada para um pedido que já foi atualizado para retirado".
-
 ## Objetivo
 
-Garantir que cada regra **dispare uma única vez por transição real de status** de cada pedido, e nunca rode em re‑entregas/duplicatas do mesmo webhook.
+1. Tocar som de notificação quando a Donatella transferir para humano.
+2. Garantir que a IA considere o horário comercial ao decidir transferir (e priorizar handoff fora do horário).
+
+## Diagnóstico
+
+- `supabase/functions/nina-orchestrator/index.ts` cria notificações `handoff_requested` / `handoff_urgent` quando a tool `request_human_handoff` é chamada, mas **não injeta o horário comercial nem o horário atual no contexto da IA**. A IA decide “no escuro”, então pode transferir mesmo fora do expediente sem qualquer regra explícita.
+- `nina_settings` já tem `timezone`, `business_hours_start`, `business_hours_end`, `business_days` (configuráveis no onboarding/Settings), mas esses campos nunca chegam ao prompt.
+- `src/hooks/useNotifications.ts` recebe novas notificações via Realtime e dispara um `toast`, mas **não toca som**.
 
 ## Mudanças
 
-### 1. Idempotência por evento (proteção total contra reenvio)
+### 1. Som de notificação no front (`src/hooks/useNotifications.ts`)
 
-Adicionar uma chave única no `webhook_events` para a combinação `source + topic + external_id`, onde `external_id` é extraído do payload (`payload.id` para pedidos Woo). No `wc-receiver`:
+- Adicionar um asset `src/assets/notification.mp3` (curto, discreto). Pré-instanciar `new Audio(notificationUrl)` no escopo do módulo para evitar bloqueio de gesto.
+- No handler de `INSERT` da subscription:
+  - Se `n.type === 'handoff_urgent'` → tocar som (volume um pouco maior).
+  - Se `n.type === 'handoff_requested'` → tocar mesmo som em volume normal.
+  - Demais tipos: sem som (mantém só toast).
+- Envolver `audio.play()` em `.catch()` para silenciar erros de autoplay quando a aba ainda não recebeu gesto; nesse caso apenas log no console.
+- Opcional: respeitar `document.visibilityState` — sempre tocar, mas só uma vez por notificação (já garantido por `seenIdsRef`).
 
-- Calcular `external_id` antes do insert.
-- Inserir com `onConflict: (source, topic, external_id, event_signature)` retornando o evento (novo ou existente).
-- `event_signature` = hash curto de `(status, date_modified)` do payload, para diferenciar updates reais de reenvios idênticos.
-- Se o conflito ocorrer e o evento já existir com `processed = true` e mesma assinatura → responder 200 sem reprocessar.
+### 2. Horário comercial na IA (`supabase/functions/nina-orchestrator/index.ts`)
 
-### 2. Idempotência por regra/transição
+- Ler de `nina_settings` (já carregado no orchestrator) os campos `timezone`, `business_hours_start`, `business_hours_end`, `business_days`.
+- Calcular `nowInTz`, `isWithinBusinessHours` usando `Intl.DateTimeFormat` com o timezone configurado (evita `new Date(string)` ambíguo).
+- Injetar no system prompt um bloco curto, ex.:
+  ```
+  Contexto operacional:
+  - Agora: quinta-feira 14:32 (America/Sao_Paulo)
+  - Horário de atendimento humano: seg-sex, 09:00–18:00
+  - Status atual: DENTRO/FORA do expediente
+  ```
+- Acrescentar regra de comportamento:
+  - **Dentro do expediente**: usar `request_human_handoff` normalmente para casos que exigem humano.
+  - **Fora do expediente**: ainda pode chamar `request_human_handoff` (a notificação interna deve ser criada), mas a `customer_message_for_client` precisa avisar que o atendimento humano retorna no próximo horário comercial (informar dia/horário). Não prometer retorno imediato.
+- Passar o status atual no metadata da notificação (`outside_business_hours: true|false`) para futura priorização/log.
 
-Nova tabela `automation_executions`:
+### 3. Sem mudanças de schema
 
-```text
-rule_id           uuid
-external_id       text   -- ex: woo_order_id como texto
-target_signature  text   -- ex: "status:retirado-entrega"
-executed_at       timestamptz default now()
-UNIQUE (rule_id, external_id, target_signature)
-```
+- Tudo já existe em `nina_settings`. Sem migration nova.
 
-No `automation-runner`, antes de executar a ação:
+## Arquivos editados
 
-- Montar `target_signature` a partir das condições do filtro com operador `eq` sobre campos "de transição" (ver §3).
-- Tentar `insert` em `automation_executions`. Se vier `23505` (já existe) → logar `skipped` com `reason: already_executed_for_transition` e parar.
-- Só executar a ação após o insert bem-sucedido.
+- `src/hooks/useNotifications.ts`
+- `src/assets/notification.mp3` (novo asset — preciso confirmar com você, ver pergunta abaixo)
+- `supabase/functions/nina-orchestrator/index.ts`
 
-Isso garante: mesmo que o Woo reentregue o webhook 10 vezes ou outro `order.updated` chegue com o mesmo status, a regra roda **uma vez só** por (pedido, status-alvo).
+## Pergunta antes de implementar
 
-### 3. Filtro por transição real (status mudou para X)
-
-Hoje as condições só olham o valor atual. Adicionar:
-
-- Novo operador `changed_to` no `AutomationFormModal` (UI) e em `compareValues` do runner.
-- Para `order.*`: o runner busca o registro anterior em `public.orders` (antes do upsert) e compara `prev.status` vs `payload.status`. A condição `status changed_to "retirado-entrega"` só passa se `prev.status !== "retirado-entrega"` **e** `payload.status === "retirado-entrega"`.
-- Mover o `upsertOrderFromEvent` para depois da avaliação das regras (ou ler o estado anterior antes de chamar o upsert).
-
-### 4. Migrar regras existentes
-
-Migration de dados convertendo as 3 regras `order.updated` atuais (`Pago`, `Retirado`, `Mensagem pedido feito`) do operador `eq` em `status` para o novo operador `changed_to`. Comportamento humano-visível continua igual, mas só dispara na transição.
-
-### 5. UI
-
-Em `AutomationFormModal.tsx`, ao escolher o campo `status` num trigger `order.updated`, mostrar como operadores: `igual a`, `mudou para` (default sugerido), `contém`. Texto de ajuda curto explicando que "mudou para" só dispara quando o pedido entra naquele status.
-
-### 6. Limpeza de duplicatas anteriores (opcional, recomendado)
-
-Migration única que marca como `processed = true` os `webhook_events` duplicados antigos por `(topic, payload->>id, payload->>status)` mantendo só o mais antigo, para evitar reprocessamento se alguém clicar em "reprocessar".
-
-## Arquivos tocados
-
-- `supabase/migrations/<new>_automation_idempotency.sql` — tabela `automation_executions`, índice único em `webhook_events`, ajuste de regras existentes.
-- `supabase/functions/wc-receiver/index.ts` — calcular `external_id`/`event_signature`, insert idempotente.
-- `supabase/functions/automation-runner/index.ts` — operador `changed_to`, leitura do status anterior, guard `automation_executions`, mover upsert.
-- `src/components/AutomationFormModal.tsx` — operador `changed_to` no select de operadores.
-- `src/hooks/useAutomations.ts` — tipos do operador, se houver enum.
-
-## Detalhes técnicos
-
-- `event_signature` = `sha1(status + '|' + date_modified)` truncado em 16 chars, calculado no `wc-receiver`.
-- `automation_executions.target_signature`:
-  - Se houver condições `changed_to` → join `field=value` (`status=retirado-entrega`).
-  - Caso contrário (regras sem transição) → `external_id` puro + `rule_id` ainda dá idempotência por pedido; usar `event_id` como sufixo se a regra for explicitamente "rodar em todo evento".
-- Não alterar o fluxo do `whatsapp-sender`; a deduplicação acontece antes da entrada na `send_queue`.
-- Manter retries existentes (`scheduleRetry`) intactos; eles continuam funcionando porque a 2ª tentativa cai na proteção `automation_executions` se a 1ª já tinha enfileirado.
+- O som: posso usar um “ding” padrão curto (mp3 leve, ~20kb) embutido no app, ou você tem um arquivo específico que prefere subir depois?
+- Quer som diferente para `handoff_urgent` vs `handoff_requested`, ou o mesmo som basta?

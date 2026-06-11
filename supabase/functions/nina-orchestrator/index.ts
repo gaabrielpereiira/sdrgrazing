@@ -996,6 +996,12 @@ async function processQueueItem(
     processedPrompt = `${processedPrompt}\n\n${resumptionSystemNote}`;
   }
 
+  // Inject business-hours awareness so the AI can decide handoff correctly.
+  const businessHoursBlock = buildBusinessHoursBlock(settings);
+  if (businessHoursBlock) {
+    processedPrompt = `${processedPrompt}\n\n${businessHoursBlock}`;
+  }
+
   console.log('[Nina] Calling Lovable AI...');
 
   // Get AI model settings based on user configuration
@@ -1760,6 +1766,80 @@ Lead: "Oi"
 Nina: "Oi! Bem-vindo ao Viver de IA! Temos 22 soluções incríveis, formações completas, mentoria com especialistas! Quer conhecer nossa plataforma? Posso agendar uma apresentação agora!" ❌
 </examples>
 </system_instruction>`;
+}
+
+// Returns a system-prompt block describing current time, business hours and
+// whether we're currently inside or outside the human-attendance window.
+// Returns "" when settings don't include business hours so caller can skip.
+function buildBusinessHoursBlock(settings: any): string {
+  if (!settings) return '';
+  const tz = settings.timezone || 'America/Sao_Paulo';
+  const start = settings.business_hours_start || null; // "HH:MM"
+  const end = settings.business_hours_end || null;     // "HH:MM"
+  const days: number[] = Array.isArray(settings.business_days)
+    ? settings.business_days
+    : [1, 2, 3, 4, 5]; // default seg-sex
+
+  if (!start || !end) return '';
+
+  const dayNames = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+  const shortDays = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+  // Compute current weekday + HH:MM in target timezone via Intl parts (avoids
+  // ambiguous Date string parsing across runtimes).
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const wkMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const wkPart = parts.find(p => p.type === 'weekday')?.value || 'Mon';
+  const hourPart = parts.find(p => p.type === 'hour')?.value || '00';
+  const minPart = parts.find(p => p.type === 'minute')?.value || '00';
+  const weekday = wkMap[wkPart] ?? 1;
+  const nowHHMM = `${hourPart === '24' ? '00' : hourPart}:${minPart}`;
+
+  const isOpenDay = days.includes(weekday);
+  const within = isOpenDay && nowHHMM >= start && nowHHMM < end;
+
+  // Friendly day list, sorted
+  const sortedDays = [...days].sort((a, b) => a - b).map(d => shortDays[d]).join(', ');
+
+  // Find next opening (simple lookahead up to 7 days)
+  let nextOpenLabel = '';
+  if (!within) {
+    for (let i = 0; i < 8; i++) {
+      const d = (weekday + i) % 7;
+      if (days.includes(d)) {
+        if (i === 0 && nowHHMM < start) {
+          nextOpenLabel = `hoje às ${start}`;
+        } else if (i === 1) {
+          nextOpenLabel = `amanhã (${dayNames[d]}) às ${start}`;
+        } else if (i > 1) {
+          nextOpenLabel = `${dayNames[d]} às ${start}`;
+        } else {
+          continue;
+        }
+        break;
+      }
+    }
+  }
+
+  return [
+    'CONTEXTO OPERACIONAL DE ATENDIMENTO HUMANO:',
+    `- Agora: ${dayNames[weekday]} ${nowHHMM} (${tz})`,
+    `- Horário do atendimento humano: ${sortedDays}, ${start}–${end}`,
+    `- Status atual: ${within ? 'DENTRO do horário comercial' : 'FORA do horário comercial'}`,
+    '',
+    'REGRA DE TRANSFERÊNCIA PARA HUMANO:',
+    within
+      ? '- Se for um caso que exige humano, chame request_human_handoff normalmente. A customer_message_for_client pode dizer que um atendente assumirá em instantes.'
+      : `- Se for um caso que exige humano, AINDA ASSIM chame request_human_handoff (a equipe será notificada internamente), MAS a customer_message_for_client DEVE deixar claro que estamos fora do horário de atendimento e que um atendente humano retornará ${nextOpenLabel || 'no próximo horário comercial'}. NÃO prometa retorno imediato.`,
+    '- Para dúvidas que você consegue resolver sozinha (informações gerais, agendamento, status simples), responda normalmente sem transferir, independente do horário.',
+  ].join('\n');
 }
 
 function processPromptTemplate(prompt: string, contact: any): string {
