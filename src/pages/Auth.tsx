@@ -17,12 +17,37 @@ const nameSchema = z.string().min(2, 'Nome deve ter pelo menos 2 caracteres');
 
 const Auth: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const emailResult = emailSchema.safeParse(email);
+    if (!emailResult.success) {
+      setErrors({ email: emailResult.error.errors[0].message });
+      return;
+    }
+    setErrors({});
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      toast.success('Enviamos um link de recuperação para o seu email.');
+      setIsForgotPassword(false);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
   
   const { signIn, signUp, user, loading, role, roleLoading } = useAuth();
   const navigate = useNavigate();
