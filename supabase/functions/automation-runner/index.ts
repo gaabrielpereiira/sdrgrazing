@@ -595,7 +595,7 @@ async function scheduleRetry(supabase: any, event: any, errorMsg: string) {
 }
 
 // Version tag — update this to confirm a new deployment is running in Supabase logs.
-const RUNNER_VERSION = '2026-05-29-v4';
+const RUNNER_VERSION = '2026-06-18-v5';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
