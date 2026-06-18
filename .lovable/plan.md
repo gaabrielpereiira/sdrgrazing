@@ -1,59 +1,61 @@
-## Objetivo
+## Diagnóstico
 
-Adicionar fluxo de **abertura** da Donatella no WhatsApp: triagem inicial com botões, captura de nome para leads novos, e roteamento para Suporte (time Produção) quando o cliente escolher "Suporte pós-venda". Nada fora desse fluxo é alterado.
+As 4 automações estão *ativas* e o runner *roda* — mas os filtros `changed_to` estão sendo avaliados contra um `prev_status` incorreto. Hoje só 4 disparos com sucesso saíram (contra ~70/dia na semana anterior).
 
-## Como o controle de estado vai funcionar
+Três causas identificadas:
 
-Vou usar a coluna `conversations.nina_context` (jsonb já existente) para guardar um sub-objeto `onboarding`:
-
-```
-nina_context.onboarding = {
-  step: 'ask_name' | 'await_name' | 'triage' | 'await_triage' | 'support_topic' | 'await_support_topic' | 'done',
-  collected_name?: string
-}
-```
-
-Critério de "lead novo" = contato **não tem conversa anterior** (apenas a recém-criada). Critério de "reabrir abertura" = sempre que `whatsapp-webhook` reabrir uma conversa inativa (já hoje ele reseta `nina_context: {}`), o onboarding roda de novo, cumprimentando pelo primeiro nome se já houver.
+1. **Pedido pago direto** — Pedidos novos chegam como `order.created` já com status `processing`/`completed` (pago no checkout). As regras escutam só `order.updated`, então nunca disparam para esses pedidos.
+2. **Eventos fora de ordem** — Em vários pedidos (ex.: 21961) o `order.updated` chega *antes* do `order.created`. O runner faz upsert na tabela `orders` antes de avaliar regras, então o `order.created` lê `prev_status = current_status` e `changed_to` falha.
+3. **Regra de CRM "pago" com filtro impossível** — A regra `f80dce44 "Pedido atualizado | pago"` está com `logic:AND` exigindo `changed_to processing` *E* `changed_to completed` simultaneamente — nunca pode ser verdade. A versão WhatsApp da mesma regra está com `OR` (correta).
 
 ## Mudanças
 
-### 1) `supabase/functions/whatsapp-webhook/index.ts`
-- Quando criar conversa nova **ou** reabrir conversa inativa, popular `nina_context.onboarding.step = 'ask_name'` se o contato não tiver `name` preenchido, ou `'triage'` se já tiver nome.
-- Manter todo o resto intacto (queue, dedup, mídia, etc.).
+### 1) `supabase/functions/automation-runner/index.ts`
 
-### 2) Novo módulo de abertura no `nina-orchestrator`
-Logo no início do processamento da conversa, antes de chamar a IA, checar `nina_context.onboarding.step`:
+**a) Avaliar regras de `order.updated` também em eventos `order.created`**
+- Quando o topic for `order.created`, além das regras de `order.created`, buscar também as de `order.updated` e avaliá-las.
+- Cada regra logada/idempotency-claimed normalmente — a guarda `automation_executions(rule_id, external_id, target_signature)` já evita disparo duplicado se o `order.updated` correspondente chegar depois.
 
-- **`ask_name`** → enviar texto fixo pedindo nome e sobrenome; setar step = `await_name`; **não chamar IA**.
-- **`await_name`** → ler última mensagem do usuário; validar se parece nome (regex: 2+ palavras alfabéticas, sem `?`, sem dígitos, length razoável). 
-  - Se válido: salvar em `contacts.name` + `contacts.call_name` (primeiro nome); avançar para `triage`.
-  - Se inválido: reenviar pedido de nome em tom gentil ("Pra te cadastrar certinho, me manda só seu nome e sobrenome 💛"); permanecer em `await_name`.
-- **`triage`** → enviar mensagem interativa com 2 botões (`menu_atendimento`, `menu_suporte`) usando o texto "Prazer, [PRIMEIRO_NOME]! 💛 Me conta: como posso te ajudar hoje?"; setar step = `await_triage`; **não chamar IA**.
-- **`await_triage`** → ler última mensagem; esperar `metadata.interactive.id`:
-  - `menu_atendimento` → step = `done`; **deixar fluxo seguir para IA da Donatella**, injetando uma instrução de sistema "abra com uma saudação curta e calorosa convidando o cliente a dizer o que precisa".
-  - `menu_suporte` → step = `support_topic`; enviar 3 botões (`support_entrega`, `support_produto`, `support_outro`) com texto curto tipo "Sobre qual assunto?"; **não chamar IA**.
-  - Texto livre que não seja botão: reenviar a triagem uma vez, ou (se já reenviado) aceitar como "Atendimento" por padrão.
-- **`support_topic` / `await_support_topic`** → ao receber qualquer um dos 3 botões (ou texto), enviar mensagem fixa "Já estou chamando nosso time de suporte para cuidar de você. 💛 Para agilizar, me envia o seu *número do pedido*?" e:
-  - `conversations.status = 'human'`
-  - `conversations.queue = 'support'`
-  - `conversations.assigned_team = '39354a8b-67f1-4f54-8139-68cc51b12949'` (team "Produção")
-  - step = `done`
-  - Disparar notificação `handoff_requested` (reaproveitando o padrão já existente para tocar o som).
-- **`done`** → seguir o fluxo atual da Donatella (sem alteração).
+**b) Corrigir leitura de `prev_status` quando eventos chegam fora de ordem**
+- Antes de ler `prev_status` da tabela `orders`, checar se já existe um `webhook_event` *anterior* (mesmo `woo_order_id`, `received_at` menor) que foi processado. Se o pedido foi inserido pelo evento mais novo, usar `prev_status = null` em vez do status atual.
+- Implementação simples: ler `prev_status` *antes* de qualquer `upsert`, e quando o registro de `orders` existe mas foi `created_at`/`updated_at` há menos de 5s, tratar como `null` (provável race do mesmo lote de webhooks).
+- Alternativa mais robusta: armazenar o "último status visto" em uma coluna `last_processed_status` na própria tabela `orders`, atualizada apenas *depois* do processamento das regras. Vou usar essa, evita ambiguidades.
 
-### 3) Helper de envio interativo
-Adicionar utilitário dentro do `nina-orchestrator` (não mexer no `whatsapp-sender`) que faz POST direto à Graph API com `type: "interactive"` + `interactive.type: "button"` usando o token/`phone_number_id` lidos de `nina_settings`. Persistir a mensagem na tabela `messages` com `from_type='nina'`, `type='text'`, `metadata.interactive = { kind: 'button', buttons: [...] }` para o chat UI já existente exibir.
+```ts
+// pseudocódigo
+const { data: prevOrder } = await supabase
+  .from('orders').select('last_processed_status')
+  .eq('woo_order_id', wooId).maybeSingle();
+prevState.status = prevOrder?.last_processed_status ?? null;
 
-### 4) Texto fixo (constantes em arquivo separado dentro da function)
-- `WELCOME_ASK_NAME`: "Olá! 🧀✨ Eu sou a Donatella, sua concierge de experiências gastronômicas da Grazing Table & Co. Pra te atender do jeitinho certo, como é o seu nome e sobrenome?"
-- `ASK_NAME_RETRY`: "Pra te cadastrar certinho, me manda só seu nome e sobrenome, por favor 💛"
-- `TRIAGE_TEXT(firstName)`: "Prazer, {firstName}! 💛 Me conta: como posso te ajudar hoje?"
-- `SUPPORT_TOPIC_TEXT`: "Sobre qual assunto posso te ajudar?"
-- `SUPPORT_HANDOFF_TEXT`: "Já estou chamando nosso time de suporte para cuidar de você. 💛 Para agilizar, me envia o seu *número do pedido*?"
+// ... avaliar regras ...
 
-### 5) Deploy
-Redeploy de `whatsapp-webhook` e `nina-orchestrator`. Sem migrations (usamos `nina_context` que já existe). Sem mudança no frontend.
+// ao final do processamento do evento:
+await supabase.from('orders')
+  .update({ last_processed_status: event.payload.status })
+  .eq('woo_order_id', wooId);
+```
+
+### 2) Migração — adicionar coluna `last_processed_status` em `orders`
+
+```sql
+ALTER TABLE public.orders 
+  ADD COLUMN IF NOT EXISTS last_processed_status text;
+-- Seed com o status atual para não disparar tudo retroativamente:
+UPDATE public.orders SET last_processed_status = status WHERE last_processed_status IS NULL;
+```
+
+### 3) Corrigir regra `f80dce44` (CRM "pago")
+
+Trocar `logic` de `AND` para `OR` para que `changed_to processing` OU `changed_to completed` dispare a atualização de CRM. Feito via `UPDATE` em `automation_rules`.
 
 ## O que NÃO muda
-- Lógica de horário comercial, handoff urgente, transcrição de áudio, automações WC, dedup de mensagens, RLS, schema, frontend, e o prompt da Donatella permanecem inalterados.
-- Quando o cliente toca "Atendimento", nenhum outro botão/list é enviado — a IA assume.
+
+- Schema de `automation_rules`, `automation_logs`, `webhook_events`, `automation_executions`.
+- Lógica de cooldown, idempotência, send_queue, whatsapp-sender.
+- Demais regras (Retirado, Cancelado, Pedido criado) — passam a funcionar corretamente automaticamente porque o `prev_status` ficará correto e o `order.created` passará a ser considerado.
+
+## Validação após deploy
+
+1. Reprocessar manualmente os eventos `65cc7056` (21960 processing) e `ce1fb1bc` (21961 pending) e conferir nos `automation_logs` que as regras corretas disparam.
+2. Acompanhar o próximo pedido pago real e confirmar que a mensagem WhatsApp "pedido_feito" sai.
