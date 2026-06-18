@@ -136,7 +136,7 @@ const firePipelineAutomations = async (dealId: string): Promise<void> => {
     // 6. Execute each matching rule
     for (const rule of rules) {
       if (rule.action_type !== 'whatsapp_message') continue;
-      const cfg: Record<string, any> = rule.action_config || {};
+      const cfg: Record<string, any> = (rule.action_config as Record<string, any>) || {};
       if (!cfg.template_id) continue;
 
       try {
@@ -154,7 +154,7 @@ const firePipelineAutomations = async (dealId: string): Promise<void> => {
         const variableValues = variablePaths.map((p: string) => context[p] ?? '');
 
         // Interpolate template body
-        const bodyComponent = (template.components || []).find(
+        const bodyComponent = ((template.components as any[]) || []).find(
           (c: any) => (c.type || '').toUpperCase() === 'BODY'
         );
         const bodyText: string = bodyComponent?.text || '';
@@ -173,7 +173,7 @@ const firePipelineAutomations = async (dealId: string): Promise<void> => {
             name: template.name,
             language: template.language || 'pt_BR',
             category: template.category || 'MARKETING',
-            components: template.components || [],
+            components: (template.components as any[]) || [],
           },
           variables: variablesRecord,
           interpolatedBody,

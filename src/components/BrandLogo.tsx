@@ -22,7 +22,7 @@ interface GrazingMarkProps {
   className?: string;
 }
 
-const GrazingMark: React.FC<GrazingMarkProps> = ({ size, color = '#B3A369', className }) => {
+export const GrazingMark: React.FC<GrazingMarkProps> = ({ size, color = '#B3A369', className }) => {
   const h = Math.round(size * (82 / 56));
   return (
     <svg
