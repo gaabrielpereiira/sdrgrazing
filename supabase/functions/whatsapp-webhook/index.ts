@@ -294,7 +294,27 @@ serve(async (req) => {
               console.log('[Webhook] Created new conversation:', conversation.id);
             }
           }
-          // Removed user_id update to maintain single-tenant null pattern
+
+          // Seed onboarding step on the conversation if it isn't set yet.
+          // We use nina_context.onboarding to drive the opening flow in nina-orchestrator.
+          // - 'ask_name'  -> contact has no name on file (true new lead)
+          // - 'triage'    -> contact already has a name (returning, but new/reopened conv)
+          try {
+            const ninaCtx = (conversation as any).nina_context || {};
+            if (!ninaCtx.onboarding || !ninaCtx.onboarding.step) {
+              const hasName = !!(contact.name && String(contact.name).trim().length > 0);
+              const nextStep = hasName ? 'triage' : 'ask_name';
+              const newCtx = { ...ninaCtx, onboarding: { step: nextStep } };
+              await supabase
+                .from('conversations')
+                .update({ nina_context: newCtx })
+                .eq('id', conversation.id);
+              (conversation as any).nina_context = newCtx;
+              console.log('[Webhook] Seeded onboarding step:', nextStep, 'for conv', conversation.id);
+            }
+          } catch (seedErr) {
+            console.error('[Webhook] Error seeding onboarding step:', seedErr);
+          }
 
           // 3a. REACTION: not a regular message — attach emoji to target message and skip queue
           if (message.type === 'reaction') {
