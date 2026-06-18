@@ -732,6 +732,356 @@ async function cancelAppointmentFromAI(
   return data;
 }
 
+// ============================================================
+// OPENING / ONBOARDING FLOW (Donatella)
+// ============================================================
+
+const ONBOARDING_TEXTS = {
+  WELCOME_ASK_NAME:
+    'Olá! 🧀✨ Eu sou a Donatella, sua concierge de experiências gastronômicas da Grazing Table & Co. Pra te atender do jeitinho certo, como é o seu nome e sobrenome?',
+  ASK_NAME_RETRY:
+    'Pra te cadastrar certinho, me manda só seu nome e sobrenome, por favor 💛',
+  triage: (firstName: string) =>
+    `Prazer, ${firstName}! 💛 Me conta: como posso te ajudar hoje?`,
+  SUPPORT_TOPIC: 'Sobre qual assunto posso te ajudar?',
+  SUPPORT_HANDOFF:
+    'Já estou chamando nosso time de suporte para cuidar de você. 💛 Para agilizar, me envia o seu *número do pedido*?',
+};
+
+function looksLikeName(raw: string): boolean {
+  if (!raw) return false;
+  const s = raw.trim();
+  if (s.length < 3 || s.length > 80) return false;
+  if (/[?!@#$%&*()_=+<>{}\[\]\\\/]/.test(s)) return false;
+  if (/\d/.test(s)) return false;
+  const parts = s.split(/\s+/).filter((p) => /^[A-Za-zÀ-ÿ'’\-]{2,}$/.test(p));
+  return parts.length >= 2;
+}
+
+function extractFirstName(raw: string): string {
+  return raw.trim().split(/\s+/)[0] || raw.trim();
+}
+
+async function sendFixedText(
+  supabase: any,
+  conversation: any,
+  content: string,
+  responseToMessageId?: string,
+) {
+  await supabase.from('send_queue').insert({
+    conversation_id: conversation.id,
+    contact_id: conversation.contact_id,
+    content,
+    from_type: 'nina',
+    message_type: 'text',
+    priority: 2,
+    scheduled_at: new Date(Date.now() + 800).toISOString(),
+    metadata: {
+      response_to_message_id: responseToMessageId || null,
+      onboarding: true,
+    },
+  });
+}
+
+// Send a WhatsApp interactive reply-buttons message directly via the Graph API
+// (whatsapp-sender does not yet support interactive types). Also persists the
+// outgoing message in the messages table so the chat UI renders it.
+async function sendInteractiveButtons(
+  supabase: any,
+  conversation: any,
+  settings: any,
+  bodyText: string,
+  buttons: { id: string; title: string }[],
+) {
+  try {
+    const { data: contact } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('id', conversation.contact_id)
+      .maybeSingle();
+    if (!contact) {
+      console.error('[Onboarding] Contact not found for interactive send');
+      return;
+    }
+    if (!settings?.whatsapp_phone_number_id || !settings?.whatsapp_access_token) {
+      console.warn('[Onboarding] Missing WhatsApp credentials; falling back to plain text');
+      const fallback = `${bodyText}\n\n${buttons.map((b, i) => `${i + 1}. ${b.title}`).join('\n')}`;
+      await sendFixedText(supabase, conversation, fallback);
+      return;
+    }
+
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: contact.whatsapp_id || contact.phone_number,
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: bodyText },
+        action: {
+          buttons: buttons.slice(0, 3).map((b) => ({
+            type: 'reply',
+            reply: { id: b.id, title: b.title.slice(0, 20) },
+          })),
+        },
+      },
+    };
+
+    const res = await fetch(
+      `https://graph.facebook.com/v20.0/${settings.whatsapp_phone_number_id}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${settings.whatsapp_access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    const data = await res.json();
+    if (!res.ok) {
+      console.error('[Onboarding] Interactive send failed:', JSON.stringify(data));
+      // Fallback: plain text with numbered options so the user can still reply
+      const fallback = `${bodyText}\n\n${buttons.map((b, i) => `${i + 1}. ${b.title}`).join('\n')}`;
+      await sendFixedText(supabase, conversation, fallback);
+      return;
+    }
+
+    const waId = data.messages?.[0]?.id || null;
+
+    await supabase.from('messages').insert({
+      conversation_id: conversation.id,
+      whatsapp_message_id: waId,
+      content: bodyText,
+      type: 'text',
+      from_type: 'nina',
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+      metadata: {
+        onboarding: true,
+        interactive: {
+          kind: 'button',
+          buttons: buttons.map((b) => ({ id: b.id, title: b.title })),
+        },
+      },
+    });
+
+    await supabase
+      .from('conversations')
+      .update({ last_message_at: new Date().toISOString() })
+      .eq('id', conversation.id);
+  } catch (err) {
+    console.error('[Onboarding] sendInteractiveButtons exception:', err);
+  }
+}
+
+async function setOnboardingStep(supabase: any, conversation: any, patch: Record<string, any>) {
+  const ninaCtx = (conversation.nina_context as any) || {};
+  const prev = ninaCtx.onboarding || {};
+  const newCtx = { ...ninaCtx, onboarding: { ...prev, ...patch } };
+  await supabase
+    .from('conversations')
+    .update({ nina_context: newCtx })
+    .eq('id', conversation.id);
+  conversation.nina_context = newCtx;
+}
+
+function getInteractiveButtonId(message: any): string | null {
+  const inter = message?.metadata?.interactive;
+  if (inter && inter.kind === 'button_reply' && inter.id) return String(inter.id);
+  return null;
+}
+
+/**
+ * Handles the opening flow. Returns:
+ *  - 'handled'  -> we replied with fixed messages, skip the AI pipeline.
+ *  - 'continue' -> let the regular Donatella AI processing proceed.
+ */
+async function handleOnboarding(
+  supabase: any,
+  conversation: any,
+  message: any,
+  settings: any,
+): Promise<'handled' | 'continue'> {
+  const onboarding = ((conversation.nina_context as any) || {}).onboarding;
+  const step = onboarding?.step;
+  if (!step || step === 'done') return 'continue';
+
+  // Resolve contact (we may need to update name)
+  const { data: contact } = await supabase
+    .from('contacts')
+    .select('*')
+    .eq('id', conversation.contact_id)
+    .maybeSingle();
+
+  const userText = (message.content || '').trim();
+  const btnId = getInteractiveButtonId(message);
+
+  // STEP: ask_name (first turn for a new lead) -> send fixed welcome, wait for name
+  if (step === 'ask_name') {
+    await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.WELCOME_ASK_NAME, message.id);
+    await setOnboardingStep(supabase, conversation, { step: 'await_name', retries: 0 });
+    return 'handled';
+  }
+
+  // STEP: await_name -> validate and save
+  if (step === 'await_name') {
+    if (looksLikeName(userText)) {
+      const fullName = userText.replace(/\s+/g, ' ').trim();
+      const firstName = extractFirstName(fullName);
+      await supabase
+        .from('contacts')
+        .update({ name: fullName, call_name: firstName })
+        .eq('id', conversation.contact_id);
+      await sendInteractiveButtons(
+        supabase,
+        conversation,
+        settings,
+        ONBOARDING_TEXTS.triage(firstName),
+        [
+          { id: 'menu_atendimento', title: 'Atendimento' },
+          { id: 'menu_suporte', title: 'Suporte pós-venda' },
+        ],
+      );
+      await setOnboardingStep(supabase, conversation, { step: 'await_triage' });
+      return 'handled';
+    } else {
+      await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.ASK_NAME_RETRY, message.id);
+      const retries = (onboarding?.retries || 0) + 1;
+      await setOnboardingStep(supabase, conversation, { step: 'await_name', retries });
+      return 'handled';
+    }
+  }
+
+  // STEP: triage -> send triage buttons greeting by first name
+  if (step === 'triage') {
+    const firstName = contact?.call_name || extractFirstName(contact?.name || 'tudo bem');
+    await sendInteractiveButtons(
+      supabase,
+      conversation,
+      settings,
+      ONBOARDING_TEXTS.triage(firstName),
+      [
+        { id: 'menu_atendimento', title: 'Atendimento' },
+        { id: 'menu_suporte', title: 'Suporte pós-venda' },
+      ],
+    );
+    await setOnboardingStep(supabase, conversation, { step: 'await_triage' });
+    return 'handled';
+  }
+
+  // STEP: await_triage -> route based on button (or text fallback)
+  if (step === 'await_triage') {
+    const lower = userText.toLowerCase();
+    const choseAtendimento =
+      btnId === 'menu_atendimento' ||
+      /\batendimento\b/.test(lower) ||
+      /^1\b/.test(lower);
+    const choseSuporte =
+      btnId === 'menu_suporte' ||
+      /\bsuporte\b/.test(lower) ||
+      /p[óo]s[\s-]?venda/.test(lower) ||
+      /^2\b/.test(lower);
+
+    if (choseAtendimento) {
+      await setOnboardingStep(supabase, conversation, { step: 'done' });
+      // Let the AI run — flag the message so the orchestrator knows it's the kickoff turn.
+      try {
+        await supabase
+          .from('messages')
+          .update({
+            metadata: {
+              ...(message.metadata || {}),
+              onboarding_kickoff: true,
+            },
+          })
+          .eq('id', message.id);
+      } catch (_) { /* ignore */ }
+      return 'continue';
+    }
+
+    if (choseSuporte) {
+      await sendInteractiveButtons(
+        supabase,
+        conversation,
+        settings,
+        ONBOARDING_TEXTS.SUPPORT_TOPIC,
+        [
+          { id: 'support_entrega', title: 'Entrega' },
+          { id: 'support_produto', title: 'Produto' },
+          { id: 'support_outro', title: 'Outro' },
+        ],
+      );
+      await setOnboardingStep(supabase, conversation, { step: 'await_support_topic' });
+      return 'handled';
+    }
+
+    // Unrecognized text -> resend triage once, then default to Atendimento.
+    const retries = (onboarding?.retries || 0) + 1;
+    if (retries >= 2) {
+      await setOnboardingStep(supabase, conversation, { step: 'done' });
+      return 'continue';
+    }
+    const firstName = contact?.call_name || extractFirstName(contact?.name || '');
+    await sendInteractiveButtons(
+      supabase,
+      conversation,
+      settings,
+      ONBOARDING_TEXTS.triage(firstName || 'tudo bem'),
+      [
+        { id: 'menu_atendimento', title: 'Atendimento' },
+        { id: 'menu_suporte', title: 'Suporte pós-venda' },
+      ],
+    );
+    await setOnboardingStep(supabase, conversation, { step: 'await_triage', retries });
+    return 'handled';
+  }
+
+  // STEP: await_support_topic -> any choice triggers the handoff to Suporte/Produção
+  if (step === 'await_support_topic') {
+    await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.SUPPORT_HANDOFF, message.id);
+
+    // Route conversation to Suporte (Produção)
+    try {
+      await supabase
+        .from('conversations')
+        .update({
+          status: 'human',
+          queue: 'support',
+          assigned_team: 'suporte',
+        })
+        .eq('id', conversation.id);
+    } catch (routeErr) {
+      console.error('[Onboarding] Failed to route to support:', routeErr);
+    }
+
+    // Notification for the team (also drives the in-app handoff chime)
+    try {
+      const clientLabel =
+        (contact?.name as string) ||
+        (contact?.call_name as string) ||
+        (contact?.phone_number as string) ||
+        'Cliente';
+      await supabase.from('notifications').insert({
+        type: 'handoff_requested',
+        title: `Suporte solicitado: ${clientLabel}`,
+        message: 'Cliente escolheu Suporte pós-venda no menu de abertura.',
+        priority: 'high',
+        conversation_id: conversation.id,
+        contact_id: conversation.contact_id,
+      });
+    } catch (notifErr) {
+      console.error('[Onboarding] Failed to insert handoff notification:', notifErr);
+    }
+
+    await setOnboardingStep(supabase, conversation, { step: 'done' });
+    return 'handled';
+  }
+
+  return 'continue';
+}
+
 async function processQueueItem(
   supabase: any,
   lovableApiKey: string,
