@@ -997,6 +997,7 @@ export type Database = {
           customer_phone: string | null
           id: string
           is_first_order: boolean | null
+          last_processed_status: string | null
           line_items: Json | null
           order_created_at: string | null
           payment_method: string | null
@@ -1018,6 +1019,7 @@ export type Database = {
           customer_phone?: string | null
           id?: string
           is_first_order?: boolean | null
+          last_processed_status?: string | null
           line_items?: Json | null
           order_created_at?: string | null
           payment_method?: string | null
@@ -1039,6 +1041,7 @@ export type Database = {
           customer_phone?: string | null
           id?: string
           is_first_order?: boolean | null
+          last_processed_status?: string | null
           line_items?: Json | null
           order_created_at?: string | null
           payment_method?: string | null
