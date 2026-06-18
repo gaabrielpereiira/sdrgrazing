@@ -772,6 +772,26 @@ async function processQueueItem(
     return;
   }
 
+  // === OPENING / ONBOARDING FLOW ===
+  // Driven by conversation.nina_context.onboarding.step.
+  // Handles: ask name (new leads), triage buttons, support topic, handoff to Suporte/Produção.
+  try {
+    const onboardingResult = await handleOnboarding(supabase, conversation, message, settings);
+    if (onboardingResult === 'handled') {
+      // Onboarding produced a fixed reply (or routed conversation). Mark message processed
+      // and skip the AI pipeline entirely for this turn.
+      await supabase
+        .from('messages')
+        .update({ processed_by_nina: true })
+        .eq('id', message.id);
+      return;
+    }
+    // else 'continue' — fall through to normal AI handling below
+  } catch (obErr) {
+    console.error('[Nina] Onboarding handler error (continuing to AI):', obErr);
+  }
+
+
   // Check if auto-response is enabled
   if (!settings?.auto_response_enabled) {
     console.log('[Nina] Auto-response disabled, marking as processed without responding');
