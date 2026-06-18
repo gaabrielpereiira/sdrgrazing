@@ -554,6 +554,14 @@ async function processEvent(supabase: any, event: any) {
     }
   }
 
+  // Persist the status the runner just processed so the NEXT event for this
+  // order sees the correct `prev_status`, even if webhooks arrive out of order.
+  if (wooIdForStateUpdate != null && event.payload?.status != null) {
+    await supabase.from('orders')
+      .update({ last_processed_status: String(event.payload.status) })
+      .eq('woo_order_id', wooIdForStateUpdate);
+  }
+
   await supabase.from('webhook_events')
     .update({ processed: true, error: null, next_retry_at: null }).eq('id', event.id);
   return { queuedWhatsapp };
