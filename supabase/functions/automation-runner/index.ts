@@ -444,17 +444,20 @@ async function upsertOrderFromEvent(supabase: any, event: any) {
 // ─── Event processing ─────────────────────────────────────────────────
 
 async function processEvent(supabase: any, event: any) {
-  // For order.* events, read the previous status BEFORE upserting so that
-  // changed_to filters can compare prev vs current value.
+  // For order.* events, read the LAST PROCESSED status (set after the previous
+  // event finished evaluating rules) so changed_to filters compare against the
+  // real prior state — even when webhooks arrive out of order.
   const prevState: Record<string, any> = {};
   let externalId: string | null = null;
+  let wooIdForStateUpdate: number | null = null;
   if (event?.topic?.startsWith('order.')) {
     const wooId = Number(event?.payload?.id);
     if (Number.isFinite(wooId)) {
       externalId = String(wooId);
+      wooIdForStateUpdate = wooId;
       const { data: prevOrder } = await supabase
-        .from('orders').select('status').eq('woo_order_id', wooId).maybeSingle();
-      prevState.status = prevOrder?.status ?? null;
+        .from('orders').select('last_processed_status').eq('woo_order_id', wooId).maybeSingle();
+      prevState.status = prevOrder?.last_processed_status ?? null;
     }
   }
 
@@ -462,13 +465,8 @@ async function processEvent(supabase: any, event: any) {
   await upsertOrderFromEvent(supabase, event);
 
   // ── Inject computed fields into the payload ────────────────────────────
-  // These fields (prefixed with _) are calculated at processing time and can
-  // be used in filter conditions just like any other payload field.
-  //
-  // _order_age_hours: how many hours have elapsed since the order was created.
-  //   Use with operator "lte" to skip automations for old orders.
-  //   Example: field=_order_age_hours, operator=lte, value=24  →  only fires
-  //   for orders created in the last 24 h (ignores status updates on old orders).
+  // _order_age_hours: how many hours since the order was created. Use with
+  // operator "lte" to skip automations for old orders.
   if (event.payload && (event.payload.date_created_gmt || event.payload.date_created)) {
     try {
       const dateStr = event.payload.date_created_gmt || event.payload.date_created;
@@ -478,8 +476,17 @@ async function processEvent(supabase: any, event: any) {
     } catch { /* ignore malformed dates */ }
   }
 
+  // For order.created events, ALSO evaluate order.updated rules — orders that
+  // arrive already paid (status=processing/completed) never emit a separate
+  // order.updated, so "paid" rules would otherwise never fire. The
+  // automation_executions idempotency claim prevents duplicate firing when the
+  // matching order.updated webhook arrives later.
+  const topicsToMatch = event.topic === 'order.created'
+    ? ['order.created', 'order.updated']
+    : [event.topic];
+
   const { data: rules, error: rulesErr } = await supabase
-    .from('automation_rules').select('*').eq('active', true).eq('trigger_topic', event.topic);
+    .from('automation_rules').select('*').eq('active', true).in('trigger_topic', topicsToMatch);
   if (rulesErr) throw rulesErr;
   console.log(
     `[runner] event=${event.id} topic=${event.topic} matched ${rules?.length || 0} active rule(s)` +
