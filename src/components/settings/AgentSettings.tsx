@@ -636,4 +636,154 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
 
 AgentSettings.displayName = 'AgentSettings';
 
+// ===== Per-team business hours card =====
+interface TeamHoursCardProps {
+  teamMatch: string; // lowercase substring of team name
+  title: string;
+  accent: 'indigo' | 'emerald';
+}
+
+const TeamHoursCard: React.FC<TeamHoursCardProps> = ({ teamMatch, title, accent }) => {
+  const accentClasses = accent === 'emerald'
+    ? { icon: 'text-emerald-400', ring: 'focus:ring-emerald-500/50', activeBtn: 'bg-emerald-500 text-white', save: 'bg-emerald-500 hover:bg-emerald-400 text-white' }
+    : { icon: 'text-indigo-400', ring: 'focus:ring-indigo-500/50', activeBtn: 'bg-indigo-500 text-white', save: 'bg-indigo-500 hover:bg-indigo-400 text-white' };
+
+  const [teamId, setTeamId] = useState<string | null>(null);
+  const [teamMissing, setTeamMissing] = useState(false);
+  const [start, setStart] = useState('08:00');
+  const [end, setEnd] = useState('18:00');
+  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const { data: teams, error } = await supabase.from('teams').select('id,name');
+        if (error) throw error;
+        const match = (teams || []).find((t: any) => (t.name || '').toLowerCase().includes(teamMatch));
+        if (!match) {
+          setTeamMissing(true);
+          return;
+        }
+        setTeamId(match.id);
+        const { data: rows, error: hErr } = await supabase
+          .from('team_business_hours')
+          .select('day_of_week,is_open,start_time,end_time')
+          .eq('team_id', match.id);
+        if (hErr) throw hErr;
+        const open = (rows || []).filter((r: any) => r.is_open);
+        if (open.length > 0) {
+          setDays(open.map((r: any) => r.day_of_week).sort());
+          setStart(((open[0] as any).start_time || '08:00').slice(0, 5));
+          setEnd(((open[0] as any).end_time || '18:00').slice(0, 5));
+        }
+      } catch (e) {
+        console.error('[TeamHoursCard]', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [teamMatch]);
+
+  const toggleDay = (d: number) => {
+    setDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort());
+  };
+
+  const save = async () => {
+    if (!teamId) return;
+    setSaving(true);
+    try {
+      const payload = Array.from({ length: 7 }, (_, d) => ({
+        team_id: teamId,
+        day_of_week: d,
+        is_open: days.includes(d),
+        start_time: start,
+        end_time: end,
+      }));
+      const { error } = await supabase
+        .from('team_business_hours')
+        .upsert(payload, { onConflict: 'team_id,day_of_week' });
+      if (error) throw error;
+      toast.success(`Horário de ${title} salvo!`);
+    } catch (e) {
+      console.error(e);
+      toast.error('Erro ao salvar horário');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3">
+          <Calendar className={`w-5 h-5 ${accentClasses.icon}`} />
+          <h3 className="font-semibold text-white">{title}</h3>
+        </div>
+        {!loading && !teamMissing && (
+          <button
+            onClick={save}
+            disabled={saving}
+            className={`text-xs px-3 py-1.5 rounded-md font-medium transition-all disabled:opacity-50 ${accentClasses.save}`}
+          >
+            {saving ? 'Salvando…' : 'Salvar'}
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="py-6 flex justify-center"><Loader2 className="w-4 h-4 animate-spin text-slate-500" /></div>
+      ) : teamMissing ? (
+        <p className="text-sm text-slate-500">Departamento não encontrado. Crie a equipe "{teamMatch}" em Equipe.</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-slate-400 mb-1.5 block">Início</label>
+              <input
+                type="time"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+                className={`h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 ${accentClasses.ring}`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-400 mb-1.5 block">Fim</label>
+              <input
+                type="time"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+                className={`h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 ${accentClasses.ring}`}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-400 mb-2 block">Dias da Semana</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {DAYS_OF_WEEK.map(day => (
+                <button
+                  key={day.value}
+                  onClick={() => toggleDay(day.value)}
+                  className={`flex-1 min-w-[40px] h-9 text-xs font-medium rounded-lg transition-all ${
+                    days.includes(day.value)
+                      ? accentClasses.activeBtn
+                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  }`}
+                >
+                  {day.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Para horários diferentes por dia (ex: Domingo 08–17), use <b>Equipe → Configurar → Horários</b>.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default AgentSettings;
