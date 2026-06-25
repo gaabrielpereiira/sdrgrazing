@@ -1372,9 +1372,25 @@ async function processQueueItem(
   }
 
   // Inject business-hours awareness so the AI can decide handoff correctly.
-  const businessHoursBlock = buildBusinessHoursBlock(settings);
+  // Team-aware: uses team_business_hours/team_holidays for the conversation's
+  // assigned team (Produção for suporte, Comercial otherwise) and falls back
+  // to nina_settings global hours when no team rows exist.
+  const resolvedTeam = await resolveTeamForConversation(supabase, conversation);
+  const bhStatus = await getTeamBusinessHoursStatus(
+    supabase,
+    resolvedTeam?.id || null,
+    resolvedTeam?.name || null,
+    settings,
+  );
+  const businessHoursBlock = formatBusinessHoursBlock(bhStatus);
   if (businessHoursBlock) {
     processedPrompt = `${processedPrompt}\n\n${businessHoursBlock}`;
+  }
+
+  // Out-of-hours auto-reply: enqueue a single notice (per cooldown window)
+  // before the AI reply, without stopping the AI from answering.
+  if (!bhStatus.isOpen) {
+    await maybeSendOutOfHoursAutoReply(supabase, conversation, settings, bhStatus, message.id);
   }
 
   console.log('[Nina] Calling Lovable AI...');
