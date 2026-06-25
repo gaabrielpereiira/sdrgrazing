@@ -28,6 +28,8 @@ interface AgentSettings {
   business_hours_start: string;
   business_hours_end: string;
   business_days: number[];
+  out_of_hours_auto_reply: string;
+  out_of_hours_cooldown_minutes: number;
   company_name: string | null;
   sdr_name: string | null;
   ai_scheduling_enabled: boolean;
