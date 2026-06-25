@@ -1,52 +1,51 @@
 ## Objetivo
+Reorganizar as abas e filtros do painel de chat para que cada atendente veja com facilidade o que é dele, e admins consigam segmentar por pessoa ou equipe.
 
-Garantir que toda conversa tenha um responsável claro:
-- **Auto-atribuição sticky**: quando um humano responde uma conversa sem responsável, ele vira o dono.
-- **Visibilidade**: o primeiro nome do responsável aparece na lista lateral do chat (junto do avatar).
+## Mudanças de UI (apenas frontend)
 
-## Mudanças
+### 1. Abas da lista de conversas (`src/components/ChatInterface.tsx`)
+Substituir o `Tabs` de 2 colunas (Geral / Finalizadas) por 3 colunas:
 
-### 1. Auto-atribuir no envio (sticky)
+```
+[ Geral ] [ Meus bate-papos ] [ Arquivados ]
+```
 
-Arquivo: `src/services/api.ts`
+- **Geral**: comportamento atual da aba "Geral" (todas as conversas ativas).
+- **Meus bate-papos** (novo): conversas com `assignedUserId` igual ao `team_members.id` do usuário logado E `is_active=true`. Mostrar badge com a contagem.
+- **Arquivados**: renomear "Finalizadas" para "Arquivados" em todos os pontos visíveis (chip do header, label da aba, badge no header, mensagem de confirmação de encerramento na linha ~1535: "movida para a aba 'Arquivados'").
 
-Em `sendMessage`, `sendMediaMessage` e `sendTemplateMessage`, logo depois de identificar o `senderUserId` da sessão:
+Estado: trocar o tipo do `mainTab` para `'geral' | 'meus' | 'arquivados'`. Continuar mapeando para `chatTab: 'active' | 'finished'` (meus e geral → active; arquivados → finished).
 
-1. Buscar a conversa selecionando `assigned_user_id` e `contact_id` (já é buscada hoje, só estender o select).
-2. Se `assigned_user_id` **for null** e existir `senderUserId`:
-   - Procurar `team_members` com `user_id = senderUserId` → pegar `team_members.id`.
-   - Se encontrar, reutilizar `api.assignConversation(conversationId, teamMemberId, contactId)` para já gravar a atribuição no banco **e** sincronizar o `owner_id` do deal.
-3. Se já tiver responsável, não muda nada (sticky).
-4. Falhas na atribuição apenas logam (`console.warn`) — não bloqueiam o envio da mensagem.
+### 2. Resolver "meu team_member id"
+Pequeno hook local (ou `useMemo` dentro do componente) usando `useAuth().user.id` para buscar uma vez `team_members.id` via `supabase.from('team_members').select('id').eq('user_id', user.id).maybeSingle()`. Guardar no estado para usar no filtro de "Meus".
 
-Observação: o estado local da UI já atualiza via Realtime do `useConversations` quando `conversations.assigned_user_id` muda, então não precisa de trabalho extra no hook.
+### 3. Filtros acima da lista (dois dropdowns)
+Logo abaixo das abas e acima do campo de busca, adicionar uma linha com 2 `Select` (shadcn) compactos:
 
-### 2. Mostrar nome do responsável na lista lateral
+- **Responsável**: opção "Todos" + lista de `team_members` ativos (nome). Filtra por `chat.assignedUserId`.
+- **Departamento**: opção "Todos" + lista de `teams` ativos. Filtra por `chat.assignedTeam` (que é o slug/id do time já presente em `UIConversation`).
 
-Arquivo: `src/components/ChatInterface.tsx`
+Carregar listas com um `useEffect` no mount (`supabase.from('team_members').select('id,name').eq('status','active')` e `supabase.from('teams').select('id,name').eq('is_active',true)`).
 
-No bloco da listagem (linhas ~1277-1288) onde hoje renderiza só o avatar:
+Filtros aplicam em todas as abas (Geral / Meus / Arquivados), conforme escolha do usuário. Estado persistido em `localStorage` (`chat.filters.responsible`, `chat.filters.team`) para não resetar a cada navegação.
 
-- Manter o `<img>` do avatar.
-- Adicionar ao lado um `<span>` com o **primeiro nome** (`member.name.split(' ')[0]`), em texto pequeno (`text-[10px]`), cor `text-slate-400`, com `max-w-[60px] truncate` pra não estourar.
-- Mantém o `title` para nome completo no hover.
+Quando algum filtro estiver ativo, mostrar um pequeno botão "Limpar" ao lado dos selects.
 
-Layout final do badge: `[avatar] João` agrupado num `<span className="inline-flex items-center gap-1 ...">`.
+### 4. Atualizar `filteredConversations` (linha ~809)
+Adicionar antes do filtro de busca:
+- Se aba = "meus" → filtrar `chat.assignedUserId === myMemberId`.
+- Se filtro responsável ≠ "todos" → filtrar por `assignedUserId`.
+- Se filtro departamento ≠ "todos" → filtrar por `assignedTeam`.
 
-### 3. Sem mudanças de schema
+### 5. Contagem nas abas
+Atualizar `useConversationTabCounts` (`src/hooks/useConversationTabCounts.ts`) para incluir também `mine` (conversas ativas com `assigned_user_id` = team_member do usuário atual). Aceitar `myMemberId` opcional como parâmetro e, quando presente, contar a aba "Meus". Exibir o badge na aba.
 
-- `conversations.assigned_user_id` e `deals.owner_id` já existem.
-- `api.assignConversation` já cuida da sincronização conversa ↔ deal.
-- Nenhuma migration necessária.
+## Fora de escopo
+- Nenhuma mudança de backend, RLS, schema ou edge functions.
+- Lógica de auto-atribuição (já implementada) permanece como está.
+- Permissões por papel continuam iguais — todos veem as 3 abas e os 2 filtros.
 
-## Detalhes técnicos
-
-- A regra "sticky" é avaliada por envio: lemos o valor atual de `assigned_user_id` no banco (não confiamos só no cache local) para evitar corrida entre duas pessoas respondendo ao mesmo tempo.
-- O lookup do team_member é por `user_id` (auth) → `team_members.id`, porque a coluna `assigned_user_id` da conversa hoje guarda `team_members.id` (é o valor usado no `<select>` de Responsável).
-- Para trocar de responsável, o usuário continua usando o seletor "Responsável" no painel direito da conversa (comportamento atual preservado).
-
-## Fora do escopo
-
-- Notificação ao novo responsável.
-- Mudança automática quando responsável fica inativo / sai da equipe.
-- Filtro "Minhas conversas" na lista (pode virar próximo passo, se quiser).
+## Resultado esperado
+- Atendente abre o chat, clica em "Meus bate-papos" e vê só o que está sob sua responsabilidade.
+- Coordenador filtra por "Departamento: Produção" para acompanhar a fila de suporte/produção.
+- "Finalizadas" some do vocabulário visível; tudo encerrado passa a se chamar "Arquivados".
