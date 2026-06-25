@@ -6,10 +6,6 @@ import {
   type BusinessHoursStatus,
 } from "../_shared/business-hours.ts";
 
-// Synthetic rule id used in contact_cooldowns to throttle the out-of-hours
-// auto-reply (so we don't spam the client every message).
-const OUT_OF_HOURS_RULE_ID = '00000000-0000-0000-0000-0000000ff001';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
