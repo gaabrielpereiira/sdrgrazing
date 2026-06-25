@@ -866,6 +866,8 @@ const ChatInterface: React.FC = () => {
 
   const filteredConversations = conversations
     .filter(chat => {
+      // Restrição por departamento (Produção só vê o próprio time)
+      if (restrictedToTeamId && chat.assignedTeam !== restrictedToTeamId) return false;
       // Aba "Meus bate-papos": só os atribuídos a mim
       if (mainTab === 'meus') {
         if (!myMemberId || chat.assignedUserId !== myMemberId) return false;
