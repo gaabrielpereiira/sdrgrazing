@@ -204,6 +204,8 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           business_hours_start: settings.business_hours_start,
           business_hours_end: settings.business_hours_end,
           business_days: settings.business_days,
+          out_of_hours_auto_reply: settings.out_of_hours_auto_reply,
+          out_of_hours_cooldown_minutes: settings.out_of_hours_cooldown_minutes,
           company_name: settings.company_name,
           sdr_name: settings.sdr_name,
           ai_scheduling_enabled: settings.ai_scheduling_enabled,
