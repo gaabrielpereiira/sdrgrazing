@@ -209,6 +209,8 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-brand-gold-500" />
             </div>
+          ) : activeTab === 'hours' ? (
+            <TeamHoursTab teams={teams} />
           ) : activeTab === 'teams' ? (
             <div className="space-y-3">
               {/* Create New Team */}
