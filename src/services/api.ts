@@ -2379,7 +2379,7 @@ export const api = {
   ): Promise<void> => {
     const { error } = await supabase
       .from('conversations')
-      .update({ assigned_team: teamId })
+      .update({ assigned_team: teamId as any })
       .eq('id', conversationId);
 
     if (error) {
