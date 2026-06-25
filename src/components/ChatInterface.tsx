@@ -3,7 +3,7 @@ import {
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck, 
   Smile, Play, Loader2, MessageSquare, Info, X, Mail, 
   Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon, Bell, AlertTriangle,
-  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate, Mic, Trash2, LifeBuoy, ChevronLeft, Building2, ExternalLink, CornerDownLeft
+  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate, Mic, Trash2, LifeBuoy, ChevronLeft, Building2, ExternalLink, CornerDownLeft, Users
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition, formatRelativeTime } from '../types';
 import { Button } from './Button';
@@ -109,21 +109,37 @@ const ChatInterface: React.FC = () => {
   const { sdrName, companyName } = useCompanySettings();
   const queueUnread = useQueueUnreadCounts();
 
-  // Current user's team_member id (for "Meus bate-papos" filter)
+  // Current user's team_member id (for "Meus bate-papos" filter) and team
   const [myMemberId, setMyMemberId] = useState<string | null>(null);
+  const [myTeamId, setMyTeamId] = useState<string | null>(null);
+  const [myTeamName, setMyTeamName] = useState<string | null>(null);
   useEffect(() => {
-    if (!user?.id) { setMyMemberId(null); return; }
+    if (!user?.id) { setMyMemberId(null); setMyTeamId(null); setMyTeamName(null); return; }
     let cancelled = false;
     supabase
       .from('team_members')
-      .select('id')
+      .select('id, team_id, teams:team_id(id, name)')
       .eq('user_id', user.id)
       .maybeSingle()
-      .then(({ data }) => { if (!cancelled) setMyMemberId(data?.id ?? null); });
+      .then(({ data }) => {
+        if (cancelled) return;
+        setMyMemberId((data as any)?.id ?? null);
+        setMyTeamId((data as any)?.team_id ?? null);
+        setMyTeamName(((data as any)?.teams?.name) ?? null);
+      });
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  const tabCounts = useConversationTabCounts(myMemberId);
+  // Visibility rule:
+  //  - Admin OR member of "Comercial" team => see everything (no restriction).
+  //  - Other teams (e.g. Produção) => see only conversations assigned to their team.
+  //  - No team => see everything (safe fallback).
+  const restrictedToTeamId: string | null =
+    !isAdmin && myTeamId && (myTeamName || '').toLowerCase() !== 'comercial'
+      ? myTeamId
+      : null;
+
+  const tabCounts = useConversationTabCounts(myMemberId, restrictedToTeamId);
 
   // Department list (teams) for filter
   const [teamsList, setTeamsList] = useState<Array<{ id: string; name: string }>>([]);
@@ -850,6 +866,8 @@ const ChatInterface: React.FC = () => {
 
   const filteredConversations = conversations
     .filter(chat => {
+      // Restrição por departamento (Produção só vê o próprio time)
+      if (restrictedToTeamId && chat.assignedTeam !== restrictedToTeamId) return false;
       // Aba "Meus bate-papos": só os atribuídos a mim
       if (mainTab === 'meus') {
         if (!myMemberId || chat.assignedUserId !== myMemberId) return false;
@@ -1261,12 +1279,19 @@ const ChatInterface: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={filterTeam} onValueChange={setFilterTeam}>
-              <SelectTrigger className="h-8 text-xs bg-slate-950/50 border-slate-800 text-slate-200 flex-1 min-w-0">
+            <Select
+              value={restrictedToTeamId ? restrictedToTeamId : filterTeam}
+              onValueChange={setFilterTeam}
+              disabled={!!restrictedToTeamId}
+            >
+              <SelectTrigger
+                className="h-8 text-xs bg-slate-950/50 border-slate-800 text-slate-200 flex-1 min-w-0 disabled:opacity-70"
+                title={restrictedToTeamId ? `Restrito ao seu departamento (${myTeamName})` : undefined}
+              >
                 <SelectValue placeholder="Departamento" />
               </SelectTrigger>
               <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
-                <SelectItem value="all">Todos depart.</SelectItem>
+                {!restrictedToTeamId && <SelectItem value="all">Todos depart.</SelectItem>}
                 {teamsList.map(t => (
                   <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                 ))}
@@ -2420,6 +2445,49 @@ const ChatInterface: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div className="h-px bg-slate-800/50 w-full"></div>
+
+                {/* Department / Team transfer */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Departamento
+                  </h4>
+                  <select
+                    value={activeChat.assignedTeam || ''}
+                    disabled={!!restrictedToTeamId}
+                    onChange={async (e) => {
+                      const teamId = e.target.value || null;
+                      const teamName = teamId ? (teamsList.find(t => t.id === teamId)?.name ?? null) : null;
+                      try {
+                        await api.updateConversationTeam(
+                          activeChat.id,
+                          teamId,
+                          teamName,
+                          user?.email ?? null,
+                        );
+                        toast.success(teamId ? `Transferido para ${teamName}.` : 'Departamento removido.');
+                        reloadConversationMessages(activeChat.id);
+                      } catch (err) {
+                        console.error(err);
+                        toast.error('Falha ao transferir departamento.');
+                      }
+                    }}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 focus:ring-1 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 outline-none transition-all disabled:opacity-70"
+                    title={restrictedToTeamId ? 'Apenas Comercial/Admin pode transferir entre departamentos.' : undefined}
+                  >
+                    <option value="">Sem departamento</option>
+                    {teamsList.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  {restrictedToTeamId && (
+                    <p className="text-[10px] text-slate-500">
+                      Você só visualiza conversas do departamento {myTeamName}. Peça ao Comercial para transferir.
+                    </p>
+                  )}
                 </div>
 
                 <div className="h-px bg-slate-800/50 w-full"></div>

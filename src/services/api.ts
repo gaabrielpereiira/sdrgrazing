@@ -2368,6 +2368,42 @@ export const api = {
   },
 
   /**
+   * Transfer conversation to another team (department).
+   * Adds an internal system note message documenting who transferred it.
+   */
+  updateConversationTeam: async (
+    conversationId: string,
+    teamId: string | null,
+    teamName?: string | null,
+    actorName?: string | null
+  ): Promise<void> => {
+    const { error } = await supabase
+      .from('conversations')
+      .update({ assigned_team: teamId as any })
+      .eq('id', conversationId);
+
+    if (error) {
+      console.error('[API] Error updating conversation team:', error);
+      throw error;
+    }
+
+    try {
+      const noteText = teamId
+        ? `Conversa transferida para ${teamName || 'outro departamento'}${actorName ? ` por ${actorName}` : ''}.`
+        : `Departamento removido da conversa${actorName ? ` por ${actorName}` : ''}.`;
+      await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        sender_type: 'system',
+        message_type: 'text',
+        content: noteText,
+        sent_at: new Date().toISOString(),
+      } as any);
+    } catch (e) {
+      console.warn('[API] Could not log department transfer note:', e);
+    }
+  },
+
+  /**
    * Update contact notes
    */
   updateContactNotes: async (contactId: string, notes: string): Promise<void> => {
