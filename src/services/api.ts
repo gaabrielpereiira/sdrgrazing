@@ -1758,6 +1758,32 @@ export const api = {
   },
 
   /**
+   * Sticky auto-assign: if a conversation has no responsible user and the current
+   * sender is mapped to a team_member, become the responsible. Safe to call on
+   * every outgoing human message — it's a no-op when already assigned.
+   */
+  _autoAssignIfUnassigned: async (
+    conversationId: string,
+    contactId: string,
+    currentAssignedUserId: string | null,
+    senderAuthUserId: string | null,
+  ): Promise<void> => {
+    try {
+      if (currentAssignedUserId || !senderAuthUserId) return;
+      const { data: member } = await supabase
+        .from('team_members')
+        .select('id')
+        .eq('user_id', senderAuthUserId)
+        .maybeSingle();
+      if (!member?.id) return;
+      await api.assignConversation(conversationId, member.id, contactId);
+      console.log('[API] Auto-assigned conversation', conversationId, 'to team member', member.id);
+    } catch (err) {
+      console.warn('[API] Auto-assign skipped due to error:', err);
+    }
+  },
+
+  /**
    * Send a message (insert into send_queue for human messages)
    * Returns the ID of the created message
    */
@@ -1773,10 +1799,10 @@ export const api = {
       senderUserId = null;
     }
 
-    // Get conversation to find contact_id
+    // Get conversation to find contact_id + current owner (for sticky auto-assign)
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('contact_id')
+      .select('contact_id, assigned_user_id')
       .eq('id', conversationId)
       .single();
 
@@ -1784,6 +1810,14 @@ export const api = {
       console.error('[API] Error getting conversation:', convError);
       throw new Error('Conversation not found');
     }
+
+    // Sticky auto-assign before persisting the message
+    await api._autoAssignIfUnassigned(
+      conversationId,
+      conversation.contact_id,
+      conversation.assigned_user_id,
+      senderUserId,
+    );
 
     // First create the message record with status 'processing'
     const { data: msgData, error: msgError } = await supabase
@@ -1871,13 +1905,20 @@ export const api = {
 
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('contact_id')
+      .select('contact_id, assigned_user_id')
       .eq('id', conversationId)
       .single();
 
     if (convError || !conversation) {
       throw new Error('Conversation not found');
     }
+
+    await api._autoAssignIfUnassigned(
+      conversationId,
+      conversation.contact_id,
+      conversation.assigned_user_id,
+      senderUserId,
+    );
 
     const templateMeta = {
       name: payload.template.name,
@@ -1955,10 +1996,10 @@ export const api = {
       senderUserId = null;
     }
 
-    // 1) Get conversation -> contact_id
+    // 1) Get conversation -> contact_id + current owner (sticky auto-assign)
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('contact_id')
+      .select('contact_id, assigned_user_id')
       .eq('id', conversationId)
       .single();
 
@@ -1966,6 +2007,13 @@ export const api = {
       console.error('[API] Error getting conversation:', convError);
       throw new Error('Conversation not found');
     }
+
+    await api._autoAssignIfUnassigned(
+      conversationId,
+      conversation.contact_id,
+      conversation.assigned_user_id,
+      senderUserId,
+    );
 
     // 2) Upload file to storage bucket
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');

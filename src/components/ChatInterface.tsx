@@ -1277,13 +1277,21 @@ const ChatInterface: React.FC = () => {
                     {chat.assignedUserId && (() => {
                       const m = teamMembers.find(tm => tm.id === chat.assignedUserId);
                       if (!m) return null;
+                      const firstName = (m.name || '').split(' ')[0];
                       return (
-                        <img
-                          src={m.avatar}
-                          alt={m.name}
+                        <span
                           title={`Responsável: ${m.name}`}
-                          className="w-4 h-4 rounded-full ring-1 ring-slate-700"
-                        />
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-slate-800/60 border border-slate-700/60 rounded-md max-w-[110px]"
+                        >
+                          <img
+                            src={m.avatar}
+                            alt={m.name}
+                            className="w-3.5 h-3.5 rounded-full ring-1 ring-slate-700 shrink-0"
+                          />
+                          <span className="text-[10px] text-slate-300 font-medium truncate">
+                            {firstName}
+                          </span>
+                        </span>
                       );
                     })()}
                     {chat.queue === 'support' && (
