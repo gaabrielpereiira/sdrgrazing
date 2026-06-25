@@ -767,10 +767,14 @@ const ONBOARDING_TEXTS = {
     'Pra te cadastrar certinho, me manda só seu nome e sobrenome, por favor 💛',
   triage: (firstName: string) =>
     `Prazer, ${firstName}! 💛 Me conta: como posso te ajudar hoje?`,
-  SUPPORT_TOPIC: 'Sobre qual assunto posso te ajudar?',
-  SUPPORT_HANDOFF:
-    'Já estou chamando nosso time de suporte para cuidar de você. 💛 Para agilizar, me envia o seu *número do pedido*?',
+  SUPPORT_ASK_ORDER:
+    'Sem problema, vou te direcionar para o nosso time da Produção. 💛 Pra agilizar, me envia o *número do pedido*? (se não tiver em mãos, é só responder "não tenho")',
+  SUPPORT_ASK_ISSUE:
+    'Perfeito! Agora me conta em poucas palavras *o que aconteceu*, pra eu já passar tudo certinho pro time.',
+  SUPPORT_HANDOFF_FALLBACK:
+    'Recebi! Já estou acionando o time da Produção pra cuidar de você. ✨',
 };
+
 
 function looksLikeName(raw: string): boolean {
   if (!raw) return false;
