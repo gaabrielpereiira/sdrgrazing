@@ -2290,7 +2290,7 @@ export const api = {
 
     const { error } = await supabase
       .from('conversations')
-      .update({ is_active: false, status: 'paused' })
+      .update({ is_active: false, status: 'paused', tags: [] })
       .eq('id', conversationId);
 
     if (error) {
