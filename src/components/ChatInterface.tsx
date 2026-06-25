@@ -1179,25 +1179,29 @@ const ChatInterface: React.FC = () => {
             <h2 className="text-lg font-bold text-white">Conversas</h2>
             <span
               className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border flex items-center gap-1 ${
-                mainTab === 'finalizadas'
+                mainTab === 'arquivados'
                   ? 'bg-slate-500/15 text-slate-300 border-slate-500/40'
+                  : mainTab === 'meus'
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
                   : 'bg-brand-gold-500/15 text-brand-gold-300 border-brand-gold-500/40'
               }`}
             >
-              {mainTab === 'finalizadas'
-                ? <><XCircle className="w-3 h-3" />Finalizadas</>
+              {mainTab === 'arquivados'
+                ? <><XCircle className="w-3 h-3" />Arquivados</>
+                : mainTab === 'meus'
+                ? <><User className="w-3 h-3" />Meus</>
                 : <><Bot className="w-3 h-3" />Geral</>}
             </span>
           </div>
-          <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'geral' | 'finalizadas')} className="mb-3">
-            <TabsList className="grid grid-cols-2 w-full h-10 p-1">
+          <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)} className="mb-3">
+            <TabsList className="grid grid-cols-3 w-full h-10 p-1">
               <TabsTrigger
                 value="geral"
-                className="text-xs gap-1.5 data-[state=active]:bg-brand-gold-500/15 data-[state=active]:text-brand-gold-300 data-[state=active]:shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
+                className="text-xs gap-1 data-[state=active]:bg-brand-gold-500/15 data-[state=active]:text-brand-gold-300 data-[state=active]:shadow-[inset_0_-2px_0_0_hsl(var(--primary))]"
               >
                 <Bot className="w-3.5 h-3.5" />
                 Geral
-                <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                <span className="ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
                   {tabCounts.activeSales + tabCounts.activeSupport}
                 </span>
                 {(queueUnread.sales + queueUnread.support) > 0 && (
@@ -1207,17 +1211,64 @@ const ChatInterface: React.FC = () => {
                 )}
               </TabsTrigger>
               <TabsTrigger
-                value="finalizadas"
-                className="text-xs gap-1.5 data-[state=active]:bg-slate-500/15 data-[state=active]:text-slate-200 data-[state=active]:shadow-[inset_0_-2px_0_0_rgb(148_163_184)]"
+                value="meus"
+                className="text-xs gap-1 data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-300 data-[state=active]:shadow-[inset_0_-2px_0_0_rgb(16_185_129)]"
+              >
+                <User className="w-3.5 h-3.5" />
+                Meus
+                <span className="ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                  {tabCounts.mine}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="arquivados"
+                className="text-xs gap-1 data-[state=active]:bg-slate-500/15 data-[state=active]:text-slate-200 data-[state=active]:shadow-[inset_0_-2px_0_0_rgb(148_163_184)]"
               >
                 <XCircle className="w-3.5 h-3.5" />
-                Finalizadas
-                <span className="ml-1 min-w-[1.25rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                Arquivados
+                <span className="ml-0.5 min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
                   {tabCounts.finishedSales + tabCounts.finishedSupport}
                 </span>
               </TabsTrigger>
             </TabsList>
           </Tabs>
+
+          {/* Filtros: Responsável + Departamento */}
+          <div className="flex items-center gap-2 mb-3">
+            <Select value={filterResponsible} onValueChange={setFilterResponsible}>
+              <SelectTrigger className="h-8 text-xs bg-slate-950/50 border-slate-800 text-slate-200 flex-1 min-w-0">
+                <SelectValue placeholder="Responsável" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
+                <SelectItem value="all">Todos responsáveis</SelectItem>
+                <SelectItem value="unassigned">Sem responsável</SelectItem>
+                {teamMembers.map(m => (
+                  <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterTeam} onValueChange={setFilterTeam}>
+              <SelectTrigger className="h-8 text-xs bg-slate-950/50 border-slate-800 text-slate-200 flex-1 min-w-0">
+                <SelectValue placeholder="Departamento" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
+                <SelectItem value="all">Todos depart.</SelectItem>
+                {teamsList.map(t => (
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {filtersActive && (
+              <button
+                type="button"
+                onClick={() => { setFilterResponsible('all'); setFilterTeam('all'); }}
+                className="text-[10px] text-slate-400 hover:text-brand-gold-300 px-1.5 py-1 rounded border border-slate-800 hover:border-brand-gold-500/40 transition-colors flex-shrink-0"
+                title="Limpar filtros"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
 
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-brand-gold-400 transition-colors" />
@@ -1230,6 +1281,7 @@ const ChatInterface: React.FC = () => {
             />
           </div>
         </div>
+
 
         {/* Conversation List */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
