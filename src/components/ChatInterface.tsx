@@ -91,13 +91,14 @@ const EditableRow: React.FC<EditableRowProps> = ({
 };
 
 const ChatInterface: React.FC = () => {
-  const { role, isAdmin } = useAuth();
-  // Todos os usuários autenticados veem a mesma UI: Geral | Finalizadas
-  const [mainTab, setMainTab] = useState<'geral' | 'finalizadas'>('geral');
+  const { role, isAdmin, user } = useAuth();
+  // Todos os usuários autenticados veem a mesma UI: Geral | Meus | Arquivados
+  type MainTab = 'geral' | 'meus' | 'arquivados';
+  const [mainTab, setMainTab] = useState<MainTab>('geral');
   const [endDialogOpen, setEndDialogOpen] = useState(false);
   const [sendClosingMessage, setSendClosingMessage] = useState(true);
-  const chatTab: 'active' | 'finished' = mainTab === 'finalizadas' ? 'finished' : 'active';
-  const setChatTab = (v: 'active' | 'finished') => setMainTab(v === 'finished' ? 'finalizadas' : 'geral');
+  const chatTab: 'active' | 'finished' = mainTab === 'arquivados' ? 'finished' : 'active';
+  const setChatTab = (v: 'active' | 'finished') => setMainTab(v === 'finished' ? 'arquivados' : 'geral');
   // Single-tenant: all authenticated users see every conversation regardless of queue.
   const queueForFetch: 'sales' | 'support' | 'all' = 'all';
   const effectiveQueue: string = 'all';
@@ -105,7 +106,46 @@ const ChatInterface: React.FC = () => {
 
   const { sdrName, companyName } = useCompanySettings();
   const queueUnread = useQueueUnreadCounts();
-  const tabCounts = useConversationTabCounts();
+
+  // Current user's team_member id (for "Meus bate-papos" filter)
+  const [myMemberId, setMyMemberId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user?.id) { setMyMemberId(null); return; }
+    let cancelled = false;
+    supabase
+      .from('team_members')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => { if (!cancelled) setMyMemberId(data?.id ?? null); });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const tabCounts = useConversationTabCounts(myMemberId);
+
+  // Department list (teams) for filter
+  const [teamsList, setTeamsList] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from('teams')
+      .select('id, name, is_active')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => { if (!cancelled) setTeamsList((data || []).map((t: any) => ({ id: t.id, name: t.name }))); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Filters (responsible + department), persisted in localStorage
+  const [filterResponsible, setFilterResponsible] = useState<string>(() => {
+    try { return localStorage.getItem('chat.filters.responsible') || 'all'; } catch { return 'all'; }
+  });
+  const [filterTeam, setFilterTeam] = useState<string>(() => {
+    try { return localStorage.getItem('chat.filters.team') || 'all'; } catch { return 'all'; }
+  });
+  useEffect(() => { try { localStorage.setItem('chat.filters.responsible', filterResponsible); } catch {} }, [filterResponsible]);
+  useEffect(() => { try { localStorage.setItem('chat.filters.team', filterTeam); } catch {} }, [filterTeam]);
+  const filtersActive = filterResponsible !== 'all' || filterTeam !== 'all';
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [showProfileInfo, setShowProfileInfo] = useState(true);
