@@ -97,6 +97,8 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     business_hours_start: '09:00',
     business_hours_end: '18:00',
     business_days: [1, 2, 3, 4, 5],
+    out_of_hours_auto_reply: 'Olá! Recebemos sua mensagem fora do nosso horário de atendimento. Retornaremos {{horario}}.',
+    out_of_hours_cooldown_minutes: 360,
     company_name: null,
     sdr_name: null,
     ai_scheduling_enabled: true,
