@@ -28,6 +28,8 @@ interface AgentSettings {
   business_hours_start: string;
   business_hours_end: string;
   business_days: number[];
+  out_of_hours_auto_reply: string;
+  out_of_hours_cooldown_minutes: number;
   company_name: string | null;
   sdr_name: string | null;
   ai_scheduling_enabled: boolean;
@@ -95,6 +97,8 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     business_hours_start: '09:00',
     business_hours_end: '18:00',
     business_days: [1, 2, 3, 4, 5],
+    out_of_hours_auto_reply: 'Olá! Recebemos sua mensagem fora do nosso horário de atendimento. Retornaremos {{horario}}.',
+    out_of_hours_cooldown_minutes: 360,
     company_name: null,
     sdr_name: null,
     ai_scheduling_enabled: true,
@@ -168,6 +172,8 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
         business_hours_start: data.business_hours_start,
         business_hours_end: data.business_hours_end,
         business_days: data.business_days,
+        out_of_hours_auto_reply: (data as any).out_of_hours_auto_reply ?? 'Olá! Recebemos sua mensagem fora do nosso horário de atendimento. Retornaremos {{horario}}.',
+        out_of_hours_cooldown_minutes: (data as any).out_of_hours_cooldown_minutes ?? 360,
         company_name: data.company_name,
         sdr_name: data.sdr_name,
         ai_scheduling_enabled: data.ai_scheduling_enabled ?? true,
@@ -198,6 +204,8 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           business_hours_start: settings.business_hours_start,
           business_hours_end: settings.business_hours_end,
           business_days: settings.business_days,
+          out_of_hours_auto_reply: settings.out_of_hours_auto_reply,
+          out_of_hours_cooldown_minutes: settings.out_of_hours_cooldown_minutes,
           company_name: settings.company_name,
           sdr_name: settings.sdr_name,
           ai_scheduling_enabled: settings.ai_scheduling_enabled,
@@ -395,6 +403,42 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
                   ))}
                 </div>
               </div>
+            </div>
+            <div className="mt-5 pt-5 border-t border-slate-800 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-slate-400 mb-1.5 block">
+                  Mensagem fora do horário
+                </label>
+                <textarea
+                  value={settings.out_of_hours_auto_reply}
+                  onChange={(e) => setSettings({ ...settings, out_of_hours_auto_reply: e.target.value })}
+                  rows={3}
+                  placeholder="Olá! Recebemos sua mensagem fora do horário. Retornaremos {{horario}}."
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Variáveis: <code className="text-slate-300">{'{{horario}}'}</code> (próximo horário) ·{' '}
+                  <code className="text-slate-300">{'{{equipe}}'}</code>
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-400 mb-1.5 block">
+                  Intervalo entre avisos (minutos)
+                </label>
+                <input
+                  type="number"
+                  min={5}
+                  value={settings.out_of_hours_cooldown_minutes}
+                  onChange={(e) => setSettings({ ...settings, out_of_hours_cooldown_minutes: Math.max(5, Number(e.target.value) || 360) })}
+                  className="h-9 w-32 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Tempo mínimo entre duas mensagens automáticas para o mesmo cliente.
+                </p>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                ⏱️ Os horários abaixo são o <b>fallback</b>. Configure horários específicos por departamento em <b>Equipe → Configurar → Horários</b>.
+              </p>
             </div>
           </div>
         </div>

@@ -835,6 +835,8 @@ export type Database = {
           id: string
           is_active: boolean
           message_breaking_enabled: boolean
+          out_of_hours_auto_reply: string | null
+          out_of_hours_cooldown_minutes: number
           response_delay_max: number
           response_delay_min: number
           route_all_to_receiver_enabled: boolean
@@ -881,6 +883,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           message_breaking_enabled?: boolean
+          out_of_hours_auto_reply?: string | null
+          out_of_hours_cooldown_minutes?: number
           response_delay_max?: number
           response_delay_min?: number
           route_all_to_receiver_enabled?: boolean
@@ -927,6 +931,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           message_breaking_enabled?: boolean
+          out_of_hours_auto_reply?: string | null
+          out_of_hours_cooldown_minutes?: number
           response_delay_max?: number
           response_delay_min?: number
           route_all_to_receiver_enabled?: boolean
@@ -1248,6 +1254,47 @@ export type Database = {
         }
         Relationships: []
       }
+      team_business_hours: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          end_time: string
+          id: string
+          is_open: boolean
+          start_time: string
+          team_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          end_time?: string
+          id?: string
+          is_open?: boolean
+          start_time?: string
+          team_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          end_time?: string
+          id?: string
+          is_open?: boolean
+          start_time?: string
+          team_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_business_hours_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_functions: {
         Row: {
           created_at: string
@@ -1277,6 +1324,50 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      team_holidays: {
+        Row: {
+          created_at: string
+          date: string
+          end_time: string | null
+          id: string
+          is_open: boolean
+          name: string
+          start_time: string | null
+          team_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          end_time?: string | null
+          id?: string
+          is_open?: boolean
+          name: string
+          start_time?: string | null
+          team_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          end_time?: string | null
+          id?: string
+          is_open?: boolean
+          name?: string
+          start_time?: string | null
+          team_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_holidays_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       team_members: {
         Row: {
