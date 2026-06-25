@@ -1,51 +1,70 @@
-## Objetivo
-Reorganizar as abas e filtros do painel de chat para que cada atendente veja com facilidade o que é dele, e admins consigam segmentar por pessoa ou equipe.
+# Horários de atendimento por equipe
 
-## Mudanças de UI (apenas frontend)
+Hoje só existe um horário global em `nina_settings`. Vou tornar configurável **por equipe** (Produção e Comercial), com regras por dia da semana e cadastro manual de feriados, e disparar auto-resposta quando a mensagem chegar fora do expediente — **sem parar a IA**.
 
-### 1. Abas da lista de conversas (`src/components/ChatInterface.tsx`)
-Substituir o `Tabs` de 2 colunas (Geral / Finalizadas) por 3 colunas:
+## Banco de dados (1 migration)
+
+**`team_business_hours`** — uma linha por (team, day_of_week)
+- `team_id` (FK teams), `day_of_week` (0–6), `is_open` (bool), `start_time`, `end_time`
+- Único: (team_id, day_of_week)
+
+**`team_holidays`** — feriados manuais
+- `team_id` (NULL = vale para todas as equipes), `date`, `name`, `is_open` (bool, default false), `start_time`/`end_time` opcionais (para feriados com horário reduzido, ex.: Domingo/Feriado 08–17 da Produção fica no `team_business_hours` de domingo; feriados pontuais usam essa tabela)
+
+**`nina_settings`** — adicionar:
+- `out_of_hours_auto_reply` (text) — mensagem padrão enviada uma vez por conversa fora do horário
+- `out_of_hours_cooldown_minutes` (int, default 360)
+
+Seed inicial:
+- **Produção**: Seg–Sáb 08:00–20:00, Domingo 08:00–17:00
+- **Comercial**: Seg–Sex 08:00–18:00; demais dias fechados
+
+GRANTs + RLS permissivo authenticated (padrão do projeto).
+
+## UI
+
+**Novo card em `src/components/TeamConfigModal.tsx`** (ou aba nova "Horários" dentro do modal de equipe em `Team.tsx`):
+- Tabela 7 linhas (Dom–Sáb) com toggle "Aberto" + dois time inputs
+- Botão "Aplicar Seg–Sex" / "Aplicar Seg–Sáb" para acelerar
+- Subseção "Feriados": lista com data + nome + botão remover, input para adicionar
+
+**`src/components/settings/AgentSettings.tsx`**:
+- Novo bloco "Mensagem fora do horário" (textarea + input minutos de cooldown)
+- Remover/depreciar os campos globais `business_hours_start/end/days` (manter como fallback se nenhuma equipe configurada)
+
+## Lógica (backend)
+
+**Novo helper** `supabase/functions/_shared/business-hours.ts`:
+- `isTeamOpen(teamId, now)` — consulta `team_holidays` (override), depois `team_business_hours` para o dia da semana, considera timezone de `nina_settings.timezone`
+- `nextOpeningDescription(teamId, now)` — string "amanhã às 08:00" usada no template
+
+**`nina-orchestrator/index.ts`**:
+- Após resolver a equipe da conversa (assigned_team_id ou rota de triagem), checar `isTeamOpen`
+- Se fechado: enfileirar a `out_of_hours_auto_reply` (substituindo `{{horario}}` pelo `nextOpeningDescription`), respeitando cooldown via `contact_cooldowns` para não repetir
+- IA segue processando normalmente (conforme escolha do usuário)
+
+**`automation-runner`**: nenhuma mudança — automações continuam disparando 24/7.
+
+## Frontend tipos
+
+- Regenerar `src/integrations/supabase/types.ts` após migration
+- `src/services/api.ts`: CRUD para `team_business_hours` e `team_holidays`
+
+## Arquivos tocados
 
 ```
-[ Geral ] [ Meus bate-papos ] [ Arquivados ]
+supabase/migrations/<novo>.sql           [novo]
+supabase/functions/_shared/business-hours.ts  [novo]
+supabase/functions/nina-orchestrator/index.ts [editar]
+src/components/TeamConfigModal.tsx       [editar - aba Horários]
+src/components/settings/AgentSettings.tsx [editar - bloco fora-do-horário]
+src/services/api.ts                       [editar]
+src/types.ts                              [editar]
 ```
 
-- **Geral**: comportamento atual da aba "Geral" (todas as conversas ativas).
-- **Meus bate-papos** (novo): conversas com `assignedUserId` igual ao `team_members.id` do usuário logado E `is_active=true`. Mostrar badge com a contagem.
-- **Arquivados**: renomear "Finalizadas" para "Arquivados" em todos os pontos visíveis (chip do header, label da aba, badge no header, mensagem de confirmação de encerramento na linha ~1535: "movida para a aba 'Arquivados'").
+## Resultado
 
-Estado: trocar o tipo do `mainTab` para `'geral' | 'meus' | 'arquivados'`. Continuar mapeando para `chatTab: 'active' | 'finished'` (meus e geral → active; arquivados → finished).
-
-### 2. Resolver "meu team_member id"
-Pequeno hook local (ou `useMemo` dentro do componente) usando `useAuth().user.id` para buscar uma vez `team_members.id` via `supabase.from('team_members').select('id').eq('user_id', user.id).maybeSingle()`. Guardar no estado para usar no filtro de "Meus".
-
-### 3. Filtros acima da lista (dois dropdowns)
-Logo abaixo das abas e acima do campo de busca, adicionar uma linha com 2 `Select` (shadcn) compactos:
-
-- **Responsável**: opção "Todos" + lista de `team_members` ativos (nome). Filtra por `chat.assignedUserId`.
-- **Departamento**: opção "Todos" + lista de `teams` ativos. Filtra por `chat.assignedTeam` (que é o slug/id do time já presente em `UIConversation`).
-
-Carregar listas com um `useEffect` no mount (`supabase.from('team_members').select('id,name').eq('status','active')` e `supabase.from('teams').select('id,name').eq('is_active',true)`).
-
-Filtros aplicam em todas as abas (Geral / Meus / Arquivados), conforme escolha do usuário. Estado persistido em `localStorage` (`chat.filters.responsible`, `chat.filters.team`) para não resetar a cada navegação.
-
-Quando algum filtro estiver ativo, mostrar um pequeno botão "Limpar" ao lado dos selects.
-
-### 4. Atualizar `filteredConversations` (linha ~809)
-Adicionar antes do filtro de busca:
-- Se aba = "meus" → filtrar `chat.assignedUserId === myMemberId`.
-- Se filtro responsável ≠ "todos" → filtrar por `assignedUserId`.
-- Se filtro departamento ≠ "todos" → filtrar por `assignedTeam`.
-
-### 5. Contagem nas abas
-Atualizar `useConversationTabCounts` (`src/hooks/useConversationTabCounts.ts`) para incluir também `mine` (conversas ativas com `assigned_user_id` = team_member do usuário atual). Aceitar `myMemberId` opcional como parâmetro e, quando presente, contar a aba "Meus". Exibir o badge na aba.
-
-## Fora de escopo
-- Nenhuma mudança de backend, RLS, schema ou edge functions.
-- Lógica de auto-atribuição (já implementada) permanece como está.
-- Permissões por papel continuam iguais — todos veem as 3 abas e os 2 filtros.
-
-## Resultado esperado
-- Atendente abre o chat, clica em "Meus bate-papos" e vê só o que está sob sua responsabilidade.
-- Coordenador filtra por "Departamento: Produção" para acompanhar a fila de suporte/produção.
-- "Finalizadas" some do vocabulário visível; tudo encerrado passa a se chamar "Arquivados".
+- Produção: aberta Seg–Sáb 08–20, Dom 08–17, fechada em feriados manuais (ou horário reduzido se configurado)
+- Comercial: aberta Seg–Sex 08–18
+- Fora do horário: cliente recebe uma única mensagem de aviso (com próximo horário) e a Donatella continua respondendo
+- Configurável depois pela UI sem precisar de código
