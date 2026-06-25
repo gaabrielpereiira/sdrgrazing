@@ -1387,11 +1387,9 @@ async function processQueueItem(
     processedPrompt = `${processedPrompt}\n\n${businessHoursBlock}`;
   }
 
-  // Out-of-hours auto-reply: enqueue a single notice (per cooldown window)
-  // before the AI reply, without stopping the AI from answering.
-  if (!bhStatus.isOpen) {
-    await maybeSendOutOfHoursAutoReply(supabase, conversation, settings, bhStatus, message.id);
-  }
+  // Out-of-hours handling: the AI itself decides how to communicate based on
+  // the business-hours block injected into the system prompt. No fixed
+  // auto-reply is sent separately.
 
   console.log('[Nina] Calling Lovable AI...');
 
