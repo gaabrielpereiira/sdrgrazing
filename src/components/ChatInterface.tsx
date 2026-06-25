@@ -111,19 +111,43 @@ const ChatInterface: React.FC = () => {
 
   // Current user's team_member id (for "Meus bate-papos" filter)
   const [myMemberId, setMyMemberId] = useState<string | null>(null);
+  const [myTeamId, setMyTeamId] = useState<string | null>(null);
+  const [myTeamName, setMyTeamName] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   useEffect(() => {
-    if (!user?.id) { setMyMemberId(null); return; }
+    if (!user?.id) { setMyMemberId(null); setMyTeamId(null); setMyTeamName(null); setIsAdmin(false); return; }
     let cancelled = false;
-    supabase
-      .from('team_members')
-      .select('id')
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data }) => { if (!cancelled) setMyMemberId(data?.id ?? null); });
+    (async () => {
+      const { data: tm } = await supabase
+        .from('team_members')
+        .select('id, team_id, teams:team_id(id, name)')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      setMyMemberId((tm as any)?.id ?? null);
+      setMyTeamId((tm as any)?.team_id ?? null);
+      setMyTeamName(((tm as any)?.teams?.name) ?? null);
+      const { data: roleRow } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      if (!cancelled) setIsAdmin(!!roleRow);
+    })();
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  const tabCounts = useConversationTabCounts(myMemberId);
+  // Visibility rule:
+  //  - Admin OR member of "Comercial" team => see everything (no restriction).
+  //  - Other teams (e.g. Produção) => see only conversations assigned to their team.
+  //  - No team => see everything (safe fallback).
+  const restrictedToTeamId: string | null =
+    !isAdmin && myTeamId && (myTeamName || '').toLowerCase() !== 'comercial'
+      ? myTeamId
+      : null;
+
+  const tabCounts = useConversationTabCounts(myMemberId, restrictedToTeamId);
 
   // Department list (teams) for filter
   const [teamsList, setTeamsList] = useState<Array<{ id: string; name: string }>>([]);
