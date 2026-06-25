@@ -921,6 +921,110 @@ function getInteractiveButtonId(message: any): string | null {
   return null;
 }
 
+// ============================================================
+// Support intake classification (motivo + sentimento + resumo)
+// Called once after we collected order_number and issue_text.
+// ============================================================
+const SUPPORT_REASON_KEYS = ['cobranca', 'acesso', 'bug', 'duvida', 'pedido', 'outro'] as const;
+const SUPPORT_REASON_LABELS: Record<string, string> = {
+  cobranca: 'Cobrança',
+  acesso: 'Acesso',
+  bug: 'Bug',
+  duvida: 'Dúvida',
+  pedido: 'Pedido',
+  outro: 'Outro',
+};
+const SUPPORT_SENTIMENT_KEYS = ['calmo', 'neutro', 'frustrado', 'urgente'] as const;
+const SUPPORT_SENTIMENT_LABELS: Record<string, string> = {
+  calmo: 'Calmo',
+  neutro: 'Neutro',
+  frustrado: 'Frustrado',
+  urgente: 'Urgente',
+};
+
+type SupportClassification = {
+  reason_key: string;
+  reason_label: string;
+  sentiment_key: string;
+  sentiment_label: string;
+  summary: string;
+  customer_message: string;
+};
+
+async function classifySupportIntake(intake: {
+  order_number?: string | null;
+  issue_text?: string | null;
+}): Promise<SupportClassification> {
+  const fallback: SupportClassification = {
+    reason_key: 'outro',
+    reason_label: 'Outro',
+    sentiment_key: 'neutro',
+    sentiment_label: 'Neutro',
+    summary: intake.issue_text?.slice(0, 240) || 'Cliente solicitou suporte sem detalhes.',
+    customer_message:
+      'Recebi tudo! Já estou acionando o time da Produção pra cuidar de você. ✨ Em instantes alguém continua por aqui.',
+  };
+
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableApiKey) {
+    console.warn('[SupportIntake] LOVABLE_API_KEY missing; using fallback classification');
+    return fallback;
+  }
+
+  const sys =
+    'Você é uma assistente que classifica tickets de suporte pós-venda da Grazing Table & Co. ' +
+    'Responda APENAS um JSON válido (sem markdown) com as chaves: reason, sentiment, summary, customer_message. ' +
+    `reason ∈ [${SUPPORT_REASON_KEYS.join(', ')}]. ` +
+    `sentiment ∈ [${SUPPORT_SENTIMENT_KEYS.join(', ')}]. ` +
+    'summary: 1-2 frases curtas em PT-BR para o atendente humano. ' +
+    'customer_message: 1 mensagem curta e acolhedora em PT-BR (estilo Donatella, voz feminina, emojis sutis) confirmando que o time da Produção foi acionado.';
+
+  const user = JSON.stringify({
+    pedido: intake.order_number || null,
+    relato_do_cliente: intake.issue_text || '',
+  });
+
+  try {
+    const res = await fetch(LOVABLE_AI_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: user },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+    });
+    if (!res.ok) {
+      console.warn('[SupportIntake] classification HTTP error', res.status, await res.text());
+      return fallback;
+    }
+    const json = await res.json();
+    const raw = json?.choices?.[0]?.message?.content || '';
+    const parsed = JSON.parse(raw);
+    const reasonKey = SUPPORT_REASON_KEYS.includes(parsed.reason) ? parsed.reason : 'outro';
+    const sentimentKey = SUPPORT_SENTIMENT_KEYS.includes(parsed.sentiment) ? parsed.sentiment : 'neutro';
+    return {
+      reason_key: reasonKey,
+      reason_label: SUPPORT_REASON_LABELS[reasonKey],
+      sentiment_key: sentimentKey,
+      sentiment_label: SUPPORT_SENTIMENT_LABELS[sentimentKey],
+      summary: String(parsed.summary || fallback.summary).slice(0, 400),
+      customer_message: String(parsed.customer_message || fallback.customer_message).slice(0, 400),
+    };
+  } catch (e) {
+    console.error('[SupportIntake] classification failed:', e);
+    return fallback;
+  }
+}
+
+
+
 /**
  * Handles the opening flow. Returns:
  *  - 'handled'  -> we replied with fixed messages, skip the AI pipeline.
