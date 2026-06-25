@@ -26,14 +26,17 @@ const ZERO: ConversationTabCounts = {
  * (optionally) the active conversations assigned to the current team_member.
  * Refreshes every 30s and on conversations realtime changes.
  */
-export function useConversationTabCounts(myMemberId?: string | null): ConversationTabCounts {
+export function useConversationTabCounts(
+  myMemberId?: string | null,
+  restrictTeamId?: string | null,
+): ConversationTabCounts {
   const [counts, setCounts] = useState<ConversationTabCounts>(ZERO);
 
   const refresh = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('conversations')
-        .select('id, queue, is_active, assigned_user_id')
+        .select('id, queue, is_active, assigned_user_id, assigned_team')
         .limit(5000);
       if (error) {
         console.warn('[useConversationTabCounts] error:', error);
@@ -41,6 +44,7 @@ export function useConversationTabCounts(myMemberId?: string | null): Conversati
       }
       const next = { ...ZERO };
       for (const row of (data || []) as any[]) {
+        if (restrictTeamId && row.assigned_team !== restrictTeamId) continue;
         const isSupport = row.queue === 'support';
         const isActive = row.is_active !== false;
         if (isActive) {
@@ -58,7 +62,7 @@ export function useConversationTabCounts(myMemberId?: string | null): Conversati
     } catch (e) {
       console.warn('[useConversationTabCounts] refresh failed:', e);
     }
-  }, [myMemberId]);
+  }, [myMemberId, restrictTeamId]);
 
   useEffect(() => {
     refresh();
