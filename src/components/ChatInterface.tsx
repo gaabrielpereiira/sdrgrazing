@@ -129,27 +129,6 @@ const ChatInterface: React.FC = () => {
       });
     return () => { cancelled = true; };
   }, [user?.id]);
-    let cancelled = false;
-    (async () => {
-      const { data: tm } = await supabase
-        .from('team_members')
-        .select('id, team_id, teams:team_id(id, name)')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (cancelled) return;
-      setMyMemberId((tm as any)?.id ?? null);
-      setMyTeamId((tm as any)?.team_id ?? null);
-      setMyTeamName(((tm as any)?.teams?.name) ?? null);
-      const { data: roleRow } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'admin')
-        .maybeSingle();
-      if (!cancelled) setIsAdmin(!!roleRow);
-    })();
-    return () => { cancelled = true; };
-  }, [user?.id]);
 
   // Visibility rule:
   //  - Admin OR member of "Comercial" team => see everything (no restriction).
