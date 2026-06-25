@@ -1996,10 +1996,10 @@ export const api = {
       senderUserId = null;
     }
 
-    // 1) Get conversation -> contact_id
+    // 1) Get conversation -> contact_id + current owner (sticky auto-assign)
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('contact_id')
+      .select('contact_id, assigned_user_id')
       .eq('id', conversationId)
       .single();
 
@@ -2007,6 +2007,13 @@ export const api = {
       console.error('[API] Error getting conversation:', convError);
       throw new Error('Conversation not found');
     }
+
+    await api._autoAssignIfUnassigned(
+      conversationId,
+      conversation.contact_id,
+      conversation.assigned_user_id,
+      senderUserId,
+    );
 
     // 2) Upload file to storage bucket
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
