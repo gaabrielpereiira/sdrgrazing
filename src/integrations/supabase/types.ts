@@ -380,7 +380,7 @@ export type Database = {
       }
       conversations: {
         Row: {
-          assigned_team: Database["public"]["Enums"]["team_assignment"] | null
+          assigned_team: string | null
           assigned_user_id: string | null
           contact_id: string
           created_at: string
@@ -397,7 +397,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
-          assigned_team?: Database["public"]["Enums"]["team_assignment"] | null
+          assigned_team?: string | null
           assigned_user_id?: string | null
           contact_id: string
           created_at?: string
@@ -414,7 +414,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
-          assigned_team?: Database["public"]["Enums"]["team_assignment"] | null
+          assigned_team?: string | null
           assigned_user_id?: string | null
           contact_id?: string
           created_at?: string
