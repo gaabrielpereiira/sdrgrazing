@@ -1905,13 +1905,20 @@ export const api = {
 
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('contact_id')
+      .select('contact_id, assigned_user_id')
       .eq('id', conversationId)
       .single();
 
     if (convError || !conversation) {
       throw new Error('Conversation not found');
     }
+
+    await api._autoAssignIfUnassigned(
+      conversationId,
+      conversation.contact_id,
+      conversation.assigned_user_id,
+      senderUserId,
+    );
 
     const templateMeta = {
       name: payload.template.name,
