@@ -30,6 +30,8 @@ import { useQueueUnreadCounts } from '@/hooks/useQueueUnreadCounts';
 import { Checkbox } from './ui/checkbox';
 import { CLOSING_MESSAGE_TEXT } from '@/constants';
 import { useConversationTabCounts } from '@/hooks/useConversationTabCounts';
+import { supabase } from '@/integrations/supabase/client';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 // Editable row used inside the chat sidebar "Dados de Contato"
 interface EditableRowProps {
