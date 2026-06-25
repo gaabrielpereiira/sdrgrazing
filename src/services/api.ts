@@ -1799,10 +1799,10 @@ export const api = {
       senderUserId = null;
     }
 
-    // Get conversation to find contact_id
+    // Get conversation to find contact_id + current owner (for sticky auto-assign)
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('contact_id')
+      .select('contact_id, assigned_user_id')
       .eq('id', conversationId)
       .single();
 
@@ -1810,6 +1810,14 @@ export const api = {
       console.error('[API] Error getting conversation:', convError);
       throw new Error('Conversation not found');
     }
+
+    // Sticky auto-assign before persisting the message
+    await api._autoAssignIfUnassigned(
+      conversationId,
+      conversation.contact_id,
+      conversation.assigned_user_id,
+      senderUserId,
+    );
 
     // First create the message record with status 'processing'
     const { data: msgData, error: msgError } = await supabase
