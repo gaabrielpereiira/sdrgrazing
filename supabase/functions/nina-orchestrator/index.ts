@@ -1,5 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  getTeamBusinessHoursStatus,
+  resolveTeamForConversation,
+  type BusinessHoursStatus,
+} from "../_shared/business-hours.ts";
+
+// Synthetic rule id used in contact_cooldowns to throttle the out-of-hours
+// auto-reply (so we don't spam the client every message).
+const OUT_OF_HOURS_RULE_ID = '00000000-0000-0000-0000-0000000ff001';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
