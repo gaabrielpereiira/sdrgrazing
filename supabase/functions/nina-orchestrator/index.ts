@@ -2161,77 +2161,81 @@ Nina: "Oi! Bem-vindo ao Viver de IA! Temos 22 soluções incríveis, formações
 
 // Returns a system-prompt block describing current time, business hours and
 // whether we're currently inside or outside the human-attendance window.
-// Returns "" when settings don't include business hours so caller can skip.
-function buildBusinessHoursBlock(settings: any): string {
-  if (!settings) return '';
-  const tz = settings.timezone || 'America/Sao_Paulo';
-  const start = settings.business_hours_start || null; // "HH:MM"
-  const end = settings.business_hours_end || null;     // "HH:MM"
-  const days: number[] = Array.isArray(settings.business_days)
-    ? settings.business_days
-    : [1, 2, 3, 4, 5]; // default seg-sex
-
-  if (!start || !end) return '';
-
+function formatBusinessHoursBlock(s: BusinessHoursStatus): string {
   const dayNames = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
-  const shortDays = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
-
-  // Compute current weekday + HH:MM in target timezone via Intl parts (avoids
-  // ambiguous Date string parsing across runtimes).
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(new Date());
-
-  const wkMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  const wkPart = parts.find(p => p.type === 'weekday')?.value || 'Mon';
-  const hourPart = parts.find(p => p.type === 'hour')?.value || '00';
-  const minPart = parts.find(p => p.type === 'minute')?.value || '00';
-  const weekday = wkMap[wkPart] ?? 1;
-  const nowHHMM = `${hourPart === '24' ? '00' : hourPart}:${minPart}`;
-
-  const isOpenDay = days.includes(weekday);
-  const within = isOpenDay && nowHHMM >= start && nowHHMM < end;
-
-  // Friendly day list, sorted
-  const sortedDays = [...days].sort((a, b) => a - b).map(d => shortDays[d]).join(', ');
-
-  // Find next opening (simple lookahead up to 7 days)
-  let nextOpenLabel = '';
-  if (!within) {
-    for (let i = 0; i < 8; i++) {
-      const d = (weekday + i) % 7;
-      if (days.includes(d)) {
-        if (i === 0 && nowHHMM < start) {
-          nextOpenLabel = `hoje às ${start}`;
-        } else if (i === 1) {
-          nextOpenLabel = `amanhã (${dayNames[d]}) às ${start}`;
-        } else if (i > 1) {
-          nextOpenLabel = `${dayNames[d]} às ${start}`;
-        } else {
-          continue;
-        }
-        break;
-      }
-    }
-  }
-
+  const windowLabel = s.todayStart && s.todayEnd
+    ? `${s.todayStart}–${s.todayEnd}`
+    : 'fechado hoje';
+  const teamLabel = s.teamName ? ` (equipe ${s.teamName})` : '';
   return [
-    'CONTEXTO OPERACIONAL DE ATENDIMENTO HUMANO:',
-    `- Agora: ${dayNames[weekday]} ${nowHHMM} (${tz})`,
-    `- Horário do atendimento humano: ${sortedDays}, ${start}–${end}`,
-    `- Status atual: ${within ? 'DENTRO do horário comercial' : 'FORA do horário comercial'}`,
+    `CONTEXTO OPERACIONAL DE ATENDIMENTO HUMANO${teamLabel}:`,
+    `- Agora: ${dayNames[s.weekday]} ${s.nowHHMM} (${s.timezone})`,
+    `- Horário de hoje: ${windowLabel}`,
+    `- Status atual: ${s.isOpen ? 'DENTRO do horário comercial' : 'FORA do horário comercial'}`,
     '',
     'REGRA DE TRANSFERÊNCIA PARA HUMANO:',
-    within
+    s.isOpen
       ? '- Se for um caso que exige humano, chame request_human_handoff normalmente. A customer_message_for_client pode dizer que um atendente assumirá em instantes.'
-      : `- Se for um caso que exige humano, AINDA ASSIM chame request_human_handoff (a equipe será notificada internamente), MAS a customer_message_for_client DEVE deixar claro que estamos fora do horário de atendimento e que um atendente humano retornará ${nextOpenLabel || 'no próximo horário comercial'}. NÃO prometa retorno imediato.`,
+      : `- Se for um caso que exige humano, AINDA ASSIM chame request_human_handoff (a equipe será notificada internamente), MAS a customer_message_for_client DEVE deixar claro que estamos fora do horário de atendimento e que um atendente humano retornará ${s.nextOpenLabel || 'no próximo horário comercial'}. NÃO prometa retorno imediato.`,
     '- Para dúvidas que você consegue resolver sozinha (informações gerais, agendamento, status simples), responda normalmente sem transferir, independente do horário.',
   ].join('\n');
 }
+
+// Enqueue a single out-of-hours notice for this conversation, respecting
+// the cooldown configured in nina_settings.out_of_hours_cooldown_minutes.
+// Cooldown is tracked in conversations.nina_context.out_of_hours_last_sent_at
+// to avoid an FK dependency on automation_rules.
+async function maybeSendOutOfHoursAutoReply(
+  supabase: any,
+  conversation: any,
+  settings: any,
+  status: BusinessHoursStatus,
+  messageId: string,
+) {
+  try {
+    const template: string = settings?.out_of_hours_auto_reply
+      || 'Olá! Recebemos sua mensagem fora do nosso horário de atendimento. Retornaremos {{horario}}.';
+    const cooldownMin: number = Number(settings?.out_of_hours_cooldown_minutes ?? 360);
+
+    const ctx = (conversation.nina_context as any) || {};
+    const lastSent = ctx.out_of_hours_last_sent_at
+      ? new Date(ctx.out_of_hours_last_sent_at).getTime()
+      : 0;
+    const now = Date.now();
+    if (lastSent && now - lastSent < cooldownMin * 60 * 1000) {
+      return; // within cooldown
+    }
+
+    const content = template
+      .replace(/\{\{\s*horario\s*\}\}/g, status.nextOpenLabel || 'no próximo horário comercial')
+      .replace(/\{\{\s*equipe\s*\}\}/g, status.teamName || 'nosso time');
+
+    await supabase.from('send_queue').insert({
+      conversation_id: conversation.id,
+      contact_id: conversation.contact_id,
+      content,
+      from_type: 'nina',
+      message_type: 'text',
+      priority: 3,
+      scheduled_at: new Date(Date.now() + 400).toISOString(),
+      metadata: {
+        response_to_message_id: messageId || null,
+        out_of_hours: true,
+        team: status.teamName,
+      },
+    });
+
+    const newCtx = { ...ctx, out_of_hours_last_sent_at: new Date().toISOString() };
+    await supabase
+      .from('conversations')
+      .update({ nina_context: newCtx })
+      .eq('id', conversation.id);
+    conversation.nina_context = newCtx;
+  } catch (err) {
+    console.error('[Nina] out-of-hours auto-reply failed:', err);
+  }
+}
+
 
 function processPromptTemplate(prompt: string, contact: any): string {
   const now = new Date();
