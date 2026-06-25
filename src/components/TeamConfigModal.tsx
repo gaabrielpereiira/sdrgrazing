@@ -4,6 +4,7 @@ import { Button } from './Button';
 import { api } from '../services/api';
 import { Team, TeamFunction } from '../types';
 import { supabase } from '@/integrations/supabase/client';
+import TeamHoursTab from './team/TeamHoursTab';
 
 interface TeamConfigModalProps {
   isOpen: boolean;
@@ -11,7 +12,7 @@ interface TeamConfigModalProps {
   onUpdate: () => void;
 }
 
-type TabType = 'teams' | 'functions';
+type TabType = 'teams' | 'functions' | 'hours';
 
 const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUpdate }) => {
   const [activeTab, setActiveTab] = useState<TabType>('teams');
