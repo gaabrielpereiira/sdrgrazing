@@ -850,6 +850,20 @@ const ChatInterface: React.FC = () => {
 
   const filteredConversations = conversations
     .filter(chat => {
+      // Aba "Meus bate-papos": só os atribuídos a mim
+      if (mainTab === 'meus') {
+        if (!myMemberId || chat.assignedUserId !== myMemberId) return false;
+      }
+      // Filtro: Responsável
+      if (filterResponsible === 'unassigned') {
+        if (chat.assignedUserId) return false;
+      } else if (filterResponsible !== 'all') {
+        if (chat.assignedUserId !== filterResponsible) return false;
+      }
+      // Filtro: Departamento (assigned_team é o id do time)
+      if (filterTeam !== 'all') {
+        if (chat.assignedTeam !== filterTeam) return false;
+      }
       if (!searchQuery) return true;
       const query = searchQuery.toLowerCase();
       return (
@@ -1626,7 +1640,7 @@ const ChatInterface: React.FC = () => {
                       <AlertDialogHeader>
                         <AlertDialogTitle className="text-white">Finalizar esta conversa?</AlertDialogTitle>
                         <AlertDialogDescription className="text-slate-400">
-                          A conversa será movida para a aba "Finalizadas". Você ainda poderá consultar todo o histórico e reabrir quando quiser.
+                          A conversa será movida para a aba "Arquivados". Você ainda poderá consultar todo o histórico e reabrir quando quiser.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3 space-y-2">
