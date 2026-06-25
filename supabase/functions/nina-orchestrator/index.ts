@@ -767,10 +767,14 @@ const ONBOARDING_TEXTS = {
     'Pra te cadastrar certinho, me manda só seu nome e sobrenome, por favor 💛',
   triage: (firstName: string) =>
     `Prazer, ${firstName}! 💛 Me conta: como posso te ajudar hoje?`,
-  SUPPORT_TOPIC: 'Sobre qual assunto posso te ajudar?',
-  SUPPORT_HANDOFF:
-    'Já estou chamando nosso time de suporte para cuidar de você. 💛 Para agilizar, me envia o seu *número do pedido*?',
+  SUPPORT_ASK_ORDER:
+    'Sem problema, vou te direcionar para o nosso time da Produção. 💛 Pra agilizar, me envia o *número do pedido*? (se não tiver em mãos, é só responder "não tenho")',
+  SUPPORT_ASK_ISSUE:
+    'Perfeito! Agora me conta em poucas palavras *o que aconteceu*, pra eu já passar tudo certinho pro time.',
+  SUPPORT_HANDOFF_FALLBACK:
+    'Recebi! Já estou acionando o time da Produção pra cuidar de você. ✨',
 };
+
 
 function looksLikeName(raw: string): boolean {
   if (!raw) return false;
@@ -917,6 +921,110 @@ function getInteractiveButtonId(message: any): string | null {
   return null;
 }
 
+// ============================================================
+// Support intake classification (motivo + sentimento + resumo)
+// Called once after we collected order_number and issue_text.
+// ============================================================
+const SUPPORT_REASON_KEYS = ['cobranca', 'acesso', 'bug', 'duvida', 'pedido', 'outro'] as const;
+const SUPPORT_REASON_LABELS: Record<string, string> = {
+  cobranca: 'Cobrança',
+  acesso: 'Acesso',
+  bug: 'Bug',
+  duvida: 'Dúvida',
+  pedido: 'Pedido',
+  outro: 'Outro',
+};
+const SUPPORT_SENTIMENT_KEYS = ['calmo', 'neutro', 'frustrado', 'urgente'] as const;
+const SUPPORT_SENTIMENT_LABELS: Record<string, string> = {
+  calmo: 'Calmo',
+  neutro: 'Neutro',
+  frustrado: 'Frustrado',
+  urgente: 'Urgente',
+};
+
+type SupportClassification = {
+  reason_key: string;
+  reason_label: string;
+  sentiment_key: string;
+  sentiment_label: string;
+  summary: string;
+  customer_message: string;
+};
+
+async function classifySupportIntake(intake: {
+  order_number?: string | null;
+  issue_text?: string | null;
+}): Promise<SupportClassification> {
+  const fallback: SupportClassification = {
+    reason_key: 'outro',
+    reason_label: 'Outro',
+    sentiment_key: 'neutro',
+    sentiment_label: 'Neutro',
+    summary: intake.issue_text?.slice(0, 240) || 'Cliente solicitou suporte sem detalhes.',
+    customer_message:
+      'Recebi tudo! Já estou acionando o time da Produção pra cuidar de você. ✨ Em instantes alguém continua por aqui.',
+  };
+
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableApiKey) {
+    console.warn('[SupportIntake] LOVABLE_API_KEY missing; using fallback classification');
+    return fallback;
+  }
+
+  const sys =
+    'Você é uma assistente que classifica tickets de suporte pós-venda da Grazing Table & Co. ' +
+    'Responda APENAS um JSON válido (sem markdown) com as chaves: reason, sentiment, summary, customer_message. ' +
+    `reason ∈ [${SUPPORT_REASON_KEYS.join(', ')}]. ` +
+    `sentiment ∈ [${SUPPORT_SENTIMENT_KEYS.join(', ')}]. ` +
+    'summary: 1-2 frases curtas em PT-BR para o atendente humano. ' +
+    'customer_message: 1 mensagem curta e acolhedora em PT-BR (estilo Donatella, voz feminina, emojis sutis) confirmando que o time da Produção foi acionado.';
+
+  const user = JSON.stringify({
+    pedido: intake.order_number || null,
+    relato_do_cliente: intake.issue_text || '',
+  });
+
+  try {
+    const res = await fetch(LOVABLE_AI_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: user },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+    });
+    if (!res.ok) {
+      console.warn('[SupportIntake] classification HTTP error', res.status, await res.text());
+      return fallback;
+    }
+    const json = await res.json();
+    const raw = json?.choices?.[0]?.message?.content || '';
+    const parsed = JSON.parse(raw);
+    const reasonKey = SUPPORT_REASON_KEYS.includes(parsed.reason) ? parsed.reason : 'outro';
+    const sentimentKey = SUPPORT_SENTIMENT_KEYS.includes(parsed.sentiment) ? parsed.sentiment : 'neutro';
+    return {
+      reason_key: reasonKey,
+      reason_label: SUPPORT_REASON_LABELS[reasonKey],
+      sentiment_key: sentimentKey,
+      sentiment_label: SUPPORT_SENTIMENT_LABELS[sentimentKey],
+      summary: String(parsed.summary || fallback.summary).slice(0, 400),
+      customer_message: String(parsed.customer_message || fallback.customer_message).slice(0, 400),
+    };
+  } catch (e) {
+    console.error('[SupportIntake] classification failed:', e);
+    return fallback;
+  }
+}
+
+
+
 /**
  * Handles the opening flow. Returns:
  *  - 'handled'  -> we replied with fixed messages, skip the AI pipeline.
@@ -1026,18 +1134,11 @@ async function handleOnboarding(
     }
 
     if (choseSuporte) {
-      await sendInteractiveButtons(
-        supabase,
-        conversation,
-        settings,
-        ONBOARDING_TEXTS.SUPPORT_TOPIC,
-        [
-          { id: 'support_entrega', title: 'Entrega' },
-          { id: 'support_produto', title: 'Produto' },
-          { id: 'support_outro', title: 'Outro' },
-        ],
-      );
-      await setOnboardingStep(supabase, conversation, { step: 'await_support_topic' });
+      await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.SUPPORT_ASK_ORDER, message.id);
+      await setOnboardingStep(supabase, conversation, {
+        step: 'await_support_order',
+        support_intake: {},
+      });
       return 'handled';
     }
 
@@ -1062,48 +1163,147 @@ async function handleOnboarding(
     return 'handled';
   }
 
-  // STEP: await_support_topic -> any choice triggers the handoff to Suporte/Produção
-  if (step === 'await_support_topic') {
-    await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.SUPPORT_HANDOFF, message.id);
+  // STEP: await_support_order -> capture order number (or "não tenho"), then ask issue
+  if (step === 'await_support_order') {
+    const cleaned = userText.replace(/[^\w\s#-]/g, '').trim();
+    const intake = { ...(onboarding?.support_intake || {}), order_number: cleaned || null };
+    await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.SUPPORT_ASK_ISSUE, message.id);
+    await setOnboardingStep(supabase, conversation, {
+      step: 'await_support_issue',
+      support_intake: intake,
+    });
+    return 'handled';
+  }
 
-    // Route conversation to Suporte (Produção)
+  // STEP: await_support_issue -> classify, transfer to Produção, send friendly confirmation
+  if (step === 'await_support_issue') {
+    const intake = { ...(onboarding?.support_intake || {}), issue_text: userText };
+
+    // Classify motivo + sentimento via Lovable AI Gateway
+    const classification = await classifySupportIntake(intake);
+
+    // Resolve Produção team UUID
+    let producaoTeamId: string | null = null;
     try {
-      await supabase
-        .from('conversations')
-        .update({
-          status: 'human',
-          queue: 'support',
-          assigned_team: 'suporte',
-        })
-        .eq('id', conversation.id);
-    } catch (routeErr) {
-      console.error('[Onboarding] Failed to route to support:', routeErr);
+      const { data: prodTeam } = await supabase
+        .from('teams')
+        .select('id, name')
+        .ilike('name', 'produ%')
+        .maybeSingle();
+      producaoTeamId = prodTeam?.id || null;
+    } catch (e) {
+      console.error('[Onboarding] Failed to resolve Produção team:', e);
     }
 
-    // Notification for the team (also drives the in-app handoff chime)
+    const reasonLabel = classification.reason_label;
+    const sentimentLabel = classification.sentiment_label;
+    const summary = classification.summary;
+
+    const clientLabel =
+      (contact?.name as string) ||
+      (contact?.call_name as string) ||
+      (contact?.phone_number as string) ||
+      'Cliente';
+
+    // Compose tags (preserve existing)
+    const existingTags = Array.isArray(conversation.tags) ? conversation.tags : [];
+    const newTags = Array.from(
+      new Set([
+        ...existingTags,
+        `motivo:${classification.reason_key}`,
+        `sentimento:${classification.sentiment_key}`,
+      ]),
+    );
+
+    // Update conversation: hand off to Produção
     try {
-      const clientLabel =
-        (contact?.name as string) ||
-        (contact?.call_name as string) ||
-        (contact?.phone_number as string) ||
-        'Cliente';
+      const update: Record<string, any> = {
+        status: 'human',
+        queue: 'support',
+        is_active: false,
+        tags: newTags,
+      };
+      if (producaoTeamId) update.assigned_team = producaoTeamId;
+      await supabase.from('conversations').update(update).eq('id', conversation.id);
+    } catch (routeErr) {
+      console.error('[Onboarding] Failed to route to Produção:', routeErr);
+    }
+
+    // Internal system note (visible in chat)
+    try {
+      const noteLines = [
+        `🔔 Donatella transferiu para Produção`,
+        `Motivo: ${reasonLabel}`,
+        `Sentimento: ${sentimentLabel}`,
+        intake.order_number ? `Pedido: ${intake.order_number}` : 'Pedido: (não informado)',
+        `Resumo: ${summary}`,
+      ];
+      await supabase.from('messages').insert({
+        conversation_id: conversation.id,
+        content: noteLines.join('\n'),
+        type: 'text',
+        from_type: 'system',
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        metadata: {
+          internal_note: true,
+          handoff: {
+            target_team: 'producao',
+            reason: classification.reason_key,
+            sentiment: classification.sentiment_key,
+            order_number: intake.order_number,
+            summary,
+          },
+        },
+      });
+    } catch (e) {
+      console.error('[Onboarding] Failed to insert internal note:', e);
+    }
+
+    // Notification for the team
+    try {
       await supabase.from('notifications').insert({
-        type: 'handoff_requested',
-        title: `Suporte solicitado: ${clientLabel}`,
-        message: 'Cliente escolheu Suporte pós-venda no menu de abertura.',
-        priority: 'high',
+        type: classification.sentiment_key === 'urgente' ? 'handoff_urgent' : 'handoff_requested',
+        title: `Suporte → Produção: ${clientLabel}`,
+        body: [
+          `Motivo: ${reasonLabel}`,
+          `Sentimento: ${sentimentLabel}`,
+          intake.order_number ? `Pedido: ${intake.order_number}` : 'Pedido: (não informado)',
+          `Resumo: ${summary}`,
+        ].join('\n'),
+        priority: classification.sentiment_key === 'urgente' ? 'high' : 'normal',
         conversation_id: conversation.id,
         contact_id: conversation.contact_id,
+        metadata: {
+          target_team_id: producaoTeamId,
+          target_team_name: 'Produção',
+          reason: classification.reason_key,
+          sentiment: classification.sentiment_key,
+          order_number: intake.order_number,
+          triggered_by: 'donatella_support_intake',
+        },
       });
     } catch (notifErr) {
       console.error('[Onboarding] Failed to insert handoff notification:', notifErr);
     }
 
-    await setOnboardingStep(supabase, conversation, { step: 'done' });
+    // Friendly confirmation to the customer
+    await sendFixedText(
+      supabase,
+      conversation,
+      classification.customer_message || ONBOARDING_TEXTS.SUPPORT_HANDOFF_FALLBACK,
+      message.id,
+    );
+
+    await setOnboardingStep(supabase, conversation, {
+      step: 'done',
+      support_intake: intake,
+    });
     return 'handled';
   }
 
   return 'continue';
+
 }
 
 async function processQueueItem(

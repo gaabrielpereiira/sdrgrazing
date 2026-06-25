@@ -1,0 +1,1 @@
+ALTER TABLE public.conversations ALTER COLUMN assigned_team TYPE text USING assigned_team::text;
