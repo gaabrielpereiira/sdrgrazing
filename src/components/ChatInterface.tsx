@@ -2449,6 +2449,49 @@ const ChatInterface: React.FC = () => {
 
                 <div className="h-px bg-slate-800/50 w-full"></div>
 
+                {/* Department / Team transfer */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Departamento
+                  </h4>
+                  <select
+                    value={activeChat.assignedTeam || ''}
+                    disabled={!!restrictedToTeamId}
+                    onChange={async (e) => {
+                      const teamId = e.target.value || null;
+                      const teamName = teamId ? (teamsList.find(t => t.id === teamId)?.name ?? null) : null;
+                      try {
+                        await api.updateConversationTeam(
+                          activeChat.id,
+                          teamId,
+                          teamName,
+                          user?.email ?? null,
+                        );
+                        toast.success(teamId ? `Transferido para ${teamName}.` : 'Departamento removido.');
+                        reloadConversationMessages(activeChat.id);
+                      } catch (err) {
+                        console.error(err);
+                        toast.error('Falha ao transferir departamento.');
+                      }
+                    }}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 focus:ring-1 focus:ring-brand-gold-500/50 focus:border-brand-gold-500/50 outline-none transition-all disabled:opacity-70"
+                    title={restrictedToTeamId ? 'Apenas Comercial/Admin pode transferir entre departamentos.' : undefined}
+                  >
+                    <option value="">Sem departamento</option>
+                    {teamsList.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  {restrictedToTeamId && (
+                    <p className="text-[10px] text-slate-500">
+                      Você só visualiza conversas do departamento {myTeamName}. Peça ao Comercial para transferir.
+                    </p>
+                  )}
+                </div>
+
+                <div className="h-px bg-slate-800/50 w-full"></div>
+
                 {/* Activities & Reminders */}
                 <ActivitiesPanel
                   conversationId={activeChat.id}
