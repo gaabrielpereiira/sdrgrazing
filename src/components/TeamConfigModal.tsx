@@ -191,6 +191,16 @@ const TeamConfigModal: React.FC<TeamConfigModalProps> = ({ isOpen, onClose, onUp
           >
             💼 Cargos
           </button>
+          <button
+            onClick={() => setActiveTab('hours')}
+            className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'hours'
+                ? 'text-white border-b-2 border-brand-gold-500 bg-slate-800/50'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            🕒 Horários
+          </button>
         </div>
 
         {/* Content */}
