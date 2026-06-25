@@ -109,13 +109,26 @@ const ChatInterface: React.FC = () => {
   const { sdrName, companyName } = useCompanySettings();
   const queueUnread = useQueueUnreadCounts();
 
-  // Current user's team_member id (for "Meus bate-papos" filter)
+  // Current user's team_member id (for "Meus bate-papos" filter) and team
   const [myMemberId, setMyMemberId] = useState<string | null>(null);
   const [myTeamId, setMyTeamId] = useState<string | null>(null);
   const [myTeamName, setMyTeamName] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   useEffect(() => {
-    if (!user?.id) { setMyMemberId(null); setMyTeamId(null); setMyTeamName(null); setIsAdmin(false); return; }
+    if (!user?.id) { setMyMemberId(null); setMyTeamId(null); setMyTeamName(null); return; }
+    let cancelled = false;
+    supabase
+      .from('team_members')
+      .select('id, team_id, teams:team_id(id, name)')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        setMyMemberId((data as any)?.id ?? null);
+        setMyTeamId((data as any)?.team_id ?? null);
+        setMyTeamName(((data as any)?.teams?.name) ?? null);
+      });
+    return () => { cancelled = true; };
+  }, [user?.id]);
     let cancelled = false;
     (async () => {
       const { data: tm } = await supabase
