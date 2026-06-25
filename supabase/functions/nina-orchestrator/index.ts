@@ -11,6 +11,25 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function formatBusinessHoursBlock(bh: {
+  isOpen: boolean;
+  nextOpenLabel: string;
+  teamName: string | null;
+  todayStart: string | null;
+  todayEnd: string | null;
+  nowHHMM: string;
+}): string {
+  const team = bh.teamName ? ` (${bh.teamName})` : '';
+  if (bh.isOpen) {
+    return `HORÁRIO DE ATENDIMENTO${team}: ABERTO agora. Funcionamento de hoje: ${bh.todayStart} às ${bh.todayEnd}. Horário atual: ${bh.nowHHMM}.\nResponda normalmente ao cliente.`;
+  }
+  const next = bh.nextOpenLabel ? `Voltamos a atender ${bh.nextOpenLabel}.` : 'Voltaremos no próximo horário comercial.';
+  return `HORÁRIO DE ATENDIMENTO${team}: FECHADO agora (horário atual: ${bh.nowHHMM}). ${next}\n` +
+    `IMPORTANTE: estamos fora do horário de atendimento humano. Avise o cliente de forma natural e acolhedora (sem soar robótica ou usar template) que estamos fechados agora e diga quando retornaremos. ` +
+    `Você ainda pode tirar dúvidas básicas sobre produtos, agendar, ou registrar o pedido — mas deixe claro que o time humano (vendas/suporte) só estará disponível no próximo horário informado. ` +
+    `Não envie a mesma mensagem de horário em todas as respostas; mencione apenas uma vez por conversa, a menos que o cliente pergunte de novo.`;
+}
+
 const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech";
 
