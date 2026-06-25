@@ -35,3 +35,31 @@ export const labelForReasonKey = (key: string): string => {
   // Fallback: capitalize slug
   return key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
 };
+
+// ============================================================
+// Sentiment tags (set by Donatella when handing off to Produção)
+// ============================================================
+
+export const SENTIMENT_PREFIX = 'sentimento:';
+
+export interface SupportSentiment {
+  key: string;
+  label: string;
+}
+
+export const SUPPORT_SENTIMENTS: SupportSentiment[] = [
+  { key: 'calmo', label: 'Calmo' },
+  { key: 'neutro', label: 'Neutro' },
+  { key: 'frustrado', label: 'Frustrado' },
+  { key: 'urgente', label: 'Urgente' },
+];
+
+export const sentimentTag = (key: string) => `${SENTIMENT_PREFIX}${key}`;
+export const isSentimentTag = (tag: string) => tag.startsWith(SENTIMENT_PREFIX);
+export const sentimentKeyFromTag = (tag: string) => tag.slice(SENTIMENT_PREFIX.length);
+export const labelForSentimentKey = (key: string): string => {
+  const found = SUPPORT_SENTIMENTS.find((s) => s.key === key);
+  if (found) return found.label;
+  return key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
+};
+
