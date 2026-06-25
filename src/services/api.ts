@@ -784,6 +784,102 @@ export const api = {
   },
 
   /**
+   * Business hours per team (one row per weekday).
+   * Returns rows ordered Sun→Sat (0..6).
+   */
+  fetchTeamBusinessHours: async (teamId: string) => {
+    const { data, error } = await (supabase as any)
+      .from('team_business_hours')
+      .select('*')
+      .eq('team_id', teamId)
+      .order('day_of_week', { ascending: true });
+    if (error) {
+      console.error('[API] Error fetching team business hours:', error);
+      throw error;
+    }
+    return data || [];
+  },
+
+  /**
+   * Upsert a single weekday row for a team. Idempotent via (team_id, day_of_week) unique.
+   */
+  upsertTeamBusinessHours: async (row: {
+    team_id: string;
+    day_of_week: number;
+    is_open: boolean;
+    start_time: string;
+    end_time: string;
+  }) => {
+    const { data, error } = await (supabase as any)
+      .from('team_business_hours')
+      .upsert(row, { onConflict: 'team_id,day_of_week' })
+      .select()
+      .single();
+    if (error) {
+      console.error('[API] Error upserting team business hours:', error);
+      throw error;
+    }
+    return data;
+  },
+
+  /** Bulk replace for a team (writes all 7 rows at once). */
+  saveTeamBusinessHoursWeek: async (teamId: string, rows: Array<{
+    day_of_week: number; is_open: boolean; start_time: string; end_time: string;
+  }>) => {
+    const payload = rows.map(r => ({ team_id: teamId, ...r }));
+    const { error } = await (supabase as any)
+      .from('team_business_hours')
+      .upsert(payload, { onConflict: 'team_id,day_of_week' });
+    if (error) {
+      console.error('[API] Error saving week:', error);
+      throw error;
+    }
+  },
+
+  /** List holidays (optionally for a specific team; null team = global). */
+  fetchTeamHolidays: async (teamId?: string | null) => {
+    let q = (supabase as any).from('team_holidays').select('*').order('date', { ascending: true });
+    if (teamId) q = q.or(`team_id.eq.${teamId},team_id.is.null`);
+    const { data, error } = await q;
+    if (error) {
+      console.error('[API] Error fetching holidays:', error);
+      throw error;
+    }
+    return data || [];
+  },
+
+  createTeamHoliday: async (h: {
+    team_id?: string | null; date: string; name: string;
+    is_open?: boolean; start_time?: string | null; end_time?: string | null;
+  }) => {
+    const { data, error } = await (supabase as any)
+      .from('team_holidays')
+      .insert({
+        team_id: h.team_id ?? null,
+        date: h.date,
+        name: h.name,
+        is_open: h.is_open ?? false,
+        start_time: h.start_time ?? null,
+        end_time: h.end_time ?? null,
+      })
+      .select()
+      .single();
+    if (error) {
+      console.error('[API] Error creating holiday:', error);
+      throw error;
+    }
+    return data;
+  },
+
+  deleteTeamHoliday: async (id: string) => {
+    const { error } = await (supabase as any).from('team_holidays').delete().eq('id', id);
+    if (error) {
+      console.error('[API] Error deleting holiday:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Create team
    */
   createTeam: async (team: { name: string; description?: string; color?: string }) => {
