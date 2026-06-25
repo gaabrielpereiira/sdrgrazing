@@ -8,6 +8,7 @@ export interface ConversationTabCounts {
   finishedSupport: number;
   activeTotal: number;
   finishedTotal: number;
+  mine: number;
 }
 
 const ZERO: ConversationTabCounts = {
@@ -17,20 +18,22 @@ const ZERO: ConversationTabCounts = {
   finishedSupport: 0,
   activeTotal: 0,
   finishedTotal: 0,
+  mine: 0,
 };
 
 /**
- * Counts conversations grouped by queue (sales/support) and is_active.
+ * Counts conversations grouped by queue (sales/support), is_active, and
+ * (optionally) the active conversations assigned to the current team_member.
  * Refreshes every 30s and on conversations realtime changes.
  */
-export function useConversationTabCounts(): ConversationTabCounts {
+export function useConversationTabCounts(myMemberId?: string | null): ConversationTabCounts {
   const [counts, setCounts] = useState<ConversationTabCounts>(ZERO);
 
   const refresh = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('conversations')
-        .select('id, queue, is_active')
+        .select('id, queue, is_active, assigned_user_id')
         .limit(5000);
       if (error) {
         console.warn('[useConversationTabCounts] error:', error);
@@ -44,6 +47,7 @@ export function useConversationTabCounts(): ConversationTabCounts {
           next.activeTotal++;
           if (isSupport) next.activeSupport++;
           else next.activeSales++;
+          if (myMemberId && row.assigned_user_id === myMemberId) next.mine++;
         } else {
           next.finishedTotal++;
           if (isSupport) next.finishedSupport++;
@@ -54,7 +58,7 @@ export function useConversationTabCounts(): ConversationTabCounts {
     } catch (e) {
       console.warn('[useConversationTabCounts] refresh failed:', e);
     }
-  }, []);
+  }, [myMemberId]);
 
   useEffect(() => {
     refresh();
