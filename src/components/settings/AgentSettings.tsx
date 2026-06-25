@@ -358,56 +358,22 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
             </div>
           </div>
 
-          {/* Business Hours */}
+          {/* Business Hours — per department */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <TeamHoursCard teamMatch="comercial" title="Atendimento / Comercial" accent="indigo" />
+            <TeamHoursCard teamMatch="produção" title="Produção" accent="emerald" />
+          </div>
+
+          {/* Out-of-hours auto reply (global) */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
             <div className="flex items-center gap-3 mb-4">
               <Calendar className="w-5 h-5 text-indigo-400" />
-              <h3 className="font-semibold text-white">Horário de Atendimento</h3>
+              <h3 className="font-semibold text-white">Mensagem fora do horário</h3>
             </div>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-slate-400 mb-1.5 block">Início</label>
-                  <input
-                    type="time"
-                    value={settings.business_hours_start}
-                    onChange={(e) => setSettings({ ...settings, business_hours_start: e.target.value })}
-                    className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-400 mb-1.5 block">Fim</label>
-                  <input
-                    type="time"
-                    value={settings.business_hours_end}
-                    onChange={(e) => setSettings({ ...settings, business_hours_end: e.target.value })}
-                    className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-400 mb-2 block">Dias da Semana</label>
-                <div className="flex gap-2">
-                  {DAYS_OF_WEEK.map(day => (
-                    <button
-                      key={day.value}
-                      onClick={() => toggleBusinessDay(day.value)}
-                      className={`flex-1 h-9 text-xs font-medium rounded-lg transition-all ${
-                        settings.business_days.includes(day.value)
-                          ? 'bg-indigo-500 text-white'
-                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                      }`}
-                    >
-                      {day.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="mt-5 pt-5 border-t border-slate-800 space-y-3">
               <div>
                 <label className="text-xs font-medium text-slate-400 mb-1.5 block">
-                  Mensagem fora do horário
+                  Texto da mensagem automática
                 </label>
                 <textarea
                   value={settings.out_of_hours_auto_reply}
@@ -436,9 +402,6 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
                   Tempo mínimo entre duas mensagens automáticas para o mesmo cliente.
                 </p>
               </div>
-              <p className="text-[11px] text-slate-500">
-                ⏱️ Os horários abaixo são o <b>fallback</b>. Configure horários específicos por departamento em <b>Equipe → Configurar → Horários</b>.
-              </p>
             </div>
           </div>
         </div>
