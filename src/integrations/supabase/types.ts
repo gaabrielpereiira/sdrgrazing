@@ -157,8 +157,10 @@ export type Database = {
           action_config: Json
           action_type: string
           active: boolean
+          cancel_if_changed: boolean
           cooldown_hours: number
           created_at: string
+          delay_minutes: number
           filters: Json
           id: string
           name: string
@@ -169,8 +171,10 @@ export type Database = {
           action_config?: Json
           action_type: string
           active?: boolean
+          cancel_if_changed?: boolean
           cooldown_hours?: number
           created_at?: string
+          delay_minutes?: number
           filters?: Json
           id?: string
           name: string
@@ -181,8 +185,10 @@ export type Database = {
           action_config?: Json
           action_type?: string
           active?: boolean
+          cancel_if_changed?: boolean
           cooldown_hours?: number
           created_at?: string
+          delay_minutes?: number
           filters?: Json
           id?: string
           name?: string
@@ -190,6 +196,69 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      automation_scheduled: {
+        Row: {
+          cancel_reason: string | null
+          created_at: string
+          event_id: string | null
+          executed_at: string | null
+          external_id: string | null
+          id: string
+          payload: Json
+          rule_id: string
+          scheduled_for: string
+          status: string
+          status_at_schedule: string | null
+          target_signature: string | null
+          updated_at: string
+        }
+        Insert: {
+          cancel_reason?: string | null
+          created_at?: string
+          event_id?: string | null
+          executed_at?: string | null
+          external_id?: string | null
+          id?: string
+          payload?: Json
+          rule_id: string
+          scheduled_for: string
+          status?: string
+          status_at_schedule?: string | null
+          target_signature?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cancel_reason?: string | null
+          created_at?: string
+          event_id?: string | null
+          executed_at?: string | null
+          external_id?: string | null
+          id?: string
+          payload?: Json
+          rule_id?: string
+          scheduled_for?: string
+          status?: string
+          status_at_schedule?: string | null
+          target_signature?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_scheduled_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "webhook_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_scheduled_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "automation_rules"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contact_cooldowns: {
         Row: {
