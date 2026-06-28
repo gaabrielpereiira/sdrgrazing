@@ -89,7 +89,11 @@ const AutomationLogsModal: React.FC<Props> = ({ isOpen, onClose, rule }) => {
                       </div>
                     </div>
                     <span className="text-xs text-slate-400 truncate max-w-[40%]">
-                      {l.result?.reason || l.result?.template || l.result?.url || ''}
+                      {l.status === 'scheduled' && l.result?.scheduled_for
+                        ? `→ ${new Date(l.result.scheduled_for).toLocaleString('pt-BR')}`
+                        : l.status === 'cancelled'
+                          ? (l.result?.reason || 'cancelado')
+                          : (l.result?.reason || l.result?.template || l.result?.url || '')}
                     </span>
                   </button>
                   {expanded === l.id && (
