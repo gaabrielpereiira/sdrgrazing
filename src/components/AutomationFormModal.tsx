@@ -343,6 +343,52 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
             )}
           </div>
 
+          {/* Aguardar antes de executar */}
+          <div className="border border-slate-800 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 bg-sky-500/10 text-sky-400 text-xs rounded font-medium">AGUARDAR</span>
+              <span className="text-sm text-slate-300">antes de executar (opcional)</span>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="number" min={0} value={delayValue}
+                onChange={e => setDelayValue(Math.max(0, parseInt(e.target.value) || 0))}
+                className="w-full sm:w-32 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50"
+              />
+              <select
+                value={delayUnit}
+                onChange={e => setDelayUnit(e.target.value as any)}
+                className="w-full sm:w-48 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-50"
+              >
+                <option value="minutes">minuto(s)</option>
+                <option value="hours">hora(s)</option>
+                <option value="days">dia(s)</option>
+              </select>
+            </div>
+            <p className="text-xs text-slate-500">
+              {delayValue > 0
+                ? `A ação será executada ${delayValue} ${delayUnit === 'minutes' ? 'minuto(s)' : delayUnit === 'hours' ? 'hora(s)' : 'dia(s)'} depois do gatilho bater.`
+                : 'Sem espera — executa imediatamente quando o gatilho bater.'}
+            </p>
+            {delayValue > 0 && trigger.startsWith('order.') && (
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox" checked={cancelIfChanged}
+                  onChange={e => setCancelIfChanged(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-slate-700 bg-slate-950"
+                />
+                <span className="text-xs text-slate-300">
+                  Cancelar se o status do pedido mudar antes do prazo
+                  <span className="block text-slate-500">
+                    Recomendado. Evita disparar (ex.) lembrete de "Pago" se o pedido for cancelado nesse meio tempo.
+                  </span>
+                </span>
+              </label>
+            )}
+          </div>
+
+
+
           {/* Então */}
           <div className="border border-slate-800 rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2">
