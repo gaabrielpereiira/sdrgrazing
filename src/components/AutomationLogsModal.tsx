@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Loader2, CheckCircle2, XCircle, MinusCircle } from 'lucide-react';
+import { X, Loader2, CheckCircle2, XCircle, MinusCircle, Clock, Ban } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AutomationLog, AutomationRule } from '@/hooks/useAutomations';
 
