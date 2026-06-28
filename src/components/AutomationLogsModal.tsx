@@ -65,7 +65,7 @@ const AutomationLogsModal: React.FC<Props> = ({ isOpen, onClose, rule }) => {
               className={`px-3 py-1 rounded-full text-xs font-medium ${
                 filter === s ? 'bg-brand-gold-500/20 text-brand-gold-300' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200'
               }`}>
-              {s === 'all' ? 'Todos' : s === 'success' ? 'Sucesso' : s === 'failed' ? 'Falhas' : 'Ignorados'}
+              {s === 'all' ? 'Todos' : STATUS_LABEL[s] || s}
             </button>
           ))}
         </div>
