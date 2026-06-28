@@ -9,7 +9,10 @@ interface Props {
   rule: AutomationRule | null;
 }
 
-const STATUS_FILTERS = ['all', 'success', 'failed', 'skipped'] as const;
+const STATUS_FILTERS = ['all', 'success', 'scheduled', 'cancelled', 'failed', 'skipped'] as const;
+const STATUS_LABEL: Record<string, string> = {
+  all: 'Todos', success: 'Sucesso', scheduled: 'Agendados', cancelled: 'Cancelados', failed: 'Falhas', skipped: 'Ignorados',
+};
 
 const AutomationLogsModal: React.FC<Props> = ({ isOpen, onClose, rule }) => {
   const [logs, setLogs] = useState<AutomationLog[]>([]);
