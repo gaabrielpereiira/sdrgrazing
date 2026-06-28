@@ -42,7 +42,11 @@ const AutomationLogsModal: React.FC<Props> = ({ isOpen, onClose, rule }) => {
     ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
     : s === 'failed'
       ? <XCircle className="w-4 h-4 text-red-400" />
-      : <MinusCircle className="w-4 h-4 text-slate-500" />;
+      : s === 'scheduled'
+        ? <Clock className="w-4 h-4 text-sky-400" />
+        : s === 'cancelled'
+          ? <Ban className="w-4 h-4 text-amber-400" />
+          : <MinusCircle className="w-4 h-4 text-slate-500" />;
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
