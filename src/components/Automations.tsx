@@ -226,7 +226,14 @@ const Automations: React.FC = () => {
               {filtered.map(r => (
                 <div key={r.id} className="p-4 rounded-xl border border-slate-800 bg-slate-900/50">
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <h3 className="font-medium text-slate-100">{r.name}</h3>
+                    <h3 className="font-medium text-slate-100 flex items-center gap-2">
+                      {r.name}
+                      {r.delay_minutes > 0 && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300 text-[10px] font-medium">
+                          <Clock className="w-3 h-3" /> {formatDelay(r.delay_minutes)}
+                        </span>
+                      )}
+                    </h3>
                     <button onClick={() => toggleActive(r)}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         r.active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-700/30 text-slate-400'
