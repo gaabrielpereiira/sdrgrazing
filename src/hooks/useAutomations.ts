@@ -10,6 +10,8 @@ export interface AutomationRule {
   action_config: Record<string, any>;
   active: boolean;
   cooldown_hours: number;
+  delay_minutes: number;
+  cancel_if_changed: boolean;
   created_at: string;
   updated_at: string;
 }
