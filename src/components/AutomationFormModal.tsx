@@ -214,11 +214,16 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
         ? { ...cfg, variables: (variables || []).filter(Boolean) }
         : cfg;
 
+      const delay_minutes = delayValue > 0
+        ? (delayUnit === 'days' ? delayValue * 1440 : delayUnit === 'hours' ? delayValue * 60 : delayValue)
+        : 0;
+
       const payload = {
         name: name.trim(), trigger_topic: trigger,
         filters: { conditions: conditions.filter(c => c.field), logic },
         action_type: actionType, action_config,
         cooldown_hours: cooldownHours, active,
+        delay_minutes, cancel_if_changed: cancelIfChanged,
       };
       const { error } = rule
         ? await supabase.from('automation_rules').update(payload as any).eq('id', rule.id)
