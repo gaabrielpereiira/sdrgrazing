@@ -1287,6 +1287,21 @@ async function handleOnboarding(
       console.error('[Onboarding] Failed to insert handoff notification:', notifErr);
     }
 
+    // Fire WhatsApp alert to on-duty number (HSM template) — non-blocking
+    try {
+      await dispatchSupportAlert(supabase, {
+        contactId: conversation.contact_id,
+        conversationId: conversation.id,
+        clientLabel,
+        orderNumber: intake.order_number,
+        reasonLabel,
+        sentimentLabel,
+        summary,
+      });
+    } catch (alertErr) {
+      console.error('[Onboarding] dispatchSupportAlert failed:', alertErr);
+    }
+
     // Friendly confirmation to the customer
     await sendFixedText(
       supabase,
