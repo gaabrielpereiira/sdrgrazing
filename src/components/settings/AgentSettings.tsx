@@ -101,6 +101,9 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     company_name: null,
     sdr_name: null,
     ai_scheduling_enabled: true,
+    support_alert_enabled: false,
+    support_alert_phone: null,
+    support_alert_template: null,
   });
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
