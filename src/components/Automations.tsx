@@ -181,7 +181,16 @@ const Automations: React.FC = () => {
                 <tbody>
                   {filtered.map(r => (
                     <tr key={r.id} className="border-b border-slate-800/50 hover:bg-slate-900/50">
-                      <td className="p-3 font-medium text-slate-100">{r.name}</td>
+                      <td className="p-3 font-medium text-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span>{r.name}</span>
+                          {r.delay_minutes > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300 text-[10px] font-medium">
+                              <Clock className="w-3 h-3" /> {formatDelay(r.delay_minutes)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-3 text-slate-300">{triggerLabel(r.trigger_topic)}</td>
                       <td className="p-3 text-slate-300">{actionLabel(r.action_type)}</td>
                       <td className="p-3 text-slate-400">{r.cooldown_hours > 0 ? `${r.cooldown_hours}h` : '—'}</td>
