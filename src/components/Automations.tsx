@@ -50,6 +50,12 @@ const Automations: React.FC = () => {
 
   const triggerLabel = (v: string) => TRIGGER_TOPICS.find(t => t.value === v)?.label || v;
   const actionLabel = (v: string) => ACTION_TYPES.find(a => a.value === v)?.label || v;
+  const formatDelay = (min: number) => {
+    if (!min) return '';
+    if (min % 1440 === 0) return `${min / 1440}d`;
+    if (min % 60 === 0) return `${min / 60}h`;
+    return `${min}min`;
+  };
 
   const toggleActive = async (r: AutomationRule) => {
     const { error } = await supabase.from('automation_rules').update({ active: !r.active }).eq('id', r.id);
