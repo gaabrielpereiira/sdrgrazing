@@ -31,6 +31,9 @@ interface AgentSettings {
   company_name: string | null;
   sdr_name: string | null;
   ai_scheduling_enabled: boolean;
+  support_alert_enabled: boolean;
+  support_alert_phone: string | null;
+  support_alert_template: string | null;
 }
 
 const PROVIDERS: { id: AiProvider; label: string; iconLabel: string; placeholder: string; keyPrefix: RegExp }[] = [
