@@ -31,6 +31,9 @@ interface AgentSettings {
   company_name: string | null;
   sdr_name: string | null;
   ai_scheduling_enabled: boolean;
+  support_alert_enabled: boolean;
+  support_alert_phone: string | null;
+  support_alert_template: string | null;
 }
 
 const PROVIDERS: { id: AiProvider; label: string; iconLabel: string; placeholder: string; keyPrefix: RegExp }[] = [
@@ -98,6 +101,9 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     company_name: null,
     sdr_name: null,
     ai_scheduling_enabled: true,
+    support_alert_enabled: false,
+    support_alert_phone: null,
+    support_alert_template: null,
   });
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
@@ -171,6 +177,9 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
         company_name: data.company_name,
         sdr_name: data.sdr_name,
         ai_scheduling_enabled: data.ai_scheduling_enabled ?? true,
+        support_alert_enabled: (data as any).support_alert_enabled ?? false,
+        support_alert_phone: (data as any).support_alert_phone ?? null,
+        support_alert_template: (data as any).support_alert_template ?? null,
       });
     } catch (error) {
       console.error('[AgentSettings] Error loading settings:', error);
@@ -201,6 +210,9 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           company_name: settings.company_name,
           sdr_name: settings.sdr_name,
           ai_scheduling_enabled: settings.ai_scheduling_enabled,
+          support_alert_enabled: settings.support_alert_enabled,
+          support_alert_phone: settings.support_alert_phone,
+          support_alert_template: settings.support_alert_template,
           updated_at: new Date().toISOString(),
         } as any)
         .eq('id', settings.id!);
@@ -578,6 +590,75 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
               </label>
             </div>
           </div>
+        </div>
+
+        {/* Alerta de Suporte (WhatsApp plantão) */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Bot className="w-5 h-5 text-rose-400" />
+              <h3 className="font-semibold text-white">Alerta de novo chamado de suporte</h3>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.support_alert_enabled}
+                onChange={(e) => setSettings({ ...settings, support_alert_enabled: e.target.checked })}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-500"></div>
+            </label>
+          </div>
+
+          <p className="text-xs text-slate-400 mb-4">
+            Quando a Donatella transferir uma conversa para Produção, dispara uma mensagem WhatsApp para o número de plantão usando um <b>template HSM aprovado</b>.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-medium text-slate-400 mb-1.5 block">
+                Número de plantão (formato internacional, sem +)
+              </label>
+              <input
+                type="tel"
+                value={settings.support_alert_phone || ''}
+                onChange={(e) => setSettings({ ...settings, support_alert_phone: e.target.value.replace(/\D/g, '') || null })}
+                placeholder="5511999999999"
+                disabled={!settings.support_alert_enabled}
+                className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500/50 disabled:opacity-50"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-400 mb-1.5 block">
+                Nome do template aprovado
+              </label>
+              <input
+                type="text"
+                value={settings.support_alert_template || ''}
+                onChange={(e) => setSettings({ ...settings, support_alert_template: e.target.value.trim() || null })}
+                placeholder="novo_chamado_suporte"
+                disabled={!settings.support_alert_enabled}
+                className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500/50 disabled:opacity-50"
+              />
+            </div>
+          </div>
+
+          <details className="mt-4">
+            <summary className="text-xs text-rose-400 cursor-pointer hover:text-rose-300 flex items-center gap-2">
+              <Info className="w-3.5 h-3.5" /> Como criar o template na aba WhatsApp Templates
+            </summary>
+            <div className="mt-2 p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 space-y-2">
+              <p>Crie um template <b>UTILITY</b> em pt_BR com este corpo (3 variáveis na ordem):</p>
+              <pre className="font-mono text-[11px] bg-slate-900 p-2 rounded border border-slate-800 whitespace-pre-wrap">{`🚨 Novo chamado de suporte
+
+Cliente: {{1}}
+Pedido: {{2}}
+Motivo: {{3}}
+
+Acesse o painel para atender.`}</pre>
+              <p className="text-slate-500">Variáveis enviadas: 1=nome do cliente · 2=número do pedido (ou "—") · 3=motivo + resumo.</p>
+            </div>
+          </details>
         </div>
 
       </div>

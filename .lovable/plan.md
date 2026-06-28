@@ -1,52 +1,67 @@
+
 ## Objetivo
-Adicionar um **atraso (delay)** opcional nas regras de automação. Quando os filtros baterem, a execução fica agendada para X tempo depois (ex.: 24h), e só então a ação roda — desde que a condição ainda faça sentido.
 
-## Como vai funcionar (visão do usuário)
+Quando a Donatella transferir uma conversa para o time de **Produção** (handoff de suporte), disparar **imediatamente** uma mensagem WhatsApp via template HSM aprovado para **um número fixo de plantão**, contendo as informações do chamado.
 
-No modal de criar/editar automação aparece um novo bloco **"Aguardar antes de executar"** entre os filtros e a ação:
+## 1. Configuração (Settings → Agente)
 
-- Campo numérico + seletor de unidade: **minutos / horas / dias** (0 = executa imediatamente, comportamento atual)
-- Toggle **"Cancelar se o status mudar antes do prazo"** (ex.: regra "Pago há 24h" não dispara se o pedido for cancelado nesse meio tempo)
-- Texto de ajuda: *"A ação será executada X depois do gatilho. Pedidos cuja condição deixe de valer antes do prazo serão ignorados."*
+Adicionar nova seção **"Alertas de Suporte"** em `AgentSettings.tsx` com três campos persistidos em `nina_settings`:
 
-Na lista de regras, regras com delay mostram um badge **"⏱ 24h"** ao lado do nome.
+- `support_alert_enabled` (boolean) — liga/desliga
+- `support_alert_phone` (text) — número E.164 do plantão (ex: `5511999999999`)
+- `support_alert_template` (text) — nome do template HSM aprovado (ex: `novo_chamado_suporte`)
 
-Nos **Logs de automação** aparece o novo status **"Agendado"** com a hora prevista, e quando roda vira **"Sucesso"** / **"Cancelado"** (com motivo: status mudou, pedido removido, etc.).
+Mostrar dica explicando que o template precisa ter 3 variáveis na ordem: `{{1}}` nome do cliente, `{{2}}` número do pedido (ou "—"), `{{3}}` motivo/resumo do problema.
 
-## Como vai funcionar (técnico)
+## 2. Template HSM (criação manual via UI existente)
 
-### 1. Schema
-Migration adicionando à `automation_rules`:
-- `delay_minutes int not null default 0`
-- `cancel_if_changed boolean not null default true`
+O usuário criará o template em **WhatsApp Templates** (já existe `WhatsAppTemplates.tsx` + `submit-whatsapp-template`). Sugestão de corpo:
 
-Nova tabela `automation_scheduled` (fila de execuções pendentes):
-- `rule_id`, `event_id`, `order_id` (nullable), `contact_id` (nullable)
-- `payload jsonb` (snapshot do evento que disparou)
-- `status_at_schedule text` (status do pedido no momento do agendamento, para checar mudança)
-- `scheduled_for timestamptz`
-- `status text` (`pending` | `executed` | `cancelled`)
-- `cancel_reason text`
-- GRANTs + RLS padrão do projeto
+```
+🚨 Novo chamado de suporte
 
-### 2. Edge function `automation-runner` (modificada)
-Quando uma regra bate e tem `delay_minutes > 0`:
-- Em vez de executar a ação, insere linha em `automation_scheduled` com `scheduled_for = now() + delay`
-- Registra log com status `scheduled`
-- Mantém a checagem de idempotência (`automation_executions`) para não agendar duas vezes a mesma transição
+Cliente: {{1}}
+Pedido: {{2}}
+Motivo: {{3}}
 
-### 3. Nova edge function `automation-scheduler`
-Roda a cada minuto via `pg_cron` + `pg_net` (padrão já usado no projeto). Para cada linha `pending` com `scheduled_for <= now()`:
-1. Se `cancel_if_changed = true`: refaz a leitura do pedido/contato e compara com `status_at_schedule`. Se mudou → marca `cancelled` com motivo.
-2. Caso contrário: executa a mesma ação que o `automation-runner` executaria (mensagem WhatsApp, update CRM, notificação, webhook externo) reaproveitando o helper já existente.
-3. Atualiza status para `executed` ou `failed` e grava `automation_logs`.
+Acesse o painel para atender.
+```
 
-### 4. Frontend
-- `src/hooks/useAutomations.ts`: adicionar `delay_minutes` e `cancel_if_changed` na interface `AutomationRule`.
-- `src/components/AutomationFormModal.tsx`: novo bloco de UI com input numérico + select de unidade + switch de cancelamento. Converte para minutos no save.
-- `src/components/Automations.tsx`: badge "⏱ Xh" nas regras com delay.
-- `src/components/AutomationLogsModal.tsx`: exibir status `scheduled` / `cancelled` com horário e motivo.
+Categoria: `UTILITY`. Sem ação a nosso lado nesse passo — apenas documentar no campo de ajuda.
 
-## Pontos a confirmar
-1. Quando o status muda antes do prazo, devo **sempre cancelar** (mais seguro) ou quer que isso seja **opcional** por regra (toggle como descrito acima)? *Sugestão: opcional, default ligado.*
-2. O delay máximo deve ter limite (ex.: 30 dias) ou pode ser qualquer valor?
+## 3. Gatilho no `nina-orchestrator`
+
+No fluxo `handleSupportIntake` (onde hoje já fazemos transferência para Produção, system note, tag e notificação interna), adicionar uma chamada extra **após** a transferência ser concluída:
+
+- Ler `nina_settings.support_alert_enabled/phone/template`
+- Se habilitado e número/template preenchidos, enfileirar 1 registro em `send_queue` com:
+  - `to_phone` = número do plantão
+  - `type` = `template`
+  - `payload` = `{ template_name, language: 'pt_BR', components: [{ type:'body', parameters:[{type:'text', text: contactName}, {type:'text', text: orderNumber||'—'}, {type:'text', text: reasonSummary}] }] }`
+  - `conversation_id` = null (mensagem fora da conversa do cliente)
+  - `priority` = high
+
+O `whatsapp-sender` já existente consome `send_queue` e sabe enviar template — não precisa alterar.
+
+## 4. Tolerância a falhas
+
+- Se número/template não configurados → apenas log, não interrompe handoff.
+- Se `whatsapp-sender` falhar (template não aprovado, número inválido) → registra em `notifications` (`type: 'support_alert_failed'`) para o admin ver no sino.
+- Cooldown leve: não disparar 2x para o mesmo `conversation_id` em menos de 10 min (evita duplicado se a IA reclassificar).
+
+## 5. Detalhes técnicos
+
+**Arquivos tocados:**
+- `supabase/functions/nina-orchestrator/index.ts` — função `dispatchSupportAlert(settings, contact, order, reason)` chamada no final do handoff.
+- `src/components/settings/AgentSettings.tsx` — nova seção UI + persistência dos 3 campos.
+- Migration: `ALTER TABLE nina_settings ADD COLUMN support_alert_enabled boolean DEFAULT false, ADD COLUMN support_alert_phone text, ADD COLUMN support_alert_template text;`
+- `src/integrations/supabase/types.ts` regenera automaticamente.
+
+**Sem alterações em:**
+- `whatsapp-sender` (já processa template via `send_queue`)
+- Schema de `send_queue` (já suporta `type='template'` e payload livre)
+- Configuração de webhook / Meta
+
+## Resultado esperado
+
+Assim que a Donatella concluir a triagem de suporte e transferir para Produção, em menos de ~5 s o número de plantão recebe no WhatsApp uma mensagem padronizada com cliente, pedido e motivo — sem depender de ninguém estar olhando o painel.
