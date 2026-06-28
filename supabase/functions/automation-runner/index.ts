@@ -530,6 +530,36 @@ async function processEvent(supabase: any, event: any) {
         throw new Error(`execution claim failed: ${claimErr.message}`);
       }
 
+      // If the rule has a delay, schedule it instead of running now.
+      const delayMin = Number(rule.delay_minutes ?? 0);
+      if (delayMin > 0) {
+        const scheduledFor = new Date(Date.now() + delayMin * 60_000).toISOString();
+        const statusAtSchedule = event.payload?.status != null ? String(event.payload.status) : null;
+        const { error: schedErr } = await supabase.from('automation_scheduled').insert({
+          rule_id: rule.id,
+          event_id: event.id,
+          external_id: claimExternalId,
+          target_signature: targetSignature,
+          payload: event.payload || {},
+          status_at_schedule: statusAtSchedule,
+          scheduled_for: scheduledFor,
+          status: 'pending',
+        });
+        if (schedErr) {
+          await supabase.from('automation_logs').insert({
+            rule_id: rule.id, event_id: event.id, status: 'failed',
+            result: { reason: 'schedule_insert_failed', error: schedErr.message },
+          });
+        } else {
+          await supabase.from('automation_logs').insert({
+            rule_id: rule.id, event_id: event.id, status: 'scheduled',
+            result: { reason: 'delayed_execution', scheduled_for: scheduledFor, delay_minutes: delayMin },
+          });
+          console.log(`[runner] rule=${rule.id} scheduled for ${scheduledFor} (+${delayMin}min)`);
+        }
+        continue;
+      }
+
       let outcome: { status: string; result: any };
       switch (rule.action_type) {
         case 'whatsapp_message': outcome = await actionWhatsapp(supabase, rule, event); if (outcome.status === 'success') queuedWhatsapp = true; break;
@@ -544,6 +574,7 @@ async function processEvent(supabase: any, event: any) {
         rule_id: rule.id, event_id: event.id, status: outcome.status, result: outcome.result,
       });
       console.log(`[runner] rule=${rule.id} action=${rule.action_type} → ${outcome.status}`);
+
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
       console.error(`[runner] rule ${rule.id} failed:`, msg);

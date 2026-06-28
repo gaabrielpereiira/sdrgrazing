@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Loader2, CheckCircle2, XCircle, MinusCircle } from 'lucide-react';
+import { X, Loader2, CheckCircle2, XCircle, MinusCircle, Clock, Ban } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { AutomationLog, AutomationRule } from '@/hooks/useAutomations';
 
@@ -9,7 +9,10 @@ interface Props {
   rule: AutomationRule | null;
 }
 
-const STATUS_FILTERS = ['all', 'success', 'failed', 'skipped'] as const;
+const STATUS_FILTERS = ['all', 'success', 'scheduled', 'cancelled', 'failed', 'skipped'] as const;
+const STATUS_LABEL: Record<string, string> = {
+  all: 'Todos', success: 'Sucesso', scheduled: 'Agendados', cancelled: 'Cancelados', failed: 'Falhas', skipped: 'Ignorados',
+};
 
 const AutomationLogsModal: React.FC<Props> = ({ isOpen, onClose, rule }) => {
   const [logs, setLogs] = useState<AutomationLog[]>([]);
@@ -39,7 +42,11 @@ const AutomationLogsModal: React.FC<Props> = ({ isOpen, onClose, rule }) => {
     ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
     : s === 'failed'
       ? <XCircle className="w-4 h-4 text-red-400" />
-      : <MinusCircle className="w-4 h-4 text-slate-500" />;
+      : s === 'scheduled'
+        ? <Clock className="w-4 h-4 text-sky-400" />
+        : s === 'cancelled'
+          ? <Ban className="w-4 h-4 text-amber-400" />
+          : <MinusCircle className="w-4 h-4 text-slate-500" />;
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
@@ -58,7 +65,7 @@ const AutomationLogsModal: React.FC<Props> = ({ isOpen, onClose, rule }) => {
               className={`px-3 py-1 rounded-full text-xs font-medium ${
                 filter === s ? 'bg-brand-gold-500/20 text-brand-gold-300' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200'
               }`}>
-              {s === 'all' ? 'Todos' : s === 'success' ? 'Sucesso' : s === 'failed' ? 'Falhas' : 'Ignorados'}
+              {s === 'all' ? 'Todos' : STATUS_LABEL[s] || s}
             </button>
           ))}
         </div>
@@ -82,7 +89,11 @@ const AutomationLogsModal: React.FC<Props> = ({ isOpen, onClose, rule }) => {
                       </div>
                     </div>
                     <span className="text-xs text-slate-400 truncate max-w-[40%]">
-                      {l.result?.reason || l.result?.template || l.result?.url || ''}
+                      {l.status === 'scheduled' && l.result?.scheduled_for
+                        ? `→ ${new Date(l.result.scheduled_for).toLocaleString('pt-BR')}`
+                        : l.status === 'cancelled'
+                          ? (l.result?.reason || 'cancelado')
+                          : (l.result?.reason || l.result?.template || l.result?.url || '')}
                     </span>
                   </button>
                   {expanded === l.id && (

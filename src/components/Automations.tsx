@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Zap, Plus, Search, Pencil, Trash2, Loader2, Activity, FileClock, Inbox, BarChart3, FlaskConical, RefreshCw } from 'lucide-react';
+import { Zap, Plus, Search, Pencil, Trash2, Loader2, Activity, FileClock, Inbox, BarChart3, FlaskConical, RefreshCw, Clock } from 'lucide-react';
 import { Button } from './Button';
 import { useAutomations, AutomationRule, TRIGGER_TOPICS, ACTION_TYPES } from '@/hooks/useAutomations';
 import AutomationFormModal from './AutomationFormModal';
@@ -50,6 +50,12 @@ const Automations: React.FC = () => {
 
   const triggerLabel = (v: string) => TRIGGER_TOPICS.find(t => t.value === v)?.label || v;
   const actionLabel = (v: string) => ACTION_TYPES.find(a => a.value === v)?.label || v;
+  const formatDelay = (min: number) => {
+    if (!min) return '';
+    if (min % 1440 === 0) return `${min / 1440}d`;
+    if (min % 60 === 0) return `${min / 60}h`;
+    return `${min}min`;
+  };
 
   const toggleActive = async (r: AutomationRule) => {
     const { error } = await supabase.from('automation_rules').update({ active: !r.active }).eq('id', r.id);
@@ -175,7 +181,16 @@ const Automations: React.FC = () => {
                 <tbody>
                   {filtered.map(r => (
                     <tr key={r.id} className="border-b border-slate-800/50 hover:bg-slate-900/50">
-                      <td className="p-3 font-medium text-slate-100">{r.name}</td>
+                      <td className="p-3 font-medium text-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span>{r.name}</span>
+                          {r.delay_minutes > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300 text-[10px] font-medium">
+                              <Clock className="w-3 h-3" /> {formatDelay(r.delay_minutes)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-3 text-slate-300">{triggerLabel(r.trigger_topic)}</td>
                       <td className="p-3 text-slate-300">{actionLabel(r.action_type)}</td>
                       <td className="p-3 text-slate-400">{r.cooldown_hours > 0 ? `${r.cooldown_hours}h` : '—'}</td>
@@ -211,7 +226,14 @@ const Automations: React.FC = () => {
               {filtered.map(r => (
                 <div key={r.id} className="p-4 rounded-xl border border-slate-800 bg-slate-900/50">
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <h3 className="font-medium text-slate-100">{r.name}</h3>
+                    <h3 className="font-medium text-slate-100 flex items-center gap-2">
+                      {r.name}
+                      {r.delay_minutes > 0 && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300 text-[10px] font-medium">
+                          <Clock className="w-3 h-3" /> {formatDelay(r.delay_minutes)}
+                        </span>
+                      )}
+                    </h3>
                     <button onClick={() => toggleActive(r)}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         r.active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-700/30 text-slate-400'

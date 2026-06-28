@@ -1,33 +1,52 @@
-## Diagnóstico
+## Objetivo
+Adicionar um **atraso (delay)** opcional nas regras de automação. Quando os filtros baterem, a execução fica agendada para X tempo depois (ex.: 24h), e só então a ação roda — desde que a condição ainda faça sentido.
 
-A Donatella parou de responder porque o edge function `nina-orchestrator` está falhando no boot toda vez que é invocado:
+## Como vai funcionar (visão do usuário)
 
-```
-worker boot error: Uncaught SyntaxError:
-Identifier 'formatBusinessHoursBlock' has already been declared
-at nina-orchestrator/index.ts:2048
-```
+No modal de criar/editar automação aparece um novo bloco **"Aguardar antes de executar"** entre os filtros e a ação:
 
-A função `formatBusinessHoursBlock` aparece declarada em **dois lugares** do arquivo `supabase/functions/nina-orchestrator/index.ts`:
+- Campo numérico + seletor de unidade: **minutos / horas / dias** (0 = executa imediatamente, comportamento atual)
+- Toggle **"Cancelar se o status mudar antes do prazo"** (ex.: regra "Pago há 24h" não dispara se o pedido for cancelado nesse meio tempo)
+- Texto de ajuda: *"A ação será executada X depois do gatilho. Pedidos cuja condição deixe de valer antes do prazo serão ignorados."*
 
-- **Linha 14** — versão atual usada em `runOrchestrator` (linha 1604), que recebe o objeto de horário e injeta o bloco no system prompt.
-- **Linha 2381** — versão antiga remanescente da implementação anterior (`BusinessHoursStatus`), nunca mais chamada.
+Na lista de regras, regras com delay mostram um badge **"⏱ 24h"** ao lado do nome.
 
-Como Deno aborta o módulo inteiro no erro de sintaxe, o worker nem sobe — por isso:
-- Mensagens continuam entrando (webhook OK)
-- `message-grouper` agrupa e enfileira normalmente
-- Mas a chamada ao orchestrator falha silenciosamente e nenhuma resposta é gerada
+Nos **Logs de automação** aparece o novo status **"Agendado"** com a hora prevista, e quando roda vira **"Sucesso"** / **"Cancelado"** (com motivo: status mudou, pedido removido, etc.).
 
-## Correção
+## Como vai funcionar (técnico)
 
-1. **Remover a declaração duplicada** em `supabase/functions/nina-orchestrator/index.ts`:
-   - Apagar a segunda versão de `formatBusinessHoursBlock` (~linha 2381) e qualquer código órfão associado (tipo `BusinessHoursStatus` se não for usado em outro lugar).
-   - Manter apenas a versão da linha 14, que é a efetivamente chamada no fluxo atual.
+### 1. Schema
+Migration adicionando à `automation_rules`:
+- `delay_minutes int not null default 0`
+- `cancel_if_changed boolean not null default true`
 
-2. **Verificar** após o deploy:
-   - Logs do `nina-orchestrator` devem mostrar `booted` em vez de `BootFailure`.
-   - Enviar uma mensagem de teste no WhatsApp e confirmar resposta da Donatella.
+Nova tabela `automation_scheduled` (fila de execuções pendentes):
+- `rule_id`, `event_id`, `order_id` (nullable), `contact_id` (nullable)
+- `payload jsonb` (snapshot do evento que disparou)
+- `status_at_schedule text` (status do pedido no momento do agendamento, para checar mudança)
+- `scheduled_for timestamptz`
+- `status text` (`pending` | `executed` | `cancelled`)
+- `cancel_reason text`
+- GRANTs + RLS padrão do projeto
 
-## Observação
+### 2. Edge function `automation-runner` (modificada)
+Quando uma regra bate e tem `delay_minutes > 0`:
+- Em vez de executar a ação, insere linha em `automation_scheduled` com `scheduled_for = now() + delay`
+- Registra log com status `scheduled`
+- Mantém a checagem de idempotência (`automation_executions`) para não agendar duas vezes a mesma transição
 
-Não há mudança de comportamento — apenas remoção de código morto que está quebrando o build. Nenhuma migration, nenhuma alteração de UI, nenhuma mexida em outras functions.
+### 3. Nova edge function `automation-scheduler`
+Roda a cada minuto via `pg_cron` + `pg_net` (padrão já usado no projeto). Para cada linha `pending` com `scheduled_for <= now()`:
+1. Se `cancel_if_changed = true`: refaz a leitura do pedido/contato e compara com `status_at_schedule`. Se mudou → marca `cancelled` com motivo.
+2. Caso contrário: executa a mesma ação que o `automation-runner` executaria (mensagem WhatsApp, update CRM, notificação, webhook externo) reaproveitando o helper já existente.
+3. Atualiza status para `executed` ou `failed` e grava `automation_logs`.
+
+### 4. Frontend
+- `src/hooks/useAutomations.ts`: adicionar `delay_minutes` e `cancel_if_changed` na interface `AutomationRule`.
+- `src/components/AutomationFormModal.tsx`: novo bloco de UI com input numérico + select de unidade + switch de cancelamento. Converte para minutos no save.
+- `src/components/Automations.tsx`: badge "⏱ Xh" nas regras com delay.
+- `src/components/AutomationLogsModal.tsx`: exibir status `scheduled` / `cancelled` com horário e motivo.
+
+## Pontos a confirmar
+1. Quando o status muda antes do prazo, devo **sempre cancelar** (mais seguro) ou quer que isso seja **opcional** por regra (toggle como descrito acima)? *Sugestão: opcional, default ligado.*
+2. O delay máximo deve ter limite (ex.: 30 dias) ou pode ser qualquer valor?
