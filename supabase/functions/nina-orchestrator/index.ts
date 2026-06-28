@@ -922,6 +922,132 @@ function getInteractiveButtonId(message: any): string | null {
 }
 
 // ============================================================
+// Support alert: WhatsApp HSM to on-duty number after handoff.
+// Reads nina_settings.support_alert_* and enqueues a template
+// message in send_queue. Idempotent per conversation (10 min).
+// ============================================================
+async function dispatchSupportAlert(supabase: any, ctx: {
+  contactId: string;
+  conversationId: string;
+  clientLabel: string;
+  orderNumber: string | null | undefined;
+  reasonLabel: string;
+  sentimentLabel: string;
+  summary: string;
+}): Promise<void> {
+  const { data: settings } = await supabase
+    .from('nina_settings')
+    .select('support_alert_enabled, support_alert_phone, support_alert_template')
+    .limit(1)
+    .maybeSingle();
+
+  if (!settings?.support_alert_enabled) return;
+  const phone = String(settings.support_alert_phone || '').replace(/\D/g, '');
+  const templateName = String(settings.support_alert_template || '').trim();
+  if (!phone || !templateName) {
+    console.warn('[SupportAlert] enabled but phone/template missing');
+    return;
+  }
+
+  // Cooldown 10min per conversation to avoid duplicates
+  const cooldownKey = `support_alert:${ctx.conversationId}`;
+  const since = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { data: recent } = await supabase
+    .from('send_queue')
+    .select('id')
+    .eq('message_type', 'template')
+    .gte('created_at', since)
+    .contains('metadata', { support_alert_for: ctx.conversationId })
+    .limit(1);
+  if (recent && recent.length > 0) {
+    console.log('[SupportAlert] cooldown active, skipping for', ctx.conversationId);
+    return;
+  }
+
+  // Load template definition from whatsapp_templates
+  const { data: tpl } = await supabase
+    .from('whatsapp_templates')
+    .select('name, language, components, status')
+    .eq('name', templateName)
+    .maybeSingle();
+  if (!tpl) {
+    console.warn('[SupportAlert] template not found:', templateName);
+    return;
+  }
+
+  // Ensure on-duty contact exists (or create lightweight one)
+  let plantaoContactId: string | null = null;
+  try {
+    const { data: existing } = await supabase
+      .from('contacts')
+      .select('id')
+      .eq('phone_number', phone)
+      .maybeSingle();
+    if (existing?.id) {
+      plantaoContactId = existing.id;
+    } else {
+      const { data: created, error: createErr } = await supabase
+        .from('contacts')
+        .insert({
+          phone_number: phone,
+          whatsapp_id: phone,
+          name: 'Plantão Suporte',
+          tags: ['interno', 'plantao'],
+          notes: 'Contato interno para alertas de suporte (auto-criado).',
+        })
+        .select('id')
+        .single();
+      if (createErr) throw createErr;
+      plantaoContactId = created.id;
+    }
+  } catch (e) {
+    console.error('[SupportAlert] failed to ensure plantão contact:', e);
+    return;
+  }
+
+  const motivoLine = `${ctx.reasonLabel} · ${ctx.sentimentLabel}`;
+  const variables = {
+    '1': ctx.clientLabel,
+    '2': ctx.orderNumber || '—',
+    '3': `${motivoLine} — ${ctx.summary}`.slice(0, 300),
+  };
+
+  const { error: enqErr } = await supabase.from('send_queue').insert({
+    contact_id: plantaoContactId,
+    conversation_id: null,
+    message_type: 'template',
+    from_type: 'system',
+    content: `[Alerta] Novo chamado de suporte: ${ctx.clientLabel}`,
+    status: 'pending',
+    priority: 9,
+    metadata: {
+      template: {
+        name: tpl.name,
+        language: tpl.language || 'pt_BR',
+        components: tpl.components,
+        variables,
+      },
+      support_alert_for: ctx.conversationId,
+      cooldown_key: cooldownKey,
+    },
+  });
+  if (enqErr) {
+    console.error('[SupportAlert] enqueue failed:', enqErr);
+    await supabase.from('notifications').insert({
+      type: 'support_alert_failed',
+      title: '⚠️ Falha ao enviar alerta de suporte',
+      body: `Não foi possível enfileirar o WhatsApp para o plantão (${phone}). Detalhe: ${enqErr.message}`,
+      priority: 'high',
+      metadata: { template: templateName, phone, error: enqErr.message },
+    });
+    return;
+  }
+
+  console.log(`[SupportAlert] enqueued template ${templateName} to ${phone} for conv ${ctx.conversationId}`);
+}
+
+// ============================================================
+
 // Support intake classification (motivo + sentimento + resumo)
 // Called once after we collected order_number and issue_text.
 // ============================================================
