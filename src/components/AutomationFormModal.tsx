@@ -50,11 +50,19 @@ const AutomationFormModal: React.FC<Props> = ({ isOpen, onClose, rule, onSaved }
       setCfg(rule.action_config || {});
       setCooldownHours(rule.cooldown_hours || 0);
       setActive(rule.active);
+      // Hydrate delay in friendliest unit
+      const dm = rule.delay_minutes || 0;
+      if (dm === 0) { setDelayValue(0); setDelayUnit('hours'); }
+      else if (dm % 1440 === 0) { setDelayValue(dm / 1440); setDelayUnit('days'); }
+      else if (dm % 60 === 0) { setDelayValue(dm / 60); setDelayUnit('hours'); }
+      else { setDelayValue(dm); setDelayUnit('minutes'); }
+      setCancelIfChanged(rule.cancel_if_changed ?? true);
     } else {
       setName(''); setTrigger('order.created'); setConditions([]); setLogic('AND');
       setActionType('whatsapp_message');
       setCfg({ phone_field: 'billing.phone', variables: [] });
       setCooldownHours(0); setActive(true);
+      setDelayValue(0); setDelayUnit('hours'); setCancelIfChanged(true);
     }
     // When editing a pipeline rule, reset cfg defaults to no phone_field
     // (handled below in the render — phone_field is hidden for pipeline triggers)
