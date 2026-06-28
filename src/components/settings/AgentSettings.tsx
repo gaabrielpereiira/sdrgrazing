@@ -177,6 +177,9 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
         company_name: data.company_name,
         sdr_name: data.sdr_name,
         ai_scheduling_enabled: data.ai_scheduling_enabled ?? true,
+        support_alert_enabled: (data as any).support_alert_enabled ?? false,
+        support_alert_phone: (data as any).support_alert_phone ?? null,
+        support_alert_template: (data as any).support_alert_template ?? null,
       });
     } catch (error) {
       console.error('[AgentSettings] Error loading settings:', error);
