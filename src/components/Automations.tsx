@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Zap, Plus, Search, Pencil, Trash2, Loader2, Activity, FileClock, Inbox, BarChart3, FlaskConical, RefreshCw } from 'lucide-react';
+import { Zap, Plus, Search, Pencil, Trash2, Loader2, Activity, FileClock, Inbox, BarChart3, FlaskConical, RefreshCw, Clock } from 'lucide-react';
 import { Button } from './Button';
 import { useAutomations, AutomationRule, TRIGGER_TOPICS, ACTION_TYPES } from '@/hooks/useAutomations';
 import AutomationFormModal from './AutomationFormModal';
