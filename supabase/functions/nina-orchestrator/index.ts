@@ -1097,19 +1097,6 @@ const SUPPORT_SENTIMENT_LABELS: Record<string, string> = {
 };
 
 type SupportClassification = {
-  reason_key: string;
-  reason_label: string;
-  sentiment_key: string;
-  sentiment_label: string;
-  summary: string;
-  customer_message: string;
-};
-
-async function classifySupportIntake(intake: {
-  order_number?: string | null;
-  issue_text?: string | null;
-}): Promise<SupportClassification> {
-type SupportClassification = {
   group_key: SupportGroupKey;
   category_key: string;
   category_label: string;
