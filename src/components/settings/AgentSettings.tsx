@@ -120,8 +120,22 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
   useEffect(() => {
     if (user?.id) {
       loadSettings();
+      loadTeamMembers();
     }
   }, [user?.id]);
+
+  const loadTeamMembers = async () => {
+    try {
+      const { data } = await supabase
+        .from('team_members')
+        .select('id, name, email')
+        .eq('status', 'active')
+        .order('name');
+      setTeamMembers((data as any) || []);
+    } catch (e) {
+      console.error('[AgentSettings] loadTeamMembers failed', e);
+    }
+  };
 
   const loadSettings = async () => {
     if (!user?.id) {
