@@ -34,6 +34,7 @@ interface AgentSettings {
   support_alert_enabled: boolean;
   support_alert_phone: string | null;
   support_alert_template: string | null;
+  producao_user_id: string | null;
 }
 
 const PROVIDERS: { id: AiProvider; label: string; iconLabel: string; placeholder: string; keyPrefix: RegExp }[] = [
@@ -104,9 +105,11 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     support_alert_enabled: false,
     support_alert_phone: null,
     support_alert_template: null,
+    producao_user_id: null,
   });
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; email: string }[]>([]);
 
   useImperativeHandle(ref, () => ({
     save: handleSave,
@@ -117,8 +120,22 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
   useEffect(() => {
     if (user?.id) {
       loadSettings();
+      loadTeamMembers();
     }
   }, [user?.id]);
+
+  const loadTeamMembers = async () => {
+    try {
+      const { data } = await supabase
+        .from('team_members')
+        .select('id, name, email')
+        .eq('status', 'active')
+        .order('name');
+      setTeamMembers((data as any) || []);
+    } catch (e) {
+      console.error('[AgentSettings] loadTeamMembers failed', e);
+    }
+  };
 
   const loadSettings = async () => {
     if (!user?.id) {
@@ -180,6 +197,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
         support_alert_enabled: (data as any).support_alert_enabled ?? false,
         support_alert_phone: (data as any).support_alert_phone ?? null,
         support_alert_template: (data as any).support_alert_template ?? null,
+        producao_user_id: (data as any).producao_user_id ?? null,
       });
     } catch (error) {
       console.error('[AgentSettings] Error loading settings:', error);
@@ -213,6 +231,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           support_alert_enabled: settings.support_alert_enabled,
           support_alert_phone: settings.support_alert_phone,
           support_alert_template: settings.support_alert_template,
+          producao_user_id: settings.producao_user_id,
           updated_at: new Date().toISOString(),
         } as any)
         .eq('id', settings.id!);
@@ -641,6 +660,25 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
                 className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500/50 disabled:opacity-50"
               />
             </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="text-xs font-medium text-slate-400 mb-1.5 block">
+              Responsável fixo de Produção (assumirá casos encaminhados)
+            </label>
+            <select
+              value={settings.producao_user_id || ''}
+              onChange={(e) => setSettings({ ...settings, producao_user_id: e.target.value || null })}
+              className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500/50"
+            >
+              <option value="">— Nenhum (chamado fica sem responsável) —</option>
+              {teamMembers.map((tm) => (
+                <option key={tm.id} value={tm.id}>{tm.name} ({tm.email})</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Toda vez que a Donatella encaminhar um chamado para um agente humano, este membro será preenchido como responsável automaticamente.
+            </p>
           </div>
 
           <details className="mt-4">

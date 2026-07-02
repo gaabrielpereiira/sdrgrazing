@@ -906,6 +906,7 @@ export type Database = {
           message_breaking_enabled: boolean
           out_of_hours_auto_reply: string | null
           out_of_hours_cooldown_minutes: number
+          producao_user_id: string | null
           response_delay_max: number
           response_delay_min: number
           route_all_to_receiver_enabled: boolean
@@ -957,6 +958,7 @@ export type Database = {
           message_breaking_enabled?: boolean
           out_of_hours_auto_reply?: string | null
           out_of_hours_cooldown_minutes?: number
+          producao_user_id?: string | null
           response_delay_max?: number
           response_delay_min?: number
           route_all_to_receiver_enabled?: boolean
@@ -1008,6 +1010,7 @@ export type Database = {
           message_breaking_enabled?: boolean
           out_of_hours_auto_reply?: string | null
           out_of_hours_cooldown_minutes?: number
+          producao_user_id?: string | null
           response_delay_max?: number
           response_delay_min?: number
           route_all_to_receiver_enabled?: boolean
@@ -1031,7 +1034,15 @@ export type Database = {
           whatsapp_phone_number_id?: string | null
           whatsapp_verify_token?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "nina_settings_producao_user_id_fkey"
+            columns: ["producao_user_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {
@@ -1271,6 +1282,89 @@ export type Database = {
             columns: ["message_id"]
             isOneToOne: false
             referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_cases: {
+        Row: {
+          categoria_suporte: string
+          causa: string | null
+          contact_id: string | null
+          conversation_id: string | null
+          created_at: string
+          grupo_suporte: string
+          id: string
+          metadata: Json
+          order_number: string | null
+          requer_agente_humano: boolean
+          responsavel_id: string | null
+          resumo: string | null
+          sentimento: string | null
+          status_resolucao: string
+          updated_at: string
+        }
+        Insert: {
+          categoria_suporte: string
+          causa?: string | null
+          contact_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          grupo_suporte: string
+          id?: string
+          metadata?: Json
+          order_number?: string | null
+          requer_agente_humano: boolean
+          responsavel_id?: string | null
+          resumo?: string | null
+          sentimento?: string | null
+          status_resolucao: string
+          updated_at?: string
+        }
+        Update: {
+          categoria_suporte?: string
+          causa?: string | null
+          contact_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          grupo_suporte?: string
+          id?: string
+          metadata?: Json
+          order_number?: string | null
+          requer_agente_humano?: boolean
+          responsavel_id?: string | null
+          resumo?: string | null
+          sentimento?: string | null
+          status_resolucao?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_cases_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_cases_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts_with_stats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_cases_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_cases_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]

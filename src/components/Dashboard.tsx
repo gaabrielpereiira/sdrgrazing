@@ -5,6 +5,7 @@ import { StatMetric } from '../types';
 import { api } from '../services/api';
 import { OnboardingBanner } from './OnboardingBanner';
 import { SystemHealthCard } from './SystemHealthCard';
+import SupportReasonsDashboard from './support/SupportReasonsDashboard';
 import { useOutletContext } from 'react-router-dom';
 
 interface OutletContext {
@@ -226,6 +227,9 @@ const Dashboard: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Structured Support Reasons Dashboard */}
+      <SupportReasonsDashboard />
 
       {/* Charts Section */}
       <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-7">

@@ -1051,15 +1051,43 @@ async function dispatchSupportAlert(supabase: any, ctx: {
 // Support intake classification (motivo + sentimento + resumo)
 // Called once after we collected order_number and issue_text.
 // ============================================================
-const SUPPORT_REASON_KEYS = ['cobranca', 'acesso', 'bug', 'duvida', 'pedido', 'outro'] as const;
-const SUPPORT_REASON_LABELS: Record<string, string> = {
-  cobranca: 'Cobrança',
-  acesso: 'Acesso',
-  bug: 'Bug',
-  duvida: 'Dúvida',
-  pedido: 'Pedido',
-  outro: 'Outro',
-};
+// Mirror of src/lib/supportCategories.ts (edge functions cannot import from src/)
+const SUPPORT_GROUP_KEYS = ['entrega', 'produto', 'pedido_pagamento', 'outros'] as const;
+type SupportGroupKey = typeof SUPPORT_GROUP_KEYS[number];
+
+interface SupportCategoryDef {
+  key: string;
+  label: string;
+  group: SupportGroupKey;
+  requerAgenteHumanoDefault: boolean;
+}
+const SUPPORT_CATEGORIES: SupportCategoryDef[] = [
+  { key: 'atraso_entrega',            label: 'Atraso na entrega',           group: 'entrega', requerAgenteHumanoDefault: true },
+  { key: 'nao_entregue',              label: 'Pedido não entregue',         group: 'entrega', requerAgenteHumanoDefault: true },
+  { key: 'endereco_incorreto',        label: 'Endereço incorreto',          group: 'entrega', requerAgenteHumanoDefault: true },
+  { key: 'dificuldade_acesso',        label: 'Dificuldade de acesso',       group: 'entrega', requerAgenteHumanoDefault: true },
+  { key: 'embalagem_danificada',      label: 'Embalagem danificada',        group: 'entrega', requerAgenteHumanoDefault: true },
+  { key: 'produto_diferente',         label: 'Produto diferente',           group: 'produto', requerAgenteHumanoDefault: true },
+  { key: 'produto_incompleto',        label: 'Produto incompleto',          group: 'produto', requerAgenteHumanoDefault: true },
+  { key: 'qualidade_abaixo_esperado', label: 'Qualidade abaixo do esperado',group: 'produto', requerAgenteHumanoDefault: true },
+  { key: 'produto_avariado',          label: 'Produto avariado',            group: 'produto', requerAgenteHumanoDefault: true },
+  { key: 'divergencia_foto_site',     label: 'Divergência foto x site',     group: 'produto', requerAgenteHumanoDefault: true },
+  { key: 'erro_pedido',               label: 'Erro no pedido',              group: 'pedido_pagamento', requerAgenteHumanoDefault: true },
+  { key: 'problema_pagamento',        label: 'Problema no pagamento',       group: 'pedido_pagamento', requerAgenteHumanoDefault: true },
+  { key: 'cancelamento',              label: 'Cancelamento',                group: 'pedido_pagamento', requerAgenteHumanoDefault: true },
+  { key: 'reembolso_troca',           label: 'Reembolso / troca',           group: 'pedido_pagamento', requerAgenteHumanoDefault: true },
+  { key: 'elogio_feedback_positivo',  label: 'Elogio / feedback positivo',  group: 'outros',  requerAgenteHumanoDefault: false },
+  { key: 'duvida_geral_pos_compra',   label: 'Dúvida geral pós-compra',     group: 'outros',  requerAgenteHumanoDefault: false },
+  { key: 'outro',                     label: 'Outro',                       group: 'outros',  requerAgenteHumanoDefault: true },
+];
+const SUPPORT_CATEGORY_KEYS = SUPPORT_CATEGORIES.map((c) => c.key);
+const CATEGORY_BY_KEY: Record<string, SupportCategoryDef> = SUPPORT_CATEGORIES.reduce(
+  (acc, c) => ({ ...acc, [c.key]: c }), {} as Record<string, SupportCategoryDef>,
+);
+function categoriesForGroup(g: SupportGroupKey): string[] {
+  return SUPPORT_CATEGORIES.filter((c) => c.group === g).map((c) => c.key);
+}
+
 const SUPPORT_SENTIMENT_KEYS = ['calmo', 'neutro', 'frustrado', 'urgente'] as const;
 const SUPPORT_SENTIMENT_LABELS: Record<string, string> = {
   calmo: 'Calmo',
@@ -1069,12 +1097,16 @@ const SUPPORT_SENTIMENT_LABELS: Record<string, string> = {
 };
 
 type SupportClassification = {
-  reason_key: string;
-  reason_label: string;
+  group_key: SupportGroupKey;
+  category_key: string;
+  category_label: string;
   sentiment_key: string;
   sentiment_label: string;
+  causa: string;
   summary: string;
   customer_message: string;
+  pede_humano: boolean;
+  intent_side_channel: 'none' | 'rastreio' | 'nota_fiscal';
 };
 
 async function classifySupportIntake(intake: {
@@ -1082,13 +1114,17 @@ async function classifySupportIntake(intake: {
   issue_text?: string | null;
 }): Promise<SupportClassification> {
   const fallback: SupportClassification = {
-    reason_key: 'outro',
-    reason_label: 'Outro',
+    group_key: 'outros',
+    category_key: 'outro',
+    category_label: 'Outro',
     sentiment_key: 'neutro',
     sentiment_label: 'Neutro',
+    causa: intake.issue_text?.slice(0, 240) || 'Motivo não identificado.',
     summary: intake.issue_text?.slice(0, 240) || 'Cliente solicitou suporte sem detalhes.',
     customer_message:
       'Recebi tudo! Já estou acionando o time da Produção pra cuidar de você. ✨ Em instantes alguém continua por aqui.',
+    pede_humano: false,
+    intent_side_channel: 'none',
   };
 
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
@@ -1097,13 +1133,25 @@ async function classifySupportIntake(intake: {
     return fallback;
   }
 
+  const matrix = SUPPORT_GROUP_KEYS.map(
+    (g) => `${g}: [${categoriesForGroup(g).join(', ')}]`,
+  ).join(' | ');
+
   const sys =
     'Você é uma assistente que classifica tickets de suporte pós-venda da Grazing Table & Co. ' +
-    'Responda APENAS um JSON válido (sem markdown) com as chaves: reason, sentiment, summary, customer_message. ' +
-    `reason ∈ [${SUPPORT_REASON_KEYS.join(', ')}]. ` +
+    'Responda APENAS um JSON válido (sem markdown) com as chaves: grupo, categoria, causa, resumo, sentiment, pede_humano, intent_side_channel, customer_message. ' +
+    `grupo ∈ [${SUPPORT_GROUP_KEYS.join(', ')}]. ` +
+    `categoria depende do grupo → ${matrix}. ` +
     `sentiment ∈ [${SUPPORT_SENTIMENT_KEYS.join(', ')}]. ` +
-    'summary: 1-2 frases curtas em PT-BR para o atendente humano. ' +
-    'customer_message: 1 mensagem curta e acolhedora em PT-BR (estilo Donatella, voz feminina, emojis sutis) confirmando que o time da Produção foi acionado.';
+    'pede_humano: true se o cliente pediu explicitamente para falar com humano/atendente, senão false. ' +
+    'intent_side_channel: use "rastreio" se a real necessidade for consultar status/rastreio do pedido; use "nota_fiscal" se for pedir nota fiscal; use "none" para qualquer outro caso de suporte real. ' +
+    'causa: 1 frase objetiva descrevendo o problema real. ' +
+    'resumo: 1-2 frases curtas em PT-BR para o atendente humano. ' +
+    'customer_message: 1 mensagem curta e acolhedora em PT-BR (estilo Donatella, voz feminina, emojis sutis). ' +
+    'Para intent_side_channel="rastreio", diga que vai verificar o status do pedido e retornar em instantes. ' +
+    'Para intent_side_channel="nota_fiscal", informe gentilmente que a nota fiscal é enviada automaticamente por e-mail no momento da compra, e peça para checar caixa/spam. ' +
+    'Para intent_side_channel="none", confirme que o time da Produção foi acionado. ' +
+    'Se não conseguir identificar com clareza, use grupo="outros" e categoria="outro".';
 
   const user = JSON.stringify({
     pedido: intake.order_number || null,
@@ -1133,19 +1181,90 @@ async function classifySupportIntake(intake: {
     const json = await res.json();
     const raw = json?.choices?.[0]?.message?.content || '';
     const parsed = JSON.parse(raw);
-    const reasonKey = SUPPORT_REASON_KEYS.includes(parsed.reason) ? parsed.reason : 'outro';
-    const sentimentKey = SUPPORT_SENTIMENT_KEYS.includes(parsed.sentiment) ? parsed.sentiment : 'neutro';
+
+    let groupKey: SupportGroupKey = (SUPPORT_GROUP_KEYS as readonly string[]).includes(parsed.grupo)
+      ? (parsed.grupo as SupportGroupKey)
+      : 'outros';
+    let categoryKey: string = SUPPORT_CATEGORY_KEYS.includes(parsed.categoria) ? parsed.categoria : 'outro';
+    // Ensure category belongs to group; if not, coerce
+    const catDef = CATEGORY_BY_KEY[categoryKey];
+    if (!catDef || catDef.group !== groupKey) {
+      // If category is valid, prefer its own group
+      if (catDef) groupKey = catDef.group;
+      else {
+        categoryKey = 'outro';
+        groupKey = 'outros';
+      }
+    }
+    const sentimentKey = (SUPPORT_SENTIMENT_KEYS as readonly string[]).includes(parsed.sentiment)
+      ? parsed.sentiment
+      : 'neutro';
+    const sideChannel: 'none' | 'rastreio' | 'nota_fiscal' =
+      parsed.intent_side_channel === 'rastreio' || parsed.intent_side_channel === 'nota_fiscal'
+        ? parsed.intent_side_channel
+        : 'none';
+
     return {
-      reason_key: reasonKey,
-      reason_label: SUPPORT_REASON_LABELS[reasonKey],
+      group_key: groupKey,
+      category_key: categoryKey,
+      category_label: CATEGORY_BY_KEY[categoryKey]?.label ?? categoryKey,
       sentiment_key: sentimentKey,
       sentiment_label: SUPPORT_SENTIMENT_LABELS[sentimentKey],
-      summary: String(parsed.summary || fallback.summary).slice(0, 400),
-      customer_message: String(parsed.customer_message || fallback.customer_message).slice(0, 400),
+      causa: String(parsed.causa || parsed.resumo || fallback.causa).slice(0, 400),
+      summary: String(parsed.resumo || fallback.summary).slice(0, 400),
+      customer_message: String(parsed.customer_message || fallback.customer_message).slice(0, 500),
+      pede_humano: parsed.pede_humano === true,
+      intent_side_channel: sideChannel,
     };
   } catch (e) {
     console.error('[SupportIntake] classification failed:', e);
     return fallback;
+  }
+}
+
+// Try to fetch a WooCommerce order status. Best-effort: returns null on any failure.
+async function fetchWooOrderStatus(supabase: any, orderNumber: string | null | undefined): Promise<{
+  status: string;
+  status_label: string;
+  tracking?: string | null;
+} | null> {
+  if (!orderNumber) return null;
+  try {
+    const { data: cred } = await supabase
+      .from('nina_settings')
+      .select('wc_site_url, wc_consumer_key, wc_consumer_secret')
+      .is('user_id', null)
+      .maybeSingle();
+    const site = cred?.wc_site_url;
+    const ck = cred?.wc_consumer_key;
+    const cs = cred?.wc_consumer_secret;
+    if (!site || !ck || !cs) return null;
+    const num = String(orderNumber).replace(/\D/g, '');
+    if (!num) return null;
+    const url = `${site.replace(/\/$/, '')}/wp-json/wc/v3/orders/${num}`;
+    const auth = 'Basic ' + btoa(`${ck}:${cs}`);
+    const r = await fetch(url, { headers: { Authorization: auth } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const STATUS_MAP: Record<string, string> = {
+      pending: 'aguardando pagamento',
+      processing: 'em processamento',
+      'on-hold': 'em espera',
+      completed: 'concluído',
+      cancelled: 'cancelado',
+      refunded: 'reembolsado',
+      failed: 'falhou',
+    };
+    const tracking =
+      j?.meta_data?.find?.((m: any) => /track|rastre/i.test(m?.key || ''))?.value || null;
+    return {
+      status: j.status,
+      status_label: STATUS_MAP[j.status] || j.status,
+      tracking: tracking ? String(tracking) : null,
+    };
+  } catch (e) {
+    console.warn('[fetchWooOrderStatus] failed:', e);
+    return null;
   }
 }
 
@@ -1301,29 +1420,12 @@ async function handleOnboarding(
     return 'handled';
   }
 
-  // STEP: await_support_issue -> classify, transfer to Produção, send friendly confirmation
+  // STEP: await_support_issue -> classify, decide, transfer if needed
   if (step === 'await_support_issue') {
     const intake = { ...(onboarding?.support_intake || {}), issue_text: userText };
 
-    // Classify motivo + sentimento via Lovable AI Gateway
+    // Classify group + category + sentiment + side-channel via Lovable AI Gateway
     const classification = await classifySupportIntake(intake);
-
-    // Resolve Produção team UUID
-    let producaoTeamId: string | null = null;
-    try {
-      const { data: prodTeam } = await supabase
-        .from('teams')
-        .select('id, name')
-        .ilike('name', 'produ%')
-        .maybeSingle();
-      producaoTeamId = prodTeam?.id || null;
-    } catch (e) {
-      console.error('[Onboarding] Failed to resolve Produção team:', e);
-    }
-
-    const reasonLabel = classification.reason_label;
-    const sentimentLabel = classification.sentiment_label;
-    const summary = classification.summary;
 
     const clientLabel =
       (contact?.name as string) ||
@@ -1331,17 +1433,148 @@ async function handleOnboarding(
       (contact?.phone_number as string) ||
       'Cliente';
 
-    // Compose tags (preserve existing)
+    // ============================================================
+    // (b) Side-channel: rastreio / nota_fiscal — resolver como Comercial, sem abrir caso
+    // ============================================================
+    if (classification.intent_side_channel === 'rastreio' || classification.intent_side_channel === 'nota_fiscal') {
+      let reply = classification.customer_message;
+      if (classification.intent_side_channel === 'rastreio') {
+        const status = await fetchWooOrderStatus(supabase, intake.order_number);
+        if (status) {
+          const trackLine = status.tracking ? `\nCódigo de rastreio: ${status.tracking}` : '';
+          reply = `Achei aqui! Seu pedido ${intake.order_number ? `#${intake.order_number} ` : ''}está *${status.status_label}*.${trackLine}\n\nQualquer dúvida, é só me chamar por aqui. 💛`;
+        } else {
+          reply = classification.customer_message ||
+            'Vou verificar o status do seu pedido e o time comercial retorna em instantes com a informação. 💛';
+        }
+      } else {
+        reply = classification.customer_message ||
+          'A nota fiscal é enviada automaticamente para o seu e-mail no momento da compra. Dá uma olhadinha na caixa de entrada e no spam, tá? Se não achar, me avisa que peço uma segunda via pro comercial. 💛';
+      }
+
+      await sendFixedText(supabase, conversation, reply, message.id);
+      await setOnboardingStep(supabase, conversation, { step: 'done', support_intake: intake });
+      return 'handled';
+    }
+
+    // ============================================================
+    // (c) requer_agente_humano — default + gatilhos transversais
+    // ============================================================
+    const catDef = CATEGORY_BY_KEY[classification.category_key];
+    let requerAgente = catDef?.requerAgenteHumanoDefault ?? true;
+    if (classification.pede_humano) requerAgente = true;
+    if (classification.sentiment_key === 'frustrado' || classification.sentiment_key === 'urgente') requerAgente = true;
+    if (classification.category_key === 'outro') requerAgente = true;
+
+    const reasonLabel = classification.category_label;
+    const sentimentLabel = classification.sentiment_label;
+    const summary = classification.summary;
+
+    // Resolve responsavel_id fixo de Produção (nina_settings.producao_user_id)
+    let responsavelId: string | null = null;
+    let producaoTeamId: string | null = null;
+    if (requerAgente) {
+      try {
+        const { data: ns } = await supabase
+          .from('nina_settings')
+          .select('producao_user_id')
+          .is('user_id', null)
+          .maybeSingle();
+        const prodUserId = (ns as any)?.producao_user_id || null;
+        if (prodUserId) {
+          const { data: tm } = await supabase
+            .from('team_members')
+            .select('id, status')
+            .eq('id', prodUserId)
+            .maybeSingle();
+          if (tm && (tm as any).status === 'active') {
+            responsavelId = (tm as any).id;
+          } else {
+            await supabase.from('notifications').insert({
+              type: 'support_producao_missing',
+              title: 'Responsável de Produção indisponível',
+              body: 'O usuário fixo de Produção configurado não está ativo. Configure em Settings → Agente.',
+              priority: 'high',
+              metadata: { producao_user_id: prodUserId, conversation_id: conversation.id },
+            });
+          }
+        } else {
+          await supabase.from('notifications').insert({
+            type: 'support_producao_missing',
+            title: 'Responsável de Produção não configurado',
+            body: 'Nenhum usuário fixo de Produção definido em Settings → Agente.',
+            priority: 'normal',
+            metadata: { conversation_id: conversation.id },
+          });
+        }
+      } catch (e) {
+        console.error('[SupportIntake] Failed to resolve producao_user_id:', e);
+      }
+
+      try {
+        const { data: prodTeam } = await supabase
+          .from('teams')
+          .select('id, name')
+          .ilike('name', 'produ%')
+          .maybeSingle();
+        producaoTeamId = (prodTeam as any)?.id || null;
+      } catch (e) {
+        console.error('[SupportIntake] Failed to resolve Produção team:', e);
+      }
+    }
+
+    // ============================================================
+    // Insert support_cases row (both paths)
+    // ============================================================
+    try {
+      await supabase.from('support_cases').insert({
+        conversation_id: conversation.id,
+        contact_id: conversation.contact_id,
+        grupo_suporte: classification.group_key,
+        categoria_suporte: classification.category_key,
+        requer_agente_humano: requerAgente,
+        status_resolucao: requerAgente ? 'encaminhado_agente' : 'resolvido_pela_ia',
+        responsavel_id: responsavelId,
+        causa: classification.causa,
+        resumo: summary,
+        sentimento: classification.sentiment_key,
+        order_number: intake.order_number || null,
+        metadata: {
+          client_label: clientLabel,
+          triggered_by: 'donatella_support_intake',
+        },
+      });
+    } catch (e) {
+      console.error('[SupportIntake] Failed to insert support_cases:', e);
+    }
+
+    // ============================================================
+    // (d) requer_agente_humano = false → IA responde direto, mantém conversa
+    // ============================================================
+    if (!requerAgente) {
+      await sendFixedText(
+        supabase,
+        conversation,
+        classification.customer_message || 'Obrigada pelo contato! Fico feliz em ajudar. 💛',
+        message.id,
+      );
+      await setOnboardingStep(supabase, conversation, { step: 'done', support_intake: intake });
+      return 'handled';
+    }
+
+    // ============================================================
+    // (e) requer_agente_humano = true → transferir para Produção
+    // ============================================================
     const existingTags = Array.isArray(conversation.tags) ? conversation.tags : [];
     const newTags = Array.from(
       new Set([
         ...existingTags,
-        `motivo:${classification.reason_key}`,
+        `motivo:${classification.category_key}`,
+        `grupo:${classification.group_key}`,
         `sentimento:${classification.sentiment_key}`,
       ]),
     );
 
-    // Update conversation: hand off to Produção
     try {
       const update: Record<string, any> = {
         status: 'human',
@@ -1350,12 +1583,12 @@ async function handleOnboarding(
         tags: newTags,
       };
       if (producaoTeamId) update.assigned_team = producaoTeamId;
+      if (responsavelId) update.assigned_user_id = responsavelId;
       await supabase.from('conversations').update(update).eq('id', conversation.id);
     } catch (routeErr) {
-      console.error('[Onboarding] Failed to route to Produção:', routeErr);
+      console.error('[SupportIntake] Failed to route to Produção:', routeErr);
     }
 
-    // Internal system note (visible in chat)
     try {
       const noteLines = [
         `🔔 Donatella transferiu para Produção`,
@@ -1375,7 +1608,8 @@ async function handleOnboarding(
           internal_note: true,
           handoff: {
             target_team: 'producao',
-            reason: classification.reason_key,
+            group: classification.group_key,
+            category: classification.category_key,
             sentiment: classification.sentiment_key,
             order_number: intake.order_number,
             summary,
@@ -1383,10 +1617,9 @@ async function handleOnboarding(
         },
       });
     } catch (e) {
-      console.error('[Onboarding] Failed to insert internal note:', e);
+      console.error('[SupportIntake] Failed to insert internal note:', e);
     }
 
-    // Notification for the team
     try {
       await supabase.from('notifications').insert({
         type: classification.sentiment_key === 'urgente' ? 'handoff_urgent' : 'handoff_requested',
@@ -1403,17 +1636,18 @@ async function handleOnboarding(
         metadata: {
           target_team_id: producaoTeamId,
           target_team_name: 'Produção',
-          reason: classification.reason_key,
+          responsavel_id: responsavelId,
+          group: classification.group_key,
+          category: classification.category_key,
           sentiment: classification.sentiment_key,
           order_number: intake.order_number,
           triggered_by: 'donatella_support_intake',
         },
       });
     } catch (notifErr) {
-      console.error('[Onboarding] Failed to insert handoff notification:', notifErr);
+      console.error('[SupportIntake] Failed to insert handoff notification:', notifErr);
     }
 
-    // Fire WhatsApp alert to on-duty number (HSM template) — non-blocking
     try {
       await dispatchSupportAlert(supabase, {
         contactId: conversation.contact_id,
@@ -1425,10 +1659,9 @@ async function handleOnboarding(
         summary,
       });
     } catch (alertErr) {
-      console.error('[Onboarding] dispatchSupportAlert failed:', alertErr);
+      console.error('[SupportIntake] dispatchSupportAlert failed:', alertErr);
     }
 
-    // Friendly confirmation to the customer
     await sendFixedText(
       supabase,
       conversation,
@@ -1436,12 +1669,10 @@ async function handleOnboarding(
       message.id,
     );
 
-    await setOnboardingStep(supabase, conversation, {
-      step: 'done',
-      support_intake: intake,
-    });
+    await setOnboardingStep(supabase, conversation, { step: 'done', support_intake: intake });
     return 'handled';
   }
+
 
   return 'continue';
 
