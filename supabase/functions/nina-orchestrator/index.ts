@@ -1051,15 +1051,43 @@ async function dispatchSupportAlert(supabase: any, ctx: {
 // Support intake classification (motivo + sentimento + resumo)
 // Called once after we collected order_number and issue_text.
 // ============================================================
-const SUPPORT_REASON_KEYS = ['cobranca', 'acesso', 'bug', 'duvida', 'pedido', 'outro'] as const;
-const SUPPORT_REASON_LABELS: Record<string, string> = {
-  cobranca: 'Cobrança',
-  acesso: 'Acesso',
-  bug: 'Bug',
-  duvida: 'Dúvida',
-  pedido: 'Pedido',
-  outro: 'Outro',
-};
+// Mirror of src/lib/supportCategories.ts (edge functions cannot import from src/)
+const SUPPORT_GROUP_KEYS = ['entrega', 'produto', 'pedido_pagamento', 'outros'] as const;
+type SupportGroupKey = typeof SUPPORT_GROUP_KEYS[number];
+
+interface SupportCategoryDef {
+  key: string;
+  label: string;
+  group: SupportGroupKey;
+  requerAgenteHumanoDefault: boolean;
+}
+const SUPPORT_CATEGORIES: SupportCategoryDef[] = [
+  { key: 'atraso_entrega',            label: 'Atraso na entrega',           group: 'entrega', requerAgenteHumanoDefault: true },
+  { key: 'nao_entregue',              label: 'Pedido não entregue',         group: 'entrega', requerAgenteHumanoDefault: true },
+  { key: 'endereco_incorreto',        label: 'Endereço incorreto',          group: 'entrega', requerAgenteHumanoDefault: true },
+  { key: 'dificuldade_acesso',        label: 'Dificuldade de acesso',       group: 'entrega', requerAgenteHumanoDefault: true },
+  { key: 'embalagem_danificada',      label: 'Embalagem danificada',        group: 'entrega', requerAgenteHumanoDefault: true },
+  { key: 'produto_diferente',         label: 'Produto diferente',           group: 'produto', requerAgenteHumanoDefault: true },
+  { key: 'produto_incompleto',        label: 'Produto incompleto',          group: 'produto', requerAgenteHumanoDefault: true },
+  { key: 'qualidade_abaixo_esperado', label: 'Qualidade abaixo do esperado',group: 'produto', requerAgenteHumanoDefault: true },
+  { key: 'produto_avariado',          label: 'Produto avariado',            group: 'produto', requerAgenteHumanoDefault: true },
+  { key: 'divergencia_foto_site',     label: 'Divergência foto x site',     group: 'produto', requerAgenteHumanoDefault: true },
+  { key: 'erro_pedido',               label: 'Erro no pedido',              group: 'pedido_pagamento', requerAgenteHumanoDefault: true },
+  { key: 'problema_pagamento',        label: 'Problema no pagamento',       group: 'pedido_pagamento', requerAgenteHumanoDefault: true },
+  { key: 'cancelamento',              label: 'Cancelamento',                group: 'pedido_pagamento', requerAgenteHumanoDefault: true },
+  { key: 'reembolso_troca',           label: 'Reembolso / troca',           group: 'pedido_pagamento', requerAgenteHumanoDefault: true },
+  { key: 'elogio_feedback_positivo',  label: 'Elogio / feedback positivo',  group: 'outros',  requerAgenteHumanoDefault: false },
+  { key: 'duvida_geral_pos_compra',   label: 'Dúvida geral pós-compra',     group: 'outros',  requerAgenteHumanoDefault: false },
+  { key: 'outro',                     label: 'Outro',                       group: 'outros',  requerAgenteHumanoDefault: true },
+];
+const SUPPORT_CATEGORY_KEYS = SUPPORT_CATEGORIES.map((c) => c.key);
+const CATEGORY_BY_KEY: Record<string, SupportCategoryDef> = SUPPORT_CATEGORIES.reduce(
+  (acc, c) => ({ ...acc, [c.key]: c }), {} as Record<string, SupportCategoryDef>,
+);
+function categoriesForGroup(g: SupportGroupKey): string[] {
+  return SUPPORT_CATEGORIES.filter((c) => c.group === g).map((c) => c.key);
+}
+
 const SUPPORT_SENTIMENT_KEYS = ['calmo', 'neutro', 'frustrado', 'urgente'] as const;
 const SUPPORT_SENTIMENT_LABELS: Record<string, string> = {
   calmo: 'Calmo',
