@@ -1854,7 +1854,153 @@ export const api = {
   },
 
   /**
-   * Sticky auto-assign: if a conversation has no responsible user and the current
+   * Aggregate structured support cases for the new dashboard.
+   * Returns period + previous-period counts by category/group + IA vs human split.
+   */
+  fetchSupportCasesSummary: async (
+    days: number = 30,
+    statusFilter: 'all' | 'resolvido_pela_ia' | 'encaminhado_agente' = 'all',
+  ): Promise<{
+    total: number;
+    resolvidoIa: number;
+    encaminhadoAgente: number;
+    byCategory: { key: string; total: number; ia: number; humano: number }[];
+    byGroup: { key: string; count: number }[];
+    growth: { category: string | null; deltaPct: number };
+  }> => {
+    const periodStart = new Date();
+    periodStart.setDate(periodStart.getDate() - days);
+    periodStart.setHours(0, 0, 0, 0);
+    const prevStart = new Date(periodStart);
+    prevStart.setDate(prevStart.getDate() - days);
+
+    try {
+      let q = supabase
+        .from('support_cases')
+        .select('categoria_suporte, grupo_suporte, status_resolucao, created_at')
+        .gte('created_at', periodStart.toISOString());
+      if (statusFilter !== 'all') q = q.eq('status_resolucao', statusFilter);
+      const { data: cur } = await q;
+      const rows = ((cur as any[]) || []);
+
+      const { data: prev } = await supabase
+        .from('support_cases')
+        .select('categoria_suporte')
+        .gte('created_at', prevStart.toISOString())
+        .lt('created_at', periodStart.toISOString());
+      const prevRows = ((prev as any[]) || []);
+
+      const total = rows.length;
+      const resolvidoIa = rows.filter((r) => r.status_resolucao === 'resolvido_pela_ia').length;
+      const encaminhadoAgente = total - resolvidoIa;
+
+      const catMap = new Map<string, { total: number; ia: number; humano: number }>();
+      const groupMap = new Map<string, number>();
+      for (const r of rows) {
+        const c = r.categoria_suporte as string;
+        const g = r.grupo_suporte as string;
+        const cur = catMap.get(c) || { total: 0, ia: 0, humano: 0 };
+        cur.total += 1;
+        if (r.status_resolucao === 'resolvido_pela_ia') cur.ia += 1;
+        else cur.humano += 1;
+        catMap.set(c, cur);
+        groupMap.set(g, (groupMap.get(g) || 0) + 1);
+      }
+      const byCategory = Array.from(catMap.entries())
+        .map(([key, v]) => ({ key, ...v }))
+        .sort((a, b) => b.total - a.total);
+      const byGroup = Array.from(groupMap.entries())
+        .map(([key, count]) => ({ key, count }))
+        .sort((a, b) => b.count - a.count);
+
+      // Growth: max delta % category vs previous period
+      const prevMap = new Map<string, number>();
+      for (const r of prevRows) {
+        const c = r.categoria_suporte as string;
+        prevMap.set(c, (prevMap.get(c) || 0) + 1);
+      }
+      let growthCat: string | null = null;
+      let growthDelta = 0;
+      for (const { key, total: cur } of byCategory) {
+        const p = prevMap.get(key) || 0;
+        const delta = p === 0 ? (cur > 0 ? 100 : 0) : ((cur - p) / p) * 100;
+        if (delta > growthDelta) {
+          growthDelta = delta;
+          growthCat = key;
+        }
+      }
+
+      return {
+        total,
+        resolvidoIa,
+        encaminhadoAgente,
+        byCategory,
+        byGroup,
+        growth: { category: growthCat, deltaPct: Math.round(growthDelta) },
+      };
+    } catch (e) {
+      console.error('[API] fetchSupportCasesSummary failed:', e);
+      return {
+        total: 0,
+        resolvidoIa: 0,
+        encaminhadoAgente: 0,
+        byCategory: [],
+        byGroup: [],
+        growth: { category: null, deltaPct: 0 },
+      };
+    }
+  },
+
+  /** Paginated list of support cases (with responsible name) for the dashboard table. */
+  fetchSupportCasesList: async (
+    days: number = 30,
+    statusFilter: 'all' | 'resolvido_pela_ia' | 'encaminhado_agente' = 'all',
+    page: number = 0,
+    pageSize: number = 20,
+  ): Promise<{
+    rows: Array<{
+      id: string;
+      created_at: string;
+      categoria_suporte: string;
+      grupo_suporte: string;
+      responsavel_name: string | null;
+      resumo: string | null;
+      sentimento: string | null;
+      status_resolucao: string;
+    }>;
+    total: number;
+  }> => {
+    const periodStart = new Date();
+    periodStart.setDate(periodStart.getDate() - days);
+    periodStart.setHours(0, 0, 0, 0);
+    try {
+      let q = supabase
+        .from('support_cases')
+        .select(
+          'id, created_at, categoria_suporte, grupo_suporte, responsavel_id, resumo, sentimento, status_resolucao, responsavel:team_members(name)',
+          { count: 'exact' },
+        )
+        .gte('created_at', periodStart.toISOString())
+        .order('created_at', { ascending: false })
+        .range(page * pageSize, page * pageSize + pageSize - 1);
+      if (statusFilter !== 'all') q = q.eq('status_resolucao', statusFilter);
+      const { data, count } = await q;
+      const rows = ((data as any[]) || []).map((r) => ({
+        id: r.id,
+        created_at: r.created_at,
+        categoria_suporte: r.categoria_suporte,
+        grupo_suporte: r.grupo_suporte,
+        responsavel_name: r.responsavel?.name || null,
+        resumo: r.resumo,
+        sentimento: r.sentimento,
+        status_resolucao: r.status_resolucao,
+      }));
+      return { rows, total: count || 0 };
+    } catch (e) {
+      console.error('[API] fetchSupportCasesList failed:', e);
+      return { rows: [], total: 0 };
+    }
+  },
    * sender is mapped to a team_member, become the responsible. Safe to call on
    * every outgoing human message — it's a no-op when already assigned.
    */
