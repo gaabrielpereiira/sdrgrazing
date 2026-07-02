@@ -662,6 +662,25 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
             </div>
           </div>
 
+          <div className="mt-4">
+            <label className="text-xs font-medium text-slate-400 mb-1.5 block">
+              Responsável fixo de Produção (assumirá casos encaminhados)
+            </label>
+            <select
+              value={settings.producao_user_id || ''}
+              onChange={(e) => setSettings({ ...settings, producao_user_id: e.target.value || null })}
+              className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500/50"
+            >
+              <option value="">— Nenhum (chamado fica sem responsável) —</option>
+              {teamMembers.map((tm) => (
+                <option key={tm.id} value={tm.id}>{tm.name} ({tm.email})</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Toda vez que a Donatella encaminhar um chamado para um agente humano, este membro será preenchido como responsável automaticamente.
+            </p>
+          </div>
+
           <details className="mt-4">
             <summary className="text-xs text-rose-400 cursor-pointer hover:text-rose-300 flex items-center gap-2">
               <Info className="w-3.5 h-3.5" /> Como criar o template na aba WhatsApp Templates
