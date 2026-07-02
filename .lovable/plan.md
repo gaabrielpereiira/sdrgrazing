@@ -1,67 +1,111 @@
 
 ## Objetivo
 
-Quando a Donatella transferir uma conversa para o time de **Produção** (handoff de suporte), disparar **imediatamente** uma mensagem WhatsApp via template HSM aprovado para **um número fixo de plantão**, contendo as informações do chamado.
+Transformar o registro de chamados de suporte da Donatella numa estrutura formal, com **grupo + categoria fechados**, decisão explícita entre "resolvido pela IA" e "encaminhado a agente humano", responsável fixo de Produção, e um dashboard novo de Motivos de Suporte.
 
-## 1. Configuração (Settings → Agente)
+---
 
-Adicionar nova seção **"Alertas de Suporte"** em `AgentSettings.tsx` com três campos persistidos em `nina_settings`:
+## 1. Banco de dados
 
-- `support_alert_enabled` (boolean) — liga/desliga
-- `support_alert_phone` (text) — número E.164 do plantão (ex: `5511999999999`)
-- `support_alert_template` (text) — nome do template HSM aprovado (ex: `novo_chamado_suporte`)
+Hoje o "chamado de suporte" não é uma linha própria — é a `conversation` com `queue='support'` + tags `motivo:*` + notificação. Isso limita relatórios. Vou criar uma tabela dedicada.
 
-Mostrar dica explicando que o template precisa ter 3 variáveis na ordem: `{{1}}` nome do cliente, `{{2}}` número do pedido (ou "—"), `{{3}}` motivo/resumo do problema.
+**Nova tabela `public.support_cases`:**
 
-## 2. Template HSM (criação manual via UI existente)
+- `id uuid pk`
+- `conversation_id uuid` (FK conversations)
+- `contact_id uuid` (FK contacts)
+- `grupo_suporte text NOT NULL` — CHECK em `('entrega','produto','pedido_pagamento','outros')`
+- `categoria_suporte text NOT NULL` — CHECK nos 17 valores da lista fechada
+- `requer_agente_humano boolean NOT NULL`
+- `status_resolucao text NOT NULL` — CHECK `('resolvido_pela_ia','encaminhado_agente')`
+- `responsavel_id uuid NULL` — FK `team_members(id)` (usuário de Produção)
+- `causa text`, `resumo text`, `sentimento text`
+- `order_number text`, `metadata jsonb`
+- `created_at`, `updated_at` + trigger `updated_at`
 
-O usuário criará o template em **WhatsApp Templates** (já existe `WhatsAppTemplates.tsx` + `submit-whatsapp-template`). Sugestão de corpo:
+CHECK composto extra: garante que `categoria_suporte` pertence ao `grupo_suporte` correto (função `public.support_category_belongs_to_group`).
 
-```
-🚨 Novo chamado de suporte
+RLS: `authenticated` acessa tudo (padrão single-tenant do projeto). GRANTs para `authenticated` e `service_role`.
 
-Cliente: {{1}}
-Pedido: {{2}}
-Motivo: {{3}}
+Adicionar ao publisher `supabase_realtime`.
 
-Acesse o painel para atender.
-```
+**Nova coluna em `nina_settings`:**
+- `producao_user_id uuid` — referência ao `team_members.id` fixo de Produção (o `responsavel_id` default).
 
-Categoria: `UTILITY`. Sem ação a nosso lado nesse passo — apenas documentar no campo de ajuda.
+---
 
-## 3. Gatilho no `nina-orchestrator`
+## 2. Lógica da Donatella
 
-No fluxo `handleSupportIntake` (onde hoje já fazemos transferência para Produção, system note, tag e notificação interna), adicionar uma chamada extra **após** a transferência ser concluída:
+Editar `classifySupportIntake` em `supabase/functions/nina-orchestrator/index.ts`:
 
-- Ler `nina_settings.support_alert_enabled/phone/template`
-- Se habilitado e número/template preenchidos, enfileirar 1 registro em `send_queue` com:
-  - `to_phone` = número do plantão
-  - `type` = `template`
-  - `payload` = `{ template_name, language: 'pt_BR', components: [{ type:'body', parameters:[{type:'text', text: contactName}, {type:'text', text: orderNumber||'—'}, {type:'text', text: reasonSummary}] }] }`
-  - `conversation_id` = null (mensagem fora da conversa do cliente)
-  - `priority` = high
+**a) Novo prompt** pedindo JSON com: `grupo`, `categoria`, `causa`, `resumo`, `sentiment`, `intent_side_channel` (enum: `none|rastreio|nota_fiscal`), `pede_humano` (bool), `customer_message`. Enums de `grupo` e `categoria` fechados, e no prompt a matriz grupo→categorias.
 
-O `whatsapp-sender` já existente consome `send_queue` e sabe enviar template — não precisa alterar.
+**b) Desvio pré-suporte:** se `intent_side_channel !== 'none'`, NÃO abrir caso. Tratar como Comercial:
+- `rastreio` → chamar helper novo `fetchOrderStatusFromWoo(orderNumber)` (usa `wc-products`/Woo API já configurada) e responder direto ao cliente. Se não achar → responder que o time comercial retornará.
+- `nota_fiscal` → responder que a NF é enviada automaticamente no momento da compra e pedir para o cliente checar o e-mail; oferecer reencaminhar via comercial se não achar.
+Em ambos os casos: **sem `support_cases`**, sem transferência para Produção, sem alert WhatsApp; mantém `queue='sales'`.
 
-## 4. Tolerância a falhas
+**c) Aplicar `requer_agente_humano`:**
+- default do mapa categoria→bool (só `elogio_feedback_positivo` e `duvida_geral_pos_compra` são `false`)
+- forçar `true` se `pede_humano === true`, sentimento ∈ `frustrado|urgente`, ou fallback categoria `outro`.
 
-- Se número/template não configurados → apenas log, não interrompe handoff.
-- Se `whatsapp-sender` falhar (template não aprovado, número inválido) → registra em `notifications` (`type: 'support_alert_failed'`) para o admin ver no sino.
-- Cooldown leve: não disparar 2x para o mesmo `conversation_id` em menos de 10 min (evita duplicado se a IA reclassificar).
+**d) Se `requer_agente_humano === false`:**
+- inserir `support_cases` com `status_resolucao='resolvido_pela_ia'`, `responsavel_id=null`
+- Donatella responde direto (`customer_message`), conversa permanece com ela (não muda `queue`, não vai pra Produção)
+- sem alerta WhatsApp
+
+**e) Se `requer_agente_humano === true`:**
+- ler `nina_settings.producao_user_id`; validar em `team_members` (status `active`). Se ativo → `responsavel_id = producao_user_id`; senão → `responsavel_id = null` + `notifications` `type='support_producao_missing'`.
+- inserir `support_cases` com `status_resolucao='encaminhado_agente'`
+- manter o fluxo atual: transfer para queue `support`, tags `motivo:<categoria>`/`sentimento:*`/`grupo:*`, system note, notification, `dispatchSupportAlert` (template WhatsApp já existente).
+
+---
+
+## 3. UI — Settings
+
+Em `src/components/settings/AgentSettings.tsx`, dentro da seção de Alertas de Suporte, adicionar **Select "Responsável fixo de Produção"** carregado de `team_members` (status active), persistindo `producao_user_id`.
+
+---
+
+## 4. Dashboard — nova aba "Motivos de Suporte"
+
+Novo componente `src/components/support/SupportReasonsDashboard.tsx`, plugado no `Dashboard.tsx` como **nova seção abaixo da atual "Principais motivos de suporte"** (não substituir a existente para não quebrar métricas antigas — a nova opera sobre `support_cases`).
+
+Elementos, todos com paleta/cards já usados:
+
+1. **Filtros:** período (7/30/90d/custom com date pickers) + segmented control `status_resolucao` (todos / resolvido_pela_ia / encaminhado_agente).
+2. **Barras horizontais** por `categoria_suporte`, ordenado desc. Cor: verde se maioria dos casos daquela categoria foi resolvida pela IA, âmbar/rosa se encaminhada. Ícone `Bot` vs `User`.
+3. **Cards de grupo** (4 cards ou donut com Recharts `PieChart`) — `entrega`, `produto`, `pedido_pagamento`, `outros` com contagem + %.
+4. **Card KPI** "IA vs Humano" — 2 números grandes + barra 100% stacked.
+5. **Card "Maior crescimento"** — compara período atual vs período anterior de mesmo tamanho; destaca a categoria com maior delta % (`TrendingUp`).
+6. **Tabela** com colunas: data, categoria (label PT-BR), responsável (join `team_members.name`), resumo, sentimento (badge), status (badge). Paginação simples 20/pg.
+
+Dados via `src/services/api.ts` — novas funções `fetchSupportCasesSummary(range, statusFilter)` e `fetchSupportCasesList(range, statusFilter, page)` que consultam `support_cases` + join `team_members`.
+
+Labels em `src/lib/supportReasons.ts`: adicionar `SUPPORT_GROUPS` e `SUPPORT_CATEGORIES` (17 chaves com label PT-BR + grupo pai + `requerAgenteDefault`), reutilizados no orchestrator via constante compartilhada duplicada no edge function (não dá import cross-boundary).
+
+---
 
 ## 5. Detalhes técnicos
 
-**Arquivos tocados:**
-- `supabase/functions/nina-orchestrator/index.ts` — função `dispatchSupportAlert(settings, contact, order, reason)` chamada no final do handoff.
-- `src/components/settings/AgentSettings.tsx` — nova seção UI + persistência dos 3 campos.
-- Migration: `ALTER TABLE nina_settings ADD COLUMN support_alert_enabled boolean DEFAULT false, ADD COLUMN support_alert_phone text, ADD COLUMN support_alert_template text;`
-- `src/integrations/supabase/types.ts` regenera automaticamente.
+**Arquivos criados:**
+- `supabase/migrations/<ts>_create_support_cases.sql` — tabela + CHECK + trigger + coluna `producao_user_id` + publisher
+- `src/components/support/SupportReasonsDashboard.tsx`
+- `src/lib/supportCategories.ts` — matriz canônica
 
-**Sem alterações em:**
-- `whatsapp-sender` (já processa template via `send_queue`)
-- Schema de `send_queue` (já suporta `type='template'` e payload livre)
-- Configuração de webhook / Meta
+**Arquivos editados:**
+- `supabase/functions/nina-orchestrator/index.ts` — `classifySupportIntake` (novo schema), branch de rastreio/NF, `insert support_cases`, resolução do `responsavel_id`
+- `src/components/settings/AgentSettings.tsx` — select de responsável de Produção
+- `src/components/Dashboard.tsx` — inclusão da nova seção
+- `src/services/api.ts` — funções `fetchSupportCasesSummary`, `fetchSupportCasesList`
+- `src/integrations/supabase/types.ts` — regenera automaticamente
+
+**Sem alterações em:** `whatsapp-sender`, schema de `send_queue`, template HSM já criado, Meta config, `useConversations`, kanban.
+
+**Compatibilidade:** casos abertos antes da migration continuam funcionando (nada quebra); apenas não aparecem no novo dashboard.
+
+---
 
 ## Resultado esperado
 
-Assim que a Donatella concluir a triagem de suporte e transferir para Produção, em menos de ~5 s o número de plantão recebe no WhatsApp uma mensagem padronizada com cliente, pedido e motivo — sem depender de ninguém estar olhando o painel.
+Cada chamado passa a ter classificação estruturada e determinística, o responsável de Produção é preenchido automaticamente, dúvidas de rastreio/NF param de virar "suporte" desnecessariamente, e o dashboard mostra volume por categoria/grupo, % IA vs humano, crescimento e detalhe caso a caso.
