@@ -34,6 +34,7 @@ interface AgentSettings {
   support_alert_enabled: boolean;
   support_alert_phone: string | null;
   support_alert_template: string | null;
+  producao_user_id: string | null;
 }
 
 const PROVIDERS: { id: AiProvider; label: string; iconLabel: string; placeholder: string; keyPrefix: RegExp }[] = [
