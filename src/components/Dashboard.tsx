@@ -5,6 +5,7 @@ import { StatMetric } from '../types';
 import { api } from '../services/api';
 import { OnboardingBanner } from './OnboardingBanner';
 import { SystemHealthCard } from './SystemHealthCard';
+import SupportReasonsDashboard from './support/SupportReasonsDashboard';
 import { useOutletContext } from 'react-router-dom';
 
 interface OutletContext {
