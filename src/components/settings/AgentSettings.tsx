@@ -182,6 +182,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
         support_alert_enabled: (data as any).support_alert_enabled ?? false,
         support_alert_phone: (data as any).support_alert_phone ?? null,
         support_alert_template: (data as any).support_alert_template ?? null,
+        producao_user_id: (data as any).producao_user_id ?? null,
       });
     } catch (error) {
       console.error('[AgentSettings] Error loading settings:', error);
