@@ -1420,29 +1420,12 @@ async function handleOnboarding(
     return 'handled';
   }
 
-  // STEP: await_support_issue -> classify, transfer to Produção, send friendly confirmation
+  // STEP: await_support_issue -> classify, decide, transfer if needed
   if (step === 'await_support_issue') {
     const intake = { ...(onboarding?.support_intake || {}), issue_text: userText };
 
-    // Classify motivo + sentimento via Lovable AI Gateway
+    // Classify group + category + sentiment + side-channel via Lovable AI Gateway
     const classification = await classifySupportIntake(intake);
-
-    // Resolve Produção team UUID
-    let producaoTeamId: string | null = null;
-    try {
-      const { data: prodTeam } = await supabase
-        .from('teams')
-        .select('id, name')
-        .ilike('name', 'produ%')
-        .maybeSingle();
-      producaoTeamId = prodTeam?.id || null;
-    } catch (e) {
-      console.error('[Onboarding] Failed to resolve Produção team:', e);
-    }
-
-    const reasonLabel = classification.reason_label;
-    const sentimentLabel = classification.sentiment_label;
-    const summary = classification.summary;
 
     const clientLabel =
       (contact?.name as string) ||
@@ -1450,17 +1433,148 @@ async function handleOnboarding(
       (contact?.phone_number as string) ||
       'Cliente';
 
-    // Compose tags (preserve existing)
+    // ============================================================
+    // (b) Side-channel: rastreio / nota_fiscal — resolver como Comercial, sem abrir caso
+    // ============================================================
+    if (classification.intent_side_channel === 'rastreio' || classification.intent_side_channel === 'nota_fiscal') {
+      let reply = classification.customer_message;
+      if (classification.intent_side_channel === 'rastreio') {
+        const status = await fetchWooOrderStatus(supabase, intake.order_number);
+        if (status) {
+          const trackLine = status.tracking ? `\nCódigo de rastreio: ${status.tracking}` : '';
+          reply = `Achei aqui! Seu pedido ${intake.order_number ? `#${intake.order_number} ` : ''}está *${status.status_label}*.${trackLine}\n\nQualquer dúvida, é só me chamar por aqui. 💛`;
+        } else {
+          reply = classification.customer_message ||
+            'Vou verificar o status do seu pedido e o time comercial retorna em instantes com a informação. 💛';
+        }
+      } else {
+        reply = classification.customer_message ||
+          'A nota fiscal é enviada automaticamente para o seu e-mail no momento da compra. Dá uma olhadinha na caixa de entrada e no spam, tá? Se não achar, me avisa que peço uma segunda via pro comercial. 💛';
+      }
+
+      await sendFixedText(supabase, conversation, reply, message.id);
+      await setOnboardingStep(supabase, conversation, { step: 'done', support_intake: intake });
+      return 'handled';
+    }
+
+    // ============================================================
+    // (c) requer_agente_humano — default + gatilhos transversais
+    // ============================================================
+    const catDef = CATEGORY_BY_KEY[classification.category_key];
+    let requerAgente = catDef?.requerAgenteHumanoDefault ?? true;
+    if (classification.pede_humano) requerAgente = true;
+    if (classification.sentiment_key === 'frustrado' || classification.sentiment_key === 'urgente') requerAgente = true;
+    if (classification.category_key === 'outro') requerAgente = true;
+
+    const reasonLabel = classification.category_label;
+    const sentimentLabel = classification.sentiment_label;
+    const summary = classification.summary;
+
+    // Resolve responsavel_id fixo de Produção (nina_settings.producao_user_id)
+    let responsavelId: string | null = null;
+    let producaoTeamId: string | null = null;
+    if (requerAgente) {
+      try {
+        const { data: ns } = await supabase
+          .from('nina_settings')
+          .select('producao_user_id')
+          .is('user_id', null)
+          .maybeSingle();
+        const prodUserId = (ns as any)?.producao_user_id || null;
+        if (prodUserId) {
+          const { data: tm } = await supabase
+            .from('team_members')
+            .select('id, status')
+            .eq('id', prodUserId)
+            .maybeSingle();
+          if (tm && (tm as any).status === 'active') {
+            responsavelId = (tm as any).id;
+          } else {
+            await supabase.from('notifications').insert({
+              type: 'support_producao_missing',
+              title: 'Responsável de Produção indisponível',
+              body: 'O usuário fixo de Produção configurado não está ativo. Configure em Settings → Agente.',
+              priority: 'high',
+              metadata: { producao_user_id: prodUserId, conversation_id: conversation.id },
+            });
+          }
+        } else {
+          await supabase.from('notifications').insert({
+            type: 'support_producao_missing',
+            title: 'Responsável de Produção não configurado',
+            body: 'Nenhum usuário fixo de Produção definido em Settings → Agente.',
+            priority: 'normal',
+            metadata: { conversation_id: conversation.id },
+          });
+        }
+      } catch (e) {
+        console.error('[SupportIntake] Failed to resolve producao_user_id:', e);
+      }
+
+      try {
+        const { data: prodTeam } = await supabase
+          .from('teams')
+          .select('id, name')
+          .ilike('name', 'produ%')
+          .maybeSingle();
+        producaoTeamId = (prodTeam as any)?.id || null;
+      } catch (e) {
+        console.error('[SupportIntake] Failed to resolve Produção team:', e);
+      }
+    }
+
+    // ============================================================
+    // Insert support_cases row (both paths)
+    // ============================================================
+    try {
+      await supabase.from('support_cases').insert({
+        conversation_id: conversation.id,
+        contact_id: conversation.contact_id,
+        grupo_suporte: classification.group_key,
+        categoria_suporte: classification.category_key,
+        requer_agente_humano: requerAgente,
+        status_resolucao: requerAgente ? 'encaminhado_agente' : 'resolvido_pela_ia',
+        responsavel_id: responsavelId,
+        causa: classification.causa,
+        resumo: summary,
+        sentimento: classification.sentiment_key,
+        order_number: intake.order_number || null,
+        metadata: {
+          client_label: clientLabel,
+          triggered_by: 'donatella_support_intake',
+        },
+      });
+    } catch (e) {
+      console.error('[SupportIntake] Failed to insert support_cases:', e);
+    }
+
+    // ============================================================
+    // (d) requer_agente_humano = false → IA responde direto, mantém conversa
+    // ============================================================
+    if (!requerAgente) {
+      await sendFixedText(
+        supabase,
+        conversation,
+        classification.customer_message || 'Obrigada pelo contato! Fico feliz em ajudar. 💛',
+        message.id,
+      );
+      await setOnboardingStep(supabase, conversation, { step: 'done', support_intake: intake });
+      return 'handled';
+    }
+
+    // ============================================================
+    // (e) requer_agente_humano = true → transferir para Produção
+    // ============================================================
     const existingTags = Array.isArray(conversation.tags) ? conversation.tags : [];
     const newTags = Array.from(
       new Set([
         ...existingTags,
-        `motivo:${classification.reason_key}`,
+        `motivo:${classification.category_key}`,
+        `grupo:${classification.group_key}`,
         `sentimento:${classification.sentiment_key}`,
       ]),
     );
 
-    // Update conversation: hand off to Produção
     try {
       const update: Record<string, any> = {
         status: 'human',
@@ -1469,12 +1583,12 @@ async function handleOnboarding(
         tags: newTags,
       };
       if (producaoTeamId) update.assigned_team = producaoTeamId;
+      if (responsavelId) update.assigned_user_id = responsavelId;
       await supabase.from('conversations').update(update).eq('id', conversation.id);
     } catch (routeErr) {
-      console.error('[Onboarding] Failed to route to Produção:', routeErr);
+      console.error('[SupportIntake] Failed to route to Produção:', routeErr);
     }
 
-    // Internal system note (visible in chat)
     try {
       const noteLines = [
         `🔔 Donatella transferiu para Produção`,
@@ -1494,7 +1608,8 @@ async function handleOnboarding(
           internal_note: true,
           handoff: {
             target_team: 'producao',
-            reason: classification.reason_key,
+            group: classification.group_key,
+            category: classification.category_key,
             sentiment: classification.sentiment_key,
             order_number: intake.order_number,
             summary,
@@ -1502,10 +1617,9 @@ async function handleOnboarding(
         },
       });
     } catch (e) {
-      console.error('[Onboarding] Failed to insert internal note:', e);
+      console.error('[SupportIntake] Failed to insert internal note:', e);
     }
 
-    // Notification for the team
     try {
       await supabase.from('notifications').insert({
         type: classification.sentiment_key === 'urgente' ? 'handoff_urgent' : 'handoff_requested',
@@ -1522,17 +1636,18 @@ async function handleOnboarding(
         metadata: {
           target_team_id: producaoTeamId,
           target_team_name: 'Produção',
-          reason: classification.reason_key,
+          responsavel_id: responsavelId,
+          group: classification.group_key,
+          category: classification.category_key,
           sentiment: classification.sentiment_key,
           order_number: intake.order_number,
           triggered_by: 'donatella_support_intake',
         },
       });
     } catch (notifErr) {
-      console.error('[Onboarding] Failed to insert handoff notification:', notifErr);
+      console.error('[SupportIntake] Failed to insert handoff notification:', notifErr);
     }
 
-    // Fire WhatsApp alert to on-duty number (HSM template) — non-blocking
     try {
       await dispatchSupportAlert(supabase, {
         contactId: conversation.contact_id,
@@ -1544,10 +1659,9 @@ async function handleOnboarding(
         summary,
       });
     } catch (alertErr) {
-      console.error('[Onboarding] dispatchSupportAlert failed:', alertErr);
+      console.error('[SupportIntake] dispatchSupportAlert failed:', alertErr);
     }
 
-    // Friendly confirmation to the customer
     await sendFixedText(
       supabase,
       conversation,
@@ -1555,12 +1669,10 @@ async function handleOnboarding(
       message.id,
     );
 
-    await setOnboardingStep(supabase, conversation, {
-      step: 'done',
-      support_intake: intake,
-    });
+    await setOnboardingStep(supabase, conversation, { step: 'done', support_intake: intake });
     return 'handled';
   }
+
 
   return 'continue';
 
