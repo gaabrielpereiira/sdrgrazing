@@ -2001,6 +2001,9 @@ export const api = {
       return { rows: [], total: 0 };
     }
   },
+
+  /**
+   * Sticky auto-assign: if a conversation has no responsible user and the current
    * sender is mapped to a team_member, become the responsible. Safe to call on
    * every outgoing human message — it's a no-op when already assigned.
    */
