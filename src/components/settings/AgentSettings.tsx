@@ -216,6 +216,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           support_alert_enabled: settings.support_alert_enabled,
           support_alert_phone: settings.support_alert_phone,
           support_alert_template: settings.support_alert_template,
+          producao_user_id: settings.producao_user_id,
           updated_at: new Date().toISOString(),
         } as any)
         .eq('id', settings.id!);
