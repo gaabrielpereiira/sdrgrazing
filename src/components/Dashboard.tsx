@@ -228,6 +228,9 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Structured Support Reasons Dashboard */}
+      <SupportReasonsDashboard />
+
       {/* Charts Section */}
       <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-7">
         {/* Main Chart */}
