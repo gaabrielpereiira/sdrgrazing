@@ -1109,14 +1109,35 @@ async function classifySupportIntake(intake: {
   order_number?: string | null;
   issue_text?: string | null;
 }): Promise<SupportClassification> {
+type SupportClassification = {
+  group_key: SupportGroupKey;
+  category_key: string;
+  category_label: string;
+  sentiment_key: string;
+  sentiment_label: string;
+  causa: string;
+  summary: string;
+  customer_message: string;
+  pede_humano: boolean;
+  intent_side_channel: 'none' | 'rastreio' | 'nota_fiscal';
+};
+
+async function classifySupportIntake(intake: {
+  order_number?: string | null;
+  issue_text?: string | null;
+}): Promise<SupportClassification> {
   const fallback: SupportClassification = {
-    reason_key: 'outro',
-    reason_label: 'Outro',
+    group_key: 'outros',
+    category_key: 'outro',
+    category_label: 'Outro',
     sentiment_key: 'neutro',
     sentiment_label: 'Neutro',
+    causa: intake.issue_text?.slice(0, 240) || 'Motivo não identificado.',
     summary: intake.issue_text?.slice(0, 240) || 'Cliente solicitou suporte sem detalhes.',
     customer_message:
       'Recebi tudo! Já estou acionando o time da Produção pra cuidar de você. ✨ Em instantes alguém continua por aqui.',
+    pede_humano: false,
+    intent_side_channel: 'none',
   };
 
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
@@ -1125,13 +1146,25 @@ async function classifySupportIntake(intake: {
     return fallback;
   }
 
+  const matrix = SUPPORT_GROUP_KEYS.map(
+    (g) => `${g}: [${categoriesForGroup(g).join(', ')}]`,
+  ).join(' | ');
+
   const sys =
     'Você é uma assistente que classifica tickets de suporte pós-venda da Grazing Table & Co. ' +
-    'Responda APENAS um JSON válido (sem markdown) com as chaves: reason, sentiment, summary, customer_message. ' +
-    `reason ∈ [${SUPPORT_REASON_KEYS.join(', ')}]. ` +
+    'Responda APENAS um JSON válido (sem markdown) com as chaves: grupo, categoria, causa, resumo, sentiment, pede_humano, intent_side_channel, customer_message. ' +
+    `grupo ∈ [${SUPPORT_GROUP_KEYS.join(', ')}]. ` +
+    `categoria depende do grupo → ${matrix}. ` +
     `sentiment ∈ [${SUPPORT_SENTIMENT_KEYS.join(', ')}]. ` +
-    'summary: 1-2 frases curtas em PT-BR para o atendente humano. ' +
-    'customer_message: 1 mensagem curta e acolhedora em PT-BR (estilo Donatella, voz feminina, emojis sutis) confirmando que o time da Produção foi acionado.';
+    'pede_humano: true se o cliente pediu explicitamente para falar com humano/atendente, senão false. ' +
+    'intent_side_channel: use "rastreio" se a real necessidade for consultar status/rastreio do pedido; use "nota_fiscal" se for pedir nota fiscal; use "none" para qualquer outro caso de suporte real. ' +
+    'causa: 1 frase objetiva descrevendo o problema real. ' +
+    'resumo: 1-2 frases curtas em PT-BR para o atendente humano. ' +
+    'customer_message: 1 mensagem curta e acolhedora em PT-BR (estilo Donatella, voz feminina, emojis sutis). ' +
+    'Para intent_side_channel="rastreio", diga que vai verificar o status do pedido e retornar em instantes. ' +
+    'Para intent_side_channel="nota_fiscal", informe gentilmente que a nota fiscal é enviada automaticamente por e-mail no momento da compra, e peça para checar caixa/spam. ' +
+    'Para intent_side_channel="none", confirme que o time da Produção foi acionado. ' +
+    'Se não conseguir identificar com clareza, use grupo="outros" e categoria="outro".';
 
   const user = JSON.stringify({
     pedido: intake.order_number || null,
@@ -1161,19 +1194,90 @@ async function classifySupportIntake(intake: {
     const json = await res.json();
     const raw = json?.choices?.[0]?.message?.content || '';
     const parsed = JSON.parse(raw);
-    const reasonKey = SUPPORT_REASON_KEYS.includes(parsed.reason) ? parsed.reason : 'outro';
-    const sentimentKey = SUPPORT_SENTIMENT_KEYS.includes(parsed.sentiment) ? parsed.sentiment : 'neutro';
+
+    let groupKey: SupportGroupKey = (SUPPORT_GROUP_KEYS as readonly string[]).includes(parsed.grupo)
+      ? (parsed.grupo as SupportGroupKey)
+      : 'outros';
+    let categoryKey: string = SUPPORT_CATEGORY_KEYS.includes(parsed.categoria) ? parsed.categoria : 'outro';
+    // Ensure category belongs to group; if not, coerce
+    const catDef = CATEGORY_BY_KEY[categoryKey];
+    if (!catDef || catDef.group !== groupKey) {
+      // If category is valid, prefer its own group
+      if (catDef) groupKey = catDef.group;
+      else {
+        categoryKey = 'outro';
+        groupKey = 'outros';
+      }
+    }
+    const sentimentKey = (SUPPORT_SENTIMENT_KEYS as readonly string[]).includes(parsed.sentiment)
+      ? parsed.sentiment
+      : 'neutro';
+    const sideChannel: 'none' | 'rastreio' | 'nota_fiscal' =
+      parsed.intent_side_channel === 'rastreio' || parsed.intent_side_channel === 'nota_fiscal'
+        ? parsed.intent_side_channel
+        : 'none';
+
     return {
-      reason_key: reasonKey,
-      reason_label: SUPPORT_REASON_LABELS[reasonKey],
+      group_key: groupKey,
+      category_key: categoryKey,
+      category_label: CATEGORY_BY_KEY[categoryKey]?.label ?? categoryKey,
       sentiment_key: sentimentKey,
       sentiment_label: SUPPORT_SENTIMENT_LABELS[sentimentKey],
-      summary: String(parsed.summary || fallback.summary).slice(0, 400),
-      customer_message: String(parsed.customer_message || fallback.customer_message).slice(0, 400),
+      causa: String(parsed.causa || parsed.resumo || fallback.causa).slice(0, 400),
+      summary: String(parsed.resumo || fallback.summary).slice(0, 400),
+      customer_message: String(parsed.customer_message || fallback.customer_message).slice(0, 500),
+      pede_humano: parsed.pede_humano === true,
+      intent_side_channel: sideChannel,
     };
   } catch (e) {
     console.error('[SupportIntake] classification failed:', e);
     return fallback;
+  }
+}
+
+// Try to fetch a WooCommerce order status. Best-effort: returns null on any failure.
+async function fetchWooOrderStatus(supabase: any, orderNumber: string | null | undefined): Promise<{
+  status: string;
+  status_label: string;
+  tracking?: string | null;
+} | null> {
+  if (!orderNumber) return null;
+  try {
+    const { data: cred } = await supabase
+      .from('nina_settings')
+      .select('wc_site_url, wc_consumer_key, wc_consumer_secret')
+      .is('user_id', null)
+      .maybeSingle();
+    const site = cred?.wc_site_url;
+    const ck = cred?.wc_consumer_key;
+    const cs = cred?.wc_consumer_secret;
+    if (!site || !ck || !cs) return null;
+    const num = String(orderNumber).replace(/\D/g, '');
+    if (!num) return null;
+    const url = `${site.replace(/\/$/, '')}/wp-json/wc/v3/orders/${num}`;
+    const auth = 'Basic ' + btoa(`${ck}:${cs}`);
+    const r = await fetch(url, { headers: { Authorization: auth } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const STATUS_MAP: Record<string, string> = {
+      pending: 'aguardando pagamento',
+      processing: 'em processamento',
+      'on-hold': 'em espera',
+      completed: 'concluído',
+      cancelled: 'cancelado',
+      refunded: 'reembolsado',
+      failed: 'falhou',
+    };
+    const tracking =
+      j?.meta_data?.find?.((m: any) => /track|rastre/i.test(m?.key || ''))?.value || null;
+    return {
+      status: j.status,
+      status_label: STATUS_MAP[j.status] || j.status,
+      tracking: tracking ? String(tracking) : null,
+    };
+  } catch (e) {
+    console.warn('[fetchWooOrderStatus] failed:', e);
+    return null;
   }
 }
 
