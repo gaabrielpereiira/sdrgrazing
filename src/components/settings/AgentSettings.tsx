@@ -105,6 +105,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     support_alert_enabled: false,
     support_alert_phone: null,
     support_alert_template: null,
+    producao_user_id: null,
   });
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
