@@ -32,6 +32,15 @@ import { CLOSING_MESSAGE_TEXT } from '@/constants';
 import { useConversationTabCounts } from '@/hooks/useConversationTabCounts';
 import { supabase } from '@/integrations/supabase/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { useSupportCaseByConversation } from '@/hooks/useSupportCaseByConversation';
+import { labelForGroup, labelForCategory } from '@/lib/supportCategories';
+
+const SUPPORT_GROUP_CHIP: Record<string, string> = {
+  entrega: 'bg-sky-500/15 text-sky-300 border-sky-500/40',
+  produto: 'bg-violet-500/15 text-violet-300 border-violet-500/40',
+  pedido_pagamento: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+  outros: 'bg-slate-500/15 text-slate-300 border-slate-500/40',
+};
 
 // Editable row used inside the chat sidebar "Dados de Contato"
 interface EditableRowProps {
