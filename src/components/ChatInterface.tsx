@@ -117,6 +117,9 @@ const ChatInterface: React.FC = () => {
 
   const { sdrName, companyName } = useCompanySettings();
   const queueUnread = useQueueUnreadCounts();
+  const supportCaseMap = useSupportCaseByConversation(
+    conversations.filter((c) => c.queue === 'support').map((c) => c.id)
+  );
 
   // Current user's team_member id (for "Meus bate-papos" filter) and team
   const [myMemberId, setMyMemberId] = useState<string | null>(null);
