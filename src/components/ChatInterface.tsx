@@ -1439,15 +1439,23 @@ const ChatInterface: React.FC = () => {
                         </span>
                       );
                     })()}
-                    {chat.queue === 'support' && (
-                      <span
-                        title="Necessita suporte"
-                        className="px-1.5 py-0.5 bg-red-500/15 text-red-300 border border-red-500/40 text-[10px] rounded-md font-semibold flex items-center gap-1"
-                      >
-                        <LifeBuoy className="w-2.5 h-2.5" />
-                        Suporte
-                      </span>
-                    )}
+                    {chat.queue === 'support' && (() => {
+                      const sc = supportCaseMap[chat.id];
+                      const groupLabel = sc ? labelForGroup(sc.grupo) : 'Suporte';
+                      const catLabel = sc ? labelForCategory(sc.categoria) : null;
+                      const chipClass = sc
+                        ? SUPPORT_GROUP_CHIP[sc.grupo] || SUPPORT_GROUP_CHIP.outros
+                        : 'bg-red-500/15 text-red-300 border-red-500/40';
+                      return (
+                        <span
+                          title={catLabel ? `Suporte • ${catLabel}` : 'Necessita suporte'}
+                          className={`px-1.5 py-0.5 border text-[10px] rounded-md font-semibold flex items-center gap-1 ${chipClass}`}
+                        >
+                          <LifeBuoy className="w-2.5 h-2.5" />
+                          {groupLabel}
+                        </span>
+                      );
+                    })()}
                     {chat.tags.slice(0, 1).map(tag => (
                       <span key={tag} className="px-2 py-0.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-[10px] rounded-md font-medium">
                         {tag}
