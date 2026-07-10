@@ -704,6 +704,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
                   </option>
                 )}
               </select>
+            </div>
           </div>
 
           <div className="mt-4">
