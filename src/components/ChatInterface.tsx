@@ -33,7 +33,9 @@ import { useConversationTabCounts } from '@/hooks/useConversationTabCounts';
 import { supabase } from '@/integrations/supabase/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useSupportCaseByConversation } from '@/hooks/useSupportCaseByConversation';
+import { useSupportCasesByContact } from '@/hooks/useSupportCasesByContact';
 import { labelForGroup, labelForCategory } from '@/lib/supportCategories';
+import { LifeBuoy } from 'lucide-react';
 
 const SUPPORT_GROUP_CHIP: Record<string, string> = {
   entrega: 'bg-sky-500/15 text-sky-300 border-sky-500/40',
