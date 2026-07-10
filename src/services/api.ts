@@ -2003,9 +2003,10 @@ export const api = {
   },
 
   /**
-   * Sticky auto-assign: if a conversation has no responsible user and the current
-   * sender is mapped to a team_member, become the responsible. Safe to call on
-   * every outgoing human message — it's a no-op when already assigned.
+   * Sticky-on-last-human: sempre que um humano envia mensagem, se ele for
+   * diferente do responsável atual, torna-se o novo responsável. No-op se
+   * já for o responsável, se auth estiver ausente, ou se o usuário não
+   * estiver mapeado em team_members. Nunca desatribui.
    */
   _autoAssignIfUnassigned: async (
     conversationId: string,
@@ -2014,19 +2015,21 @@ export const api = {
     senderAuthUserId: string | null,
   ): Promise<void> => {
     try {
-      if (currentAssignedUserId || !senderAuthUserId) return;
+      if (!senderAuthUserId) return;
       const { data: member } = await supabase
         .from('team_members')
         .select('id')
         .eq('user_id', senderAuthUserId)
         .maybeSingle();
       if (!member?.id) return;
+      if (member.id === currentAssignedUserId) return;
       await api.assignConversation(conversationId, member.id, contactId);
-      console.log('[API] Auto-assigned conversation', conversationId, 'to team member', member.id);
+      console.log('[API] Reassigned conversation', conversationId, 'to team member', member.id);
     } catch (err) {
       console.warn('[API] Auto-assign skipped due to error:', err);
     }
   },
+
 
   /**
    * Send a message (insert into send_queue for human messages)
