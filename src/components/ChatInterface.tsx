@@ -122,6 +122,9 @@ const ChatInterface: React.FC = () => {
   const supportCaseMap = useSupportCaseByConversation(
     conversations.filter((c) => c.queue === 'support').map((c) => c.id)
   );
+  const { cases: contactSupportCases } = useSupportCasesByContact(activeChat?.contactId ?? null);
+
+
 
   // Current user's team_member id (for "Meus bate-papos" filter) and team
   const [myMemberId, setMyMemberId] = useState<string | null>(null);
