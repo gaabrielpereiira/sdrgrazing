@@ -33,7 +33,9 @@ import { useConversationTabCounts } from '@/hooks/useConversationTabCounts';
 import { supabase } from '@/integrations/supabase/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useSupportCaseByConversation } from '@/hooks/useSupportCaseByConversation';
+import { useSupportCasesByContact } from '@/hooks/useSupportCasesByContact';
 import { labelForGroup, labelForCategory } from '@/lib/supportCategories';
+
 
 const SUPPORT_GROUP_CHIP: Record<string, string> = {
   entrega: 'bg-sky-500/15 text-sky-300 border-sky-500/40',
@@ -120,6 +122,10 @@ const ChatInterface: React.FC = () => {
   const supportCaseMap = useSupportCaseByConversation(
     conversations.filter((c) => c.queue === 'support').map((c) => c.id)
   );
+
+
+
+
 
   // Current user's team_member id (for "Meus bate-papos" filter) and team
   const [myMemberId, setMyMemberId] = useState<string | null>(null);
@@ -414,6 +420,7 @@ const ChatInterface: React.FC = () => {
   };
   
   const activeChat = conversations.find(c => c.id === selectedChatId);
+  const { cases: contactSupportCases } = useSupportCasesByContact(activeChat?.contactId ?? null);
   const pendingActivities = useAllPendingActivities();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -2587,6 +2594,58 @@ const ChatInterface: React.FC = () => {
                     )}
                   </div>
                 </div>
+
+                {/* Support Tickets History */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <LifeBuoy className="w-3.5 h-3.5" />
+                    Tickets de Suporte
+                    {contactSupportCases.length > 0 && (
+                      <span className="ml-auto text-[10px] font-semibold text-slate-400 bg-slate-800/60 border border-slate-700 rounded-full px-2 py-0.5">
+                        {contactSupportCases.length}
+                      </span>
+                    )}
+                  </h4>
+                  {contactSupportCases.length === 0 ? (
+                    <p className="text-xs text-slate-500 italic">Nenhum ticket de suporte</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {contactSupportCases.map((sc) => {
+                        const dt = new Date(sc.created_at);
+                        const dateLabel = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
+                          ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                        const chipCls = SUPPORT_GROUP_CHIP[sc.grupo_suporte] || SUPPORT_GROUP_CHIP.outros;
+                        const resolved = sc.status_resolucao === 'resolvido' || sc.status_resolucao === 'closed' || sc.status_resolucao === 'resolved';
+                        return (
+                          <div key={sc.id} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${chipCls} font-medium`}>
+                                {labelForGroup(sc.grupo_suporte)}
+                              </span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${resolved ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40' : 'bg-orange-500/15 text-orange-300 border border-orange-500/40'}`}>
+                                {resolved ? 'Resolvido' : 'Em aberto'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-300 font-medium leading-snug">
+                              {labelForCategory(sc.categoria_suporte)}
+                            </p>
+                            {sc.resumo && (
+                              <p className="text-[11px] text-slate-400 leading-snug line-clamp-3">{sc.resumo}</p>
+                            )}
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
+                              <span>{dateLabel}</span>
+                              {sc.order_number && (
+                                <span className="font-mono">#{sc.order_number}</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+
 
                 {/* Notes Area */}
                 <div className="space-y-3">

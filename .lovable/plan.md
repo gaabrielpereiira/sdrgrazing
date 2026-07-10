@@ -1,18 +1,37 @@
-## Problema
-Em Settings → Agente → "Alerta de novo chamado de suporte", o campo **Nome do template aprovado** é um input de texto livre. O usuário precisa digitar o nome manualmente e não consegue ver os templates disponíveis.
+## Objetivo
 
-## Solução
-Trocar o `<input type="text">` por um `<select>` que lista todos os templates da tabela `whatsapp_templates` com `status = 'APPROVED'`.
+Na coluna direita do chat (Informações do Lead), logo abaixo da seção **Tags**, adicionar uma nova seção **Tickets de Suporte** que lista todos os casos de suporte já abertos pelo lead — com o motivo — para ficar salvo no histórico.
 
-### Detalhes
-- **Query:** `supabase.from('whatsapp_templates').select('id, name, language, category').eq('status', 'APPROVED').order('name')`.
-- Carregar junto com os `teamMembers` no `useEffect` já existente do `AgentSettings.tsx`.
-- Cada option mostra `nome_do_template · pt_BR · UTILITY` para dar contexto; `value` = `name` (compatível com o que hoje está salvo em `support_alert_template`).
-- Se não houver templates aprovados, exibir uma option desabilitada "Nenhum template aprovado — crie na aba WhatsApp Templates".
-- Mostrar também uma option vazia "— Selecione um template —" no topo.
-- Mantém o link "Como criar o template na aba WhatsApp Templates" existente.
+## Onde
 
-### Arquivos
-- `src/components/settings/AgentSettings.tsx`: adicionar state `templates`, fetch no load, e substituir o input pelo select.
+Arquivo único: `src/components/ChatInterface.tsx`, entre a seção "Tags" (linha ~2589) e "Notas Internas" (linha ~2591).
 
-Nenhuma migração, edge function ou mudança de schema é necessária.
+## O que aparece
+
+Para cada ticket do lead atual (`support_cases` filtrado por `conversation_id = activeChat.id`, ou como fallback `contact_id`):
+
+- **Cabeçalho da seção**: "Tickets de Suporte" + contador (ex: `3`)
+- **Cada card do ticket** mostra:
+  - Data de criação (formatada, ex: `10/07 14:32`)
+  - Motivo → `labelForGroup(grupo_suporte)` › `labelForCategory(categoria_suporte)` (helpers já existentes em `@/lib/supportCategories`)
+  - Status (`status_resolucao`) como badge colorido (aberto/resolvido)
+  - Resumo (`resumo`) em texto pequeno quando existir
+  - Nº do pedido (`order_number`) quando existir
+- Estado vazio: texto discreto `Nenhum ticket de suporte`
+
+## Como buscar os dados
+
+Novo hook leve `src/hooks/useSupportCasesByContact.ts` seguindo o padrão do `useSupportCaseByConversation.ts` já existente:
+
+- `select` de todas as colunas relevantes (`id, created_at, grupo_suporte, categoria_suporte, status_resolucao, resumo, order_number`)
+- Filtra por `contact_id = activeChat.contactId` (retorna histórico completo do lead, não só da conversa atual)
+- Ordena por `created_at desc`
+- Assina realtime `INSERT/UPDATE` de `support_cases` para atualizar automaticamente quando a Nina abrir um novo ticket
+
+No `ChatInterface.tsx`, chamar o hook com o `contactId` do `activeChat` e renderizar a lista.
+
+## Fora de escopo
+
+- Não muda a lógica de criação de tickets nem o roteamento fila `support`.
+- Não altera schema do banco (todas as colunas já existem).
+- Não mexe em Notas / Tags / Atividades.
