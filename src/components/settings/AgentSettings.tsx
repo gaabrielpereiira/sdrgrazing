@@ -110,7 +110,11 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     support_alert_phone: null,
     support_alert_template: null,
     producao_user_id: null,
+    welcome_followup_enabled: true,
+    welcome_followup_minutes: 60,
+    welcome_followup_message: 'Oi! Vi que você começou uma conversa com a gente há pouco e não seguiu. Posso te ajudar com alguma coisa? 💛',
   });
+
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; email: string }[]>([]);
