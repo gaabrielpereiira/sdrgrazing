@@ -130,8 +130,22 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     if (user?.id) {
       loadSettings();
       loadTeamMembers();
+      loadApprovedTemplates();
     }
   }, [user?.id]);
+
+  const loadApprovedTemplates = async () => {
+    try {
+      const { data } = await supabase
+        .from('whatsapp_templates' as any)
+        .select('id, name, language, category')
+        .eq('status', 'APPROVED')
+        .order('name');
+      setApprovedTemplates((data as any) || []);
+    } catch (e) {
+      console.error('[AgentSettings] loadApprovedTemplates failed', e);
+    }
+  };
 
   const loadTeamMembers = async () => {
     try {
