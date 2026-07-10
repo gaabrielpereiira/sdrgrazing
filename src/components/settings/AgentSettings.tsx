@@ -35,7 +35,11 @@ interface AgentSettings {
   support_alert_phone: string | null;
   support_alert_template: string | null;
   producao_user_id: string | null;
+  welcome_followup_enabled: boolean;
+  welcome_followup_minutes: number;
+  welcome_followup_message: string;
 }
+
 
 const PROVIDERS: { id: AiProvider; label: string; iconLabel: string; placeholder: string; keyPrefix: RegExp }[] = [
   { id: 'google', label: 'Google', iconLabel: 'G', placeholder: 'AIza...', keyPrefix: /^AIza[0-9A-Za-z_\-]{20,}$/ },
