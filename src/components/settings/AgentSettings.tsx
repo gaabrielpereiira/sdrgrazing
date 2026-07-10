@@ -682,15 +682,28 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
               <label className="text-xs font-medium text-slate-400 mb-1.5 block">
                 Nome do template aprovado
               </label>
-              <input
-                type="text"
+              <select
                 value={settings.support_alert_template || ''}
-                onChange={(e) => setSettings({ ...settings, support_alert_template: e.target.value.trim() || null })}
-                placeholder="novo_chamado_suporte"
+                onChange={(e) => setSettings({ ...settings, support_alert_template: e.target.value || null })}
                 disabled={!settings.support_alert_enabled}
-                className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500/50 disabled:opacity-50"
-              />
-            </div>
+                className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500/50 disabled:opacity-50"
+              >
+                <option value="">— Selecione um template —</option>
+                {approvedTemplates.length === 0 ? (
+                  <option value="" disabled>Nenhum template aprovado — crie na aba WhatsApp Templates</option>
+                ) : (
+                  approvedTemplates.map((t) => (
+                    <option key={t.id} value={t.name}>
+                      {t.name}{t.language ? ` · ${t.language}` : ''}{t.category ? ` · ${t.category}` : ''}
+                    </option>
+                  ))
+                )}
+                {settings.support_alert_template && !approvedTemplates.some(t => t.name === settings.support_alert_template) && (
+                  <option value={settings.support_alert_template}>
+                    {settings.support_alert_template} (não encontrado)
+                  </option>
+                )}
+              </select>
           </div>
 
           <div className="mt-4">
