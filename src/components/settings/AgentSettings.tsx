@@ -206,7 +206,11 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
         support_alert_phone: (data as any).support_alert_phone ?? null,
         support_alert_template: (data as any).support_alert_template ?? null,
         producao_user_id: (data as any).producao_user_id ?? null,
+        welcome_followup_enabled: (data as any).welcome_followup_enabled ?? true,
+        welcome_followup_minutes: (data as any).welcome_followup_minutes ?? 60,
+        welcome_followup_message: (data as any).welcome_followup_message ?? 'Oi! Vi que você começou uma conversa com a gente há pouco e não seguiu. Posso te ajudar com alguma coisa? 💛',
       });
+
     } catch (error) {
       console.error('[AgentSettings] Error loading settings:', error);
       toast.error('Erro ao carregar configurações do agente');
