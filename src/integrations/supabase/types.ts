@@ -925,6 +925,9 @@ export type Database = {
           wc_products_enabled: boolean
           wc_site_url: string | null
           wc_webhook_secret: string | null
+          welcome_followup_enabled: boolean
+          welcome_followup_message: string
+          welcome_followup_minutes: number
           whatsapp_access_token: string | null
           whatsapp_business_account_id: string | null
           whatsapp_phone_number_id: string | null
@@ -977,6 +980,9 @@ export type Database = {
           wc_products_enabled?: boolean
           wc_site_url?: string | null
           wc_webhook_secret?: string | null
+          welcome_followup_enabled?: boolean
+          welcome_followup_message?: string
+          welcome_followup_minutes?: number
           whatsapp_access_token?: string | null
           whatsapp_business_account_id?: string | null
           whatsapp_phone_number_id?: string | null
@@ -1029,6 +1035,9 @@ export type Database = {
           wc_products_enabled?: boolean
           wc_site_url?: string | null
           wc_webhook_secret?: string | null
+          welcome_followup_enabled?: boolean
+          welcome_followup_message?: string
+          welcome_followup_minutes?: number
           whatsapp_access_token?: string | null
           whatsapp_business_account_id?: string | null
           whatsapp_phone_number_id?: string | null

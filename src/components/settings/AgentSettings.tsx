@@ -35,7 +35,11 @@ interface AgentSettings {
   support_alert_phone: string | null;
   support_alert_template: string | null;
   producao_user_id: string | null;
+  welcome_followup_enabled: boolean;
+  welcome_followup_minutes: number;
+  welcome_followup_message: string;
 }
+
 
 const PROVIDERS: { id: AiProvider; label: string; iconLabel: string; placeholder: string; keyPrefix: RegExp }[] = [
   { id: 'google', label: 'Google', iconLabel: 'G', placeholder: 'AIza...', keyPrefix: /^AIza[0-9A-Za-z_\-]{20,}$/ },
@@ -106,7 +110,11 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
     support_alert_phone: null,
     support_alert_template: null,
     producao_user_id: null,
+    welcome_followup_enabled: true,
+    welcome_followup_minutes: 60,
+    welcome_followup_message: 'Oi! Vi que você começou uma conversa com a gente há pouco e não seguiu. Posso te ajudar com alguma coisa? 💛',
   });
+
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; email: string }[]>([]);
@@ -198,7 +206,11 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
         support_alert_phone: (data as any).support_alert_phone ?? null,
         support_alert_template: (data as any).support_alert_template ?? null,
         producao_user_id: (data as any).producao_user_id ?? null,
+        welcome_followup_enabled: (data as any).welcome_followup_enabled ?? true,
+        welcome_followup_minutes: (data as any).welcome_followup_minutes ?? 60,
+        welcome_followup_message: (data as any).welcome_followup_message ?? 'Oi! Vi que você começou uma conversa com a gente há pouco e não seguiu. Posso te ajudar com alguma coisa? 💛',
       });
+
     } catch (error) {
       console.error('[AgentSettings] Error loading settings:', error);
       toast.error('Erro ao carregar configurações do agente');
@@ -232,7 +244,11 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           support_alert_phone: settings.support_alert_phone,
           support_alert_template: settings.support_alert_template,
           producao_user_id: settings.producao_user_id,
+          welcome_followup_enabled: settings.welcome_followup_enabled,
+          welcome_followup_minutes: settings.welcome_followup_minutes,
+          welcome_followup_message: settings.welcome_followup_message,
           updated_at: new Date().toISOString(),
+
         } as any)
         .eq('id', settings.id!);
 
@@ -699,7 +715,60 @@ Acesse o painel para atender.`}</pre>
           </details>
         </div>
 
+        {/* Follow-up automático para leads inativos */}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Bot className="w-5 h-5 text-brand-gold-400" />
+              <h3 className="font-semibold text-white">Follow-up automático de leads inativos</h3>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.welcome_followup_enabled}
+                onChange={(e) => setSettings({ ...settings, welcome_followup_enabled: e.target.checked })}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-gold-500"></div>
+            </label>
+          </div>
+
+          <p className="text-xs text-slate-400 mb-4">
+            Se um lead novo receber a mensagem de boas-vindas e não responder após o tempo definido, a Donatella envia automaticamente uma mensagem de reengajamento. Executa a cada 15 minutos, uma única vez por conversa.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-xs font-medium text-slate-400 mb-1.5 block">
+                Enviar após (minutos de inatividade)
+              </label>
+              <input
+                type="number"
+                min={5}
+                step={5}
+                value={settings.welcome_followup_minutes}
+                onChange={(e) => setSettings({ ...settings, welcome_followup_minutes: Math.max(5, Number(e.target.value) || 60) })}
+                disabled={!settings.welcome_followup_enabled}
+                className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 disabled:opacity-50"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-xs font-medium text-slate-400 mb-1.5 block">
+                Mensagem enviada
+              </label>
+              <textarea
+                value={settings.welcome_followup_message}
+                onChange={(e) => setSettings({ ...settings, welcome_followup_message: e.target.value })}
+                disabled={!settings.welcome_followup_enabled}
+                rows={3}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-gold-500/50 disabled:opacity-50 resize-none"
+              />
+            </div>
+          </div>
+        </div>
+
       </div>
+
       </TooltipProvider>
     </>
   );
