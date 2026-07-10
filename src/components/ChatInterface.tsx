@@ -122,7 +122,8 @@ const ChatInterface: React.FC = () => {
   const supportCaseMap = useSupportCaseByConversation(
     conversations.filter((c) => c.queue === 'support').map((c) => c.id)
   );
-  const { cases: contactSupportCases } = useSupportCasesByContact(activeChat?.contactId ?? null);
+
+
 
 
 
