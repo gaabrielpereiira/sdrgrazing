@@ -244,7 +244,11 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
           support_alert_phone: settings.support_alert_phone,
           support_alert_template: settings.support_alert_template,
           producao_user_id: settings.producao_user_id,
+          welcome_followup_enabled: settings.welcome_followup_enabled,
+          welcome_followup_minutes: settings.welcome_followup_minutes,
+          welcome_followup_message: settings.welcome_followup_message,
           updated_at: new Date().toISOString(),
+
         } as any)
         .eq('id', settings.id!);
 
