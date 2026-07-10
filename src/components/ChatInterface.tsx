@@ -420,6 +420,7 @@ const ChatInterface: React.FC = () => {
   };
   
   const activeChat = conversations.find(c => c.id === selectedChatId);
+  const { cases: contactSupportCases } = useSupportCasesByContact(activeChat?.contactId ?? null);
   const pendingActivities = useAllPendingActivities();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
