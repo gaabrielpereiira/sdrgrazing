@@ -118,6 +118,7 @@ const AgentSettings = forwardRef<AgentSettingsRef, {}>((props, ref) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [approvedTemplates, setApprovedTemplates] = useState<{ id: string; name: string; language: string | null; category: string | null }[]>([]);
 
   useImperativeHandle(ref, () => ({
     save: handleSave,
