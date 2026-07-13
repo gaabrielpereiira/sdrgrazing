@@ -126,14 +126,14 @@ const requestHandoffTool = {
   type: "function",
   function: {
     name: "request_human_handoff",
-    description: "Transfere a conversa para um atendente humano e cria uma notificação interna na plataforma. Use SEMPRE que o cliente precisar de atendimento humano (reclamação, status de pedido, cancelamento, boleto/NF, lead qualificado, ou qualquer assunto fora do escopo da IA). NUNCA escreva mensagens internas como '🔔 ATENDIMENTO NECESSÁRIO' no chat — use esta ferramenta.",
+    description: "Transfere a conversa para um atendente humano e cria uma notificação interna na plataforma. Use SEMPRE que o cliente precisar de atendimento humano. NUNCA escreva mensagens internas como '🔔 ATENDIMENTO NECESSÁRIO' no chat — use esta ferramenta. IMPORTANTE: 'reason' define se a conversa vira ticket de Suporte (pós-venda) ou continua em Vendas (pré-venda). Suporte = APENAS pós-compra (reclamação, status de pedido, cancelamento/alteração, boleto/NF). Lead qualificado, orçamento e dúvidas comerciais NÃO são suporte — use 'qualified_lead' ou 'other' e a conversa segue em Vendas.",
     parameters: {
       type: "object",
       properties: {
         reason: {
           type: "string",
           enum: ["complaint", "order_status", "cancel_change", "payment_invoice", "qualified_lead", "other"],
-          description: "Motivo da transferência (uso interno)."
+          description: "Motivo (uso interno). PÓS-VENDA (vai para fila Suporte): complaint, order_status, cancel_change, payment_invoice. PRÉ-VENDA (segue em Vendas): qualified_lead (lead pronto para fechar / orçamento avançado), other (dúvida comercial ou fora do escopo da IA)."
         },
         urgency: {
           type: "string",
@@ -2281,10 +2281,16 @@ async function processQueueItem(
         const args = JSON.parse(toolCall.function.arguments);
         console.log('[Nina] Processing request_human_handoff tool call:', args);
 
-        // 1) Mark conversation as needing/under human handling
+        // 1) Mark conversation as needing/under human handling.
+        //    Only route to the SUPPORT queue when the reason is post-sale.
+        //    Pre-sale reasons (qualified_lead, other) stay in the current queue (sales).
+        const POST_SALE_REASONS = new Set(['complaint', 'order_status', 'cancel_change', 'payment_invoice']);
+        const isPostSale = POST_SALE_REASONS.has(String(args.reason));
+        const handoffUpdate: Record<string, unknown> = { status: 'human' };
+        if (isPostSale) handoffUpdate.queue = 'support';
         await supabase
           .from('conversations')
-          .update({ status: 'human', queue: 'support' })
+          .update(handoffUpdate)
           .eq('id', conversation.id);
 
         // 2) Build a friendly title for the notification
@@ -2388,9 +2394,11 @@ async function processQueueItem(
         conversation.contact?.phone_number ||
         'Cliente';
 
+      // Safety net has no reliable `reason` — default to marking human only, keep current queue.
+      // If it's actually post-sale support, the operator reclassifies via the UI.
       await supabase
         .from('conversations')
-        .update({ status: 'human', queue: 'support' })
+        .update({ status: 'human' })
         .eq('id', conversation.id);
 
       await supabase.from('notifications').insert({
@@ -2711,7 +2719,11 @@ Trigger para oferecer agendamento:
 - Momento natural da conversa (não force)
 
 Transferência para humano:
-- Quando o cliente precisar de atendimento humano (reclamação, status de pedido, cancelamento, boleto/NF, ou qualquer assunto fora do seu escopo), use SEMPRE a ferramenta request_human_handoff.
+- Quando o cliente precisar de atendimento humano, use SEMPRE a ferramenta request_human_handoff.
+- Escolha o reason correto — ele decide a fila:
+  • PÓS-VENDA (vai para Suporte): complaint, order_status, cancel_change, payment_invoice.
+  • PRÉ-VENDA / comercial (segue em Vendas): qualified_lead (lead pronto para fechar, orçamento avançado, pedido grande), other (dúvida comercial fora do seu escopo).
+- Orçamento, pedido de proposta e negociação NÃO são suporte — use qualified_lead.
 - NUNCA escreva no chat mensagens internas como "🔔 ATENDIMENTO NECESSÁRIO", "ASSUNTO:", "Mensagem original:" ou listas de campos internos. Essas mensagens vão direto para o WhatsApp do cliente.
 - Ao chamar a ferramenta, preencha customer_message_for_client com uma mensagem amigável e curta (essa SIM vai para o cliente).
 </tool_usage_protocol>
