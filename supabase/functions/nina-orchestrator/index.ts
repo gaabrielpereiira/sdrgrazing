@@ -2394,9 +2394,11 @@ async function processQueueItem(
         conversation.contact?.phone_number ||
         'Cliente';
 
+      // Safety net has no reliable `reason` — default to marking human only, keep current queue.
+      // If it's actually post-sale support, the operator reclassifies via the UI.
       await supabase
         .from('conversations')
-        .update({ status: 'human', queue: 'support' })
+        .update({ status: 'human' })
         .eq('id', conversation.id);
 
       await supabase.from('notifications').insert({
