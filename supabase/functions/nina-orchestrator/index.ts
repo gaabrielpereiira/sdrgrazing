@@ -126,14 +126,14 @@ const requestHandoffTool = {
   type: "function",
   function: {
     name: "request_human_handoff",
-    description: "Transfere a conversa para um atendente humano e cria uma notificação interna na plataforma. Use SEMPRE que o cliente precisar de atendimento humano (reclamação, status de pedido, cancelamento, boleto/NF, lead qualificado, ou qualquer assunto fora do escopo da IA). NUNCA escreva mensagens internas como '🔔 ATENDIMENTO NECESSÁRIO' no chat — use esta ferramenta.",
+    description: "Transfere a conversa para um atendente humano e cria uma notificação interna na plataforma. Use SEMPRE que o cliente precisar de atendimento humano. NUNCA escreva mensagens internas como '🔔 ATENDIMENTO NECESSÁRIO' no chat — use esta ferramenta. IMPORTANTE: 'reason' define se a conversa vira ticket de Suporte (pós-venda) ou continua em Vendas (pré-venda). Suporte = APENAS pós-compra (reclamação, status de pedido, cancelamento/alteração, boleto/NF). Lead qualificado, orçamento e dúvidas comerciais NÃO são suporte — use 'qualified_lead' ou 'other' e a conversa segue em Vendas.",
     parameters: {
       type: "object",
       properties: {
         reason: {
           type: "string",
           enum: ["complaint", "order_status", "cancel_change", "payment_invoice", "qualified_lead", "other"],
-          description: "Motivo da transferência (uso interno)."
+          description: "Motivo (uso interno). PÓS-VENDA (vai para fila Suporte): complaint, order_status, cancel_change, payment_invoice. PRÉ-VENDA (segue em Vendas): qualified_lead (lead pronto para fechar / orçamento avançado), other (dúvida comercial ou fora do escopo da IA)."
         },
         urgency: {
           type: "string",
