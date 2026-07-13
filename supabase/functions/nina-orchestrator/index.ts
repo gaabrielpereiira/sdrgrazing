@@ -2423,13 +2423,17 @@ async function processQueueItem(
   }
 
   if (!aiContent) {
-    console.warn('[Nina] Empty AI response received, skipping send (no fallback to avoid duplicates)');
-    // Mark the original message as processed so it doesn't keep retrying.
-    await supabase
-      .from('messages')
-      .update({ processed_by_nina: true })
-      .eq('id', message.id);
-    return;
+    // Donatella deve assumir a conversa e responder — jamais ficar em silêncio.
+    // Ex.: cliente clicou "Atendimento" e mandou uma pergunta junto (caso Sharlley).
+    // O dedupe defensivo em queueTextResponse (últimos 30s) evita duplicatas.
+    console.warn('[Nina] Empty AI response — using safe fallback so Donatella never stays silent');
+    const contactFirstName =
+      conversation.contact?.call_name ||
+      extractFirstName(conversation.contact?.name || '') ||
+      '';
+    aiContent = contactFirstName
+      ? `Oi, ${contactFirstName}! 💛 Deixa eu te ajudar com isso. Pode me contar um pouquinho mais o que você precisa?`
+      : 'Oi! 💛 Deixa eu te ajudar com isso. Pode me contar um pouquinho mais o que você precisa?';
   }
 
   console.log('[Nina] Final response length:', aiContent.length);
