@@ -2281,10 +2281,16 @@ async function processQueueItem(
         const args = JSON.parse(toolCall.function.arguments);
         console.log('[Nina] Processing request_human_handoff tool call:', args);
 
-        // 1) Mark conversation as needing/under human handling
+        // 1) Mark conversation as needing/under human handling.
+        //    Only route to the SUPPORT queue when the reason is post-sale.
+        //    Pre-sale reasons (qualified_lead, other) stay in the current queue (sales).
+        const POST_SALE_REASONS = new Set(['complaint', 'order_status', 'cancel_change', 'payment_invoice']);
+        const isPostSale = POST_SALE_REASONS.has(String(args.reason));
+        const handoffUpdate: Record<string, unknown> = { status: 'human' };
+        if (isPostSale) handoffUpdate.queue = 'support';
         await supabase
           .from('conversations')
-          .update({ status: 'human', queue: 'support' })
+          .update(handoffUpdate)
           .eq('id', conversation.id);
 
         // 2) Build a friendly title for the notification
