@@ -649,6 +649,7 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
 
     try {
       await api.sendMediaMessage(conversationId, file, opts);
+      applyStickyAssignmentOptimistic(conversationId);
     } catch (err: any) {
       console.error('[useConversations] Error sending media:', err);
       toast.error(err?.message || 'Erro ao enviar arquivo');
