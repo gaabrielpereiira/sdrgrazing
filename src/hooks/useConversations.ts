@@ -815,6 +815,7 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
 
     try {
       await api.sendTemplateMessage(conversationId, payload);
+      applyStickyAssignmentOptimistic(conversationId);
       toast.success('Template enviado');
     } catch (err: any) {
       console.error('[useConversations] Error sending template:', err);
