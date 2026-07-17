@@ -31,6 +31,43 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
   // Track conversation IDs being fetched to prevent duplicate fetches
   const fetchingConversationIds = useRef(new Set<string>());
 
+  // Cache of the current auth user's team_members.id, used to reflect the
+  // sticky-on-last-human reassignment optimistically in the UI.
+  const currentMemberIdRef = useRef<string | null>(null);
+  const currentMemberFetchedRef = useRef(false);
+
+  const resolveCurrentMemberId = useCallback(async (): Promise<string | null> => {
+    if (currentMemberFetchedRef.current) return currentMemberIdRef.current;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        currentMemberFetchedRef.current = true;
+        return null;
+      }
+      const { data: member } = await supabase
+        .from('team_members')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      currentMemberIdRef.current = member?.id ?? null;
+      currentMemberFetchedRef.current = true;
+      return currentMemberIdRef.current;
+    } catch {
+      currentMemberFetchedRef.current = true;
+      return null;
+    }
+  }, []);
+
+  const applyStickyAssignmentOptimistic = useCallback(async (conversationId: string) => {
+    const memberId = await resolveCurrentMemberId();
+    if (!memberId) return;
+    setConversationsTracked(prev => prev.map(c => {
+      if (c.id !== conversationId) return c;
+      if (c.assignedUserId === memberId) return c;
+      return { ...c, assignedUserId: memberId };
+    }));
+  }, [resolveCurrentMemberId]);
+
   // Diagnostic wrapper: detect when a conversation loses messages or disappears
   const setConversationsTracked = useCallback(
     (updater: UIConversation[] | ((prev: UIConversation[]) => UIConversation[])) => {
