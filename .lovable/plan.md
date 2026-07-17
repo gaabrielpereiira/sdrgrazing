@@ -1,55 +1,43 @@
-## Problema
+## Contexto verificado
 
-A Helena está fazendo **orçamento** (pré-venda) e apareceu marcada como "Suporte" na lista.
+- **Erasmo Alencar** — a conversa **está** com `assigned_user_id = ffec7a15` (Gabriel) no banco, e o `team_members.user_id` do Gabriel é o mesmo `sender_user_id` gravado nas mensagens. Ou seja, a sticky reassignment em `api._autoAssignIfUnassigned` gravou certo. O que falha é a **UI do painel do chat não refletir** o novo responsável logo após o envio — só aparece depois de recarregar / esperar o realtime.
+- **Botões da triagem** — a Donatella grava a mensagem interativa em `messages` com `metadata.interactive = { kind: 'button', buttons: [...] }`, e a resposta do cliente chega via `metadata.interactive = { kind: 'button_reply', id, title }`. Hoje o `ChatInterface` renderiza só `content` como texto, então os chips de botão e o "botão clicado" ficam invisíveis para o operador.
 
-Causa: hoje, sempre que a IA chama `request_human_handoff`, o código força `queue = 'support'` — independente do motivo. Ou seja, **qualquer** handoff para humano vira ticket de suporte.
+## Mudanças
 
-Regra correta: **Suporte = pós-compra**. A conversa só deve ir para a fila de Suporte em **dois casos**:
+### 1. UI reflete o novo responsável imediatamente após enviar (`src/hooks/useConversations.ts`)
 
-1. O cliente clicou no botão **"Suporte"** na triagem inicial (fluxo da Donatella / `await_support_*`).
-2. A IA transferiu para humano com um motivo **pós-venda**: reclamação, status de pedido, cancelamento/alteração, boleto/nota fiscal.
+No `sendMessage`, `sendMediaMessage` e `sendTemplateMessage` (as três wrappers do hook), depois de disparar o envio com sucesso:
 
-Nos demais casos (lead qualificado, dúvida comercial, orçamento, "outro" pré-venda), a conversa **continua em Vendas** com `status = 'human'` para o time atender.
+- Ler `supabase.auth.getUser()` no cliente.
+- Buscar `team_members.id` onde `user_id = auth.uid()` (uma vez, com cache local no hook).
+- Se o `assignedUserId` atual da conversa for diferente do `member.id`, atualizar otimisticamente `setConversationsTracked` com o novo `assignedUserId`.
+- O realtime UPDATE que chegar em seguida vai apenas confirmar o mesmo valor (idempotente).
 
-## Correção — `supabase/functions/nina-orchestrator/index.ts`
+Isso resolve o "não atribuiu a mim" percebido — o chip de responsável no cabeçalho e a badge na lista passam a mostrar o Gabriel na hora.
 
-### 1. Tool `request_human_handoff` (linha ~2287)
+### 2. Renderizar os botões de triagem no chat (`src/components/ChatInterface.tsx`)
 
-Classificar os `reason` em duas categorias:
+No renderizador de mensagem (procurar o bloco que imprime `msg.content`):
 
-- **Pós-venda → `queue: 'support'`**: `complaint`, `order_status`, `cancel_change`, `payment_invoice`
-- **Pré-venda / geral → mantém a fila atual (Vendas)**: `qualified_lead`, `other`
+**Saída (Donatella → cliente):** quando `msg.metadata?.interactive?.kind === 'button'`:
+- Renderizar o `content` normalmente.
+- Abaixo, uma linha de chips desabilitados (`<button disabled>` estilizado como pill outline) com o `title` de cada `metadata.interactive.buttons[i]`.
+- Legenda pequena `Botões enviados`.
 
-O update passa a montar dinamicamente:
+**Entrada (cliente → Donatella):** quando `msg.metadata?.interactive?.kind === 'button_reply'`:
+- Se `content` estiver vazio, usar `metadata.interactive.title` como texto.
+- Renderizar um badge acima da mensagem: `↳ Botão clicado` com o `title` destacado (mesma cor do accent do chat).
 
-```text
-update = { status: 'human' }
-if (reason ∈ pós-venda) update.queue = 'support'
-```
-
-### 2. Safety net (linha ~2393)
-
-Quando o texto interno vaza da IA e não há `reason` confiável, **não** forçar `queue: 'support'`. Só marcar `status: 'human'`. Se for suporte de verdade, o operador reclassifica manualmente pelo chat.
-
-### 3. Fluxo da Donatella (linha ~1581) — sem mudanças
-
-O caminho `await_support_issue` é acionado **exatamente** quando o cliente clicou em "Suporte" na triagem, então continua setando `queue: 'support'` + `assigned_team = producao`. Esse é o caso (1) da regra.
-
-### 4. Prompt da IA (mesmo arquivo)
-
-Reforçar na descrição do tool e no system prompt:
-
-- `qualified_lead`, orçamento, dúvidas comerciais → chama humano mas **segue em Vendas**.
-- `complaint`, `order_status`, `cancel_change`, `payment_invoice` → pós-compra, vai para **Suporte**.
-
-## Limpeza das conversas já mal-classificadas (Helena e outras)
-
-Duas opções:
-
-- **Manual (recomendado):** você move pelo próprio chat — o botão de trocar de fila já existe.
-- **Automático:** rodar um one-off que reseta `queue = 'sales'` para conversas em `support` **sem** `support_cases` associado (foram para suporte só pelo handoff antigo, não pelo fluxo da Donatella). Me avisa se quiser esse "faxinão".
+Sem mudança no orquestrador, no schema, ou no fluxo do WhatsApp — os dados já estão persistidos em `metadata`.
 
 ## Fora de escopo
 
-- Badge da lista e card "Tickets de Suporte" no painel do lead permanecem iguais — já mostram o motivo corretamente quando existe `support_case`. O problema era só a classificação errada de fila.
-- Sem mudanças de schema.
+- Não muda a lógica sticky do backend (`api._autoAssignIfUnassigned`) — já funciona.
+- Não muda o envio da mensagem interativa pela Meta Graph API.
+- Não muda schema nem RLS.
+
+## Como validar depois
+
+1. Abrir uma conversa não atribuída a você, mandar uma mensagem → chip de "Responsável: {seu nome}" aparece imediatamente na coluna direita e na lista.
+2. Abrir uma conversa recém-triada da Donatella → ver os chips "Atendimento" / "Suporte" logo abaixo da mensagem de saudação, e, quando o cliente clicar, ver o badge "Botão clicado: Suporte" na próxima mensagem de entrada.
