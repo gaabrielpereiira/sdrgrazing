@@ -1925,13 +1925,29 @@ const ChatInterface: React.FC = () => {
                                     </p>
                                   </button>
                                 )}
-                                {msg.metadata?.interactive && (
+                                {msg.metadata?.interactive && msg.metadata.interactive.kind !== 'button' && (
                                   <div className={`mb-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium border ${isOutgoing ? 'bg-white/10 border-white/20 text-white/80' : 'bg-brand-gold-500/10 border-brand-gold-500/30 text-brand-gold-300'}`}>
                                     <CornerDownLeft className="w-3 h-3" />
-                                    {msg.metadata.interactive.kind === 'list_reply' ? 'Resposta de lista' : 'Resposta de botão'}
+                                    {msg.metadata.interactive.kind === 'list_reply' ? 'Resposta de lista' : 'Botão clicado'}
+                                    {msg.metadata.interactive.title && (
+                                      <span className="opacity-90">· {msg.metadata.interactive.title}</span>
+                                    )}
                                   </div>
                                 )}
                                 {renderMessageContent(msg)}
+                                {msg.metadata?.interactive?.kind === 'button' && Array.isArray(msg.metadata.interactive.buttons) && msg.metadata.interactive.buttons.length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {msg.metadata.interactive.buttons.map((b: any, bi: number) => (
+                                      <span
+                                        key={bi}
+                                        className={`px-2.5 py-1 rounded-full text-[11px] font-medium border ${isOutgoing ? 'bg-white/10 border-white/25 text-white/90' : 'bg-slate-800/60 border-slate-600 text-slate-200'}`}
+                                        title="Botão enviado ao cliente"
+                                      >
+                                        {b.title}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                                 {Array.isArray(msg.metadata?.buttons) && msg.metadata.buttons.length > 0 && (
                                   <div className={`mt-2 -mx-5 -mb-3 border-t ${isOutgoing ? 'border-white/15' : 'border-slate-700/60'} flex flex-col`}>
                                     {msg.metadata.buttons.map((btn: any, bi: number) => {
