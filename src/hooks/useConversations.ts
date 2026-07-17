@@ -586,6 +586,8 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
     try {
       // The realtime handler will detect and replace the temp message automatically
       await api.sendMessage(conversationId, content, { replyToId: opts?.replyToId || null });
+      // Reflect sticky-on-last-human reassignment immediately in the UI
+      applyStickyAssignmentOptimistic(conversationId);
     } catch (err) {
       console.error('[useConversations] Error sending message:', err);
       toast.error('Erro ao enviar mensagem');
