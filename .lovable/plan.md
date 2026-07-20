@@ -1,43 +1,49 @@
-## Contexto verificado
+## Problema
 
-- **Erasmo Alencar** — a conversa **está** com `assigned_user_id = ffec7a15` (Gabriel) no banco, e o `team_members.user_id` do Gabriel é o mesmo `sender_user_id` gravado nas mensagens. Ou seja, a sticky reassignment em `api._autoAssignIfUnassigned` gravou certo. O que falha é a **UI do painel do chat não refletir** o novo responsável logo após o envio — só aparece depois de recarregar / esperar o realtime.
-- **Botões da triagem** — a Donatella grava a mensagem interativa em `messages` com `metadata.interactive = { kind: 'button', buttons: [...] }`, e a resposta do cliente chega via `metadata.interactive = { kind: 'button_reply', id, title }`. Hoje o `ChatInterface` renderiza só `content` como texto, então os chips de botão e o "botão clicado" ficam invisíveis para o operador.
+O follow-up "Oi! Vi que você começou uma conversa..." está indo em qualquer conversa em que a última mensagem não é do cliente — inclusive quando a última mensagem é um **template de automação** (ex.: `PEDIDO_RETIRADO` disparado pelo WooCommerce). Isso gera o cenário do print: cliente recebeu aviso de entrega e, 1h depois, tomou um follow-up de "não seguiu a conversa".
+
+O follow-up deve rodar **só no cenário original**: lead novo entrou, a Donatella respondeu a saudação, e o lead não voltou.
+
+## Verificado
+
+- `supabase/functions/followup-inactive-leads/index.ts` filtra por `status='nina'`, `queue='sales'`, `is_active`, `last_message_at` na janela, e apenas confirma que a última mensagem não é do usuário. Nada impede que essa última mensagem seja um template outbound de automação.
+- Templates de automação são gravados em `messages` com `from_type != 'user'` (Nina/sistema) e `message_type = 'template'` (ou `metadata.template` / `metadata.automation_rule_id`), então passam batido no filtro atual.
+- Idempotência é por `metadata.welcome_followup_sent`, então cada conversa só toma um follow-up — mas o gatilho errado já basta para o problema relatado.
 
 ## Mudanças
 
-### 1. UI reflete o novo responsável imediatamente após enviar (`src/hooks/useConversations.ts`)
+### 1. Restringir o candidato a "primeira interação inbound sem resposta do lead" (`supabase/functions/followup-inactive-leads/index.ts`)
 
-No `sendMessage`, `sendMediaMessage` e `sendTemplateMessage` (as três wrappers do hook), depois de disparar o envio com sucesso:
+Depois de buscar os candidatos e antes de enfileirar, aplicar estas checagens por conversa (em vez de só olhar `lastMsg.from_type`):
 
-- Ler `supabase.auth.getUser()` no cliente.
-- Buscar `team_members.id` onde `user_id = auth.uid()` (uma vez, com cache local no hook).
-- Se o `assignedUserId` atual da conversa for diferente do `member.id`, atualizar otimisticamente `setConversationsTracked` com o novo `assignedUserId`.
-- O realtime UPDATE que chegar em seguida vai apenas confirmar o mesmo valor (idempotente).
+- Contar mensagens do cliente na conversa: `select count from messages where conversation_id = X and from_type = 'user'`. Se `> 1`, pular (não é mais "lead que não deu andamento" — a conversa já teve troca).
+- Buscar as últimas ~10 mensagens outbound (`from_type in ('nina','human','system')`) da conversa e verificar se **alguma** foi:
+  - `message_type = 'template'`, **ou**
+  - `metadata->>automation_rule_id` presente, **ou**
+  - `metadata->>welcome_followup` = `true` (a própria de follow-up), **ou**
+  - `metadata->>kind` indicando template/automação.
+  
+  Se **qualquer** dessas existir, pular a conversa. Follow-up é só quando a última interação outbound foi a saudação orgânica da Nina.
+- Manter a checagem atual `lastMsg.from_type !== 'user'` e a janela temporal.
 
-Isso resolve o "não atribuiu a mim" percebido — o chip de responsável no cabeçalho e a badge na lista passam a mostrar o Gabriel na hora.
+Isso descarta os casos do tipo `PEDIDO_RETIRADO` / `PEDIDO_PAGO` / qualquer automação WooCommerce que gere um outbound recente.
 
-### 2. Renderizar os botões de triagem no chat (`src/components/ChatInterface.tsx`)
+### 2. Marcar as mensagens de automação/template para o filtro (`supabase/functions/automation-runner/index.ts`)
 
-No renderizador de mensagem (procurar o bloco que imprime `msg.content`):
+Confirmar (e ajustar se preciso) que toda mensagem enfileirada pelo `automation-runner` grave em `send_queue.metadata` o `automation_rule_id` (e/ou `template_name`) para que, ao virar `messages`, o filtro acima funcione com robustez. Se já grava, não precisa mudar; se não grava, incluir `metadata: { automation_rule_id, template_name }` no insert do `send_queue`.
 
-**Saída (Donatella → cliente):** quando `msg.metadata?.interactive?.kind === 'button'`:
-- Renderizar o `content` normalmente.
-- Abaixo, uma linha de chips desabilitados (`<button disabled>` estilizado como pill outline) com o `title` de cada `metadata.interactive.buttons[i]`.
-- Legenda pequena `Botões enviados`.
+### 3. (Opcional, defensivo) Marcar a saudação inicial como elegível
 
-**Entrada (cliente → Donatella):** quando `msg.metadata?.interactive?.kind === 'button_reply'`:
-- Se `content` estiver vazio, usar `metadata.interactive.title` como texto.
-- Renderizar um badge acima da mensagem: `↳ Botão clicado` com o `title` destacado (mesma cor do accent do chat).
-
-Sem mudança no orquestrador, no schema, ou no fluxo do WhatsApp — os dados já estão persistidos em `metadata`.
+No `nina-orchestrator`, quando a Nina envia a primeira resposta a um lead novo (onboarding/saudação), gravar `metadata.welcome_greeting = true` na mensagem. Ajustar o `followup-inactive-leads` para exigir que o **último outbound** tenha `metadata.welcome_greeting = true`. Isso é o inverso do filtro do item 1 e torna a regra explícita ("só faz follow-up de saudação"). Deixo como opcional porque o item 1 já resolve o bug reportado; se você quiser a versão mais estrita, incluímos.
 
 ## Fora de escopo
 
-- Não muda a lógica sticky do backend (`api._autoAssignIfUnassigned`) — já funciona.
-- Não muda o envio da mensagem interativa pela Meta Graph API.
-- Não muda schema nem RLS.
+- Sem mudanças de UI, schema ou RLS.
+- Sem mexer no `pg_cron` — a frequência (15 min) continua igual.
+- Sem alterar a mensagem de follow-up nem o tempo configurado em Settings.
 
-## Como validar depois
+## Como validar
 
-1. Abrir uma conversa não atribuída a você, mandar uma mensagem → chip de "Responsável: {seu nome}" aparece imediatamente na coluna direita e na lista.
-2. Abrir uma conversa recém-triada da Donatella → ver os chips "Atendimento" / "Suporte" logo abaixo da mensagem de saudação, e, quando o cliente clicar, ver o badge "Botão clicado: Suporte" na próxima mensagem de entrada.
+1. Simular um template outbound recente (ex.: `PEDIDO_RETIRADO`) em uma conversa `status='nina'` e rodar `followup-inactive-leads` manualmente → deve retornar `skipped` para essa conversa.
+2. Criar uma conversa nova só com 1 mensagem do cliente + 1 resposta orgânica da Nina, aguardar a janela → deve disparar o follow-up.
+3. Conferir o caso do print (Kátia R.): não deveria mais receber follow-up após um `PEDIDO_RETIRADO`.
