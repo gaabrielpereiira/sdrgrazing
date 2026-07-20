@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
     // Candidates: still with Nina, sales queue, active, no follow-up yet, last activity within window
     const { data: candidates, error } = await supabase
       .from('conversations')
-      .select('id, contact_id, last_message_at, metadata')
+      .select('id, contact_id, last_message_at, metadata, nina_context')
       .eq('status', 'nina')
       .eq('queue', 'sales')
       .eq('is_active', true)
@@ -49,7 +49,24 @@ Deno.serve(async (req) => {
       const meta = (conv.metadata || {}) as Record<string, any>;
       if (meta.welcome_followup_sent === true) { skipped++; continue; }
 
-      // Confirm the last message was NOT from the user
+      // Must still be in triage step (lead hasn't clicked any button yet)
+      const step = ((conv.nina_context as any)?.onboarding?.step) || null;
+      if (step !== 'await_triage') { skipped++; continue; }
+
+      // Last outbound must be exactly the triage buttons message
+      const { data: lastOutbound } = await supabase
+        .from('messages')
+        .select('from_type, metadata')
+        .eq('conversation_id', conv.id)
+        .in('from_type', ['nina', 'human', 'system'])
+        .order('sent_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const md = ((lastOutbound?.metadata as any) || {}) as Record<string, any>;
+      const isTriage = md.onboarding === true && md?.interactive?.kind === 'button';
+      if (!lastOutbound || !isTriage) { skipped++; continue; }
+
+      // And the client must not have replied after the triage message
       const { data: lastMsg } = await supabase
         .from('messages')
         .select('from_type')
@@ -58,37 +75,6 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
       if (!lastMsg || lastMsg.from_type === 'user') { skipped++; continue; }
-
-      // Only send follow-up when this is truly a brand-new lead that never
-      // engaged after the initial greeting. Skip if:
-      //  - the lead has already sent more than one inbound message, OR
-      //  - any recent outbound was a template/automation (e.g. PEDIDO_RETIRADO)
-      const { count: userMsgCount } = await supabase
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('conversation_id', conv.id)
-        .eq('from_type', 'user');
-      if ((userMsgCount ?? 0) !== 1) { skipped++; continue; }
-
-      const { data: recentOutbound } = await supabase
-        .from('messages')
-        .select('message_type, metadata')
-        .eq('conversation_id', conv.id)
-        .in('from_type', ['nina', 'human', 'system'])
-        .order('sent_at', { ascending: false })
-        .limit(10);
-
-      const hasAutomationOrTemplate = (recentOutbound || []).some((m: any) => {
-        if (m.message_type === 'template') return true;
-        const md = (m.metadata || {}) as Record<string, any>;
-        if (md.source === 'automation') return true;
-        if (md.automation_rule_id || md.rule_id) return true;
-        if (md.template_name || md.template) return true;
-        if (md.welcome_followup === true) return true;
-        if (md.kind === 'template' || md.kind === 'automation') return true;
-        return false;
-      });
-      if (hasAutomationOrTemplate) { skipped++; continue; }
 
       // Mark first (optimistic idempotency); if update affected 0 rows, skip
       const { data: claimed } = await supabase
