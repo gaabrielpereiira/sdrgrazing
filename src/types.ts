@@ -300,6 +300,8 @@ export interface UIConversation {
   lastMessageAt: string;
   unreadCount: number;
   tags: string[];
+  contactTags: string[];
+  conversationTags: string[];
   messages: UIMessage[];
   clientMemory: ClientMemory;
   notes: string | null;
@@ -354,7 +356,9 @@ export function transformDBToUIConversation(
     lastMessageTime: formatRelativeTime(conv.last_message_at),
     lastMessageAt: conv.last_message_at,
     unreadCount,
-    tags: [...(conv.tags || []), ...(conv.contact?.tags || [])],
+    tags: Array.from(new Set([...(conv.tags || []), ...(conv.contact?.tags || [])])),
+    contactTags: Array.from(new Set(conv.contact?.tags || [])),
+    conversationTags: Array.from(new Set(conv.tags || [])),
     messages: sortedMessages.map(transformDBToUIMessage),
     clientMemory: conv.contact?.client_memory || getDefaultClientMemory(),
     notes: conv.contact?.notes || null,
