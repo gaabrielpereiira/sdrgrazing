@@ -1455,6 +1455,28 @@ async function handleOnboarding(
     }
 
     if (choseSuporte) {
+      // Pre-sale override: se o texto do lead descreve pedido novo/orçamento,
+      // ignora o clique de "Suporte pós-venda" e devolve para o fluxo comercial.
+      const preSale = await detectPreSaleIntent({
+        supabase,
+        conversationId: conversation.id,
+        currentText: userText,
+        buttonTitle: 'Suporte pós-venda',
+      });
+      if (preSale.is_pre_sale && preSale.confidence >= 60) {
+        console.log('[Onboarding] pre-sale override @await_triage:', preSale.reason, preSale.confidence);
+        await setOnboardingStep(supabase, conversation, { step: 'done' });
+        try {
+          await supabase
+            .from('messages')
+            .update({
+              metadata: { ...(message.metadata || {}), onboarding_kickoff: true, pre_sale_override: true },
+            })
+            .eq('id', message.id);
+        } catch (_) { /* ignore */ }
+        return 'continue';
+      }
+
       await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.SUPPORT_ASK_ORDER, message.id);
       await setOnboardingStep(supabase, conversation, {
         step: 'await_support_order',
@@ -1462,6 +1484,7 @@ async function handleOnboarding(
       });
       return 'handled';
     }
+
 
     // Unrecognized text -> resend triage once, then default to Atendimento.
     const retries = (onboarding?.retries || 0) + 1;
