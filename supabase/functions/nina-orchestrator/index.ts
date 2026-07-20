@@ -1269,6 +1269,82 @@ async function fetchWooOrderStatus(supabase: any, orderNumber: string | null | u
 }
 
 
+/**
+ * Detects whether the lead's text really indicates pre-sale intent
+ * (novo pedido / orçamento / cardápio / disponibilidade), even when they
+ * clicked "Suporte pós-venda" by mistake.
+ * Safe fallback: on any failure or low confidence, returns { is_pre_sale: false }.
+ */
+async function detectPreSaleIntent(params: {
+  supabase: any;
+  conversationId: string;
+  currentText: string;
+  buttonTitle?: string | null;
+}): Promise<{ is_pre_sale: boolean; confidence: number; reason: string }> {
+  const safe = { is_pre_sale: false, confidence: 0, reason: '' };
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableApiKey) return safe;
+
+  // Gather up to 5 recent inbound messages for extra context
+  let recent: string[] = [];
+  try {
+    const { data } = await params.supabase
+      .from('messages')
+      .select('content, direction, created_at')
+      .eq('conversation_id', params.conversationId)
+      .eq('direction', 'inbound')
+      .order('created_at', { ascending: false })
+      .limit(5);
+    recent = (data || [])
+      .map((m: any) => String(m.content || '').trim())
+      .filter(Boolean)
+      .reverse();
+  } catch (_) { /* ignore */ }
+
+  const combined = Array.from(new Set([...recent, params.currentText].filter(Boolean))).join(' | ');
+
+  const sys =
+    'Você classifica a intenção real de um lead do WhatsApp da Grazing Table & Co (buffet de café da manhã / cestas / eventos). ' +
+    'Responda APENAS um JSON válido com as chaves: is_pre_sale (boolean), confidence (0-100), reason (string curta em PT-BR). ' +
+    'is_pre_sale=true quando o texto indica INTENÇÃO COMERCIAL / PRÉ-VENDA: novo pedido, orçamento, cotação, cardápio, disponibilidade, preço, "quero pedir", "preciso de uma cesta", evento futuro, dúvida sobre produtos, iFood, reserva. ' +
+    'is_pre_sale=false quando indica SUPORTE PÓS-VENDA REAL: pedido já feito com problema, atraso, item errado/faltando, troca, reembolso, reclamação, cancelamento, nota fiscal, rastreio, defeito. ' +
+    'Se o cliente clicou no botão "Suporte pós-venda" mas o texto claramente descreve um pedido novo/cotação, priorize o TEXTO e retorne is_pre_sale=true. ' +
+    'Se ambíguo ou vazio, retorne is_pre_sale=false com confidence baixa.';
+
+  const user = JSON.stringify({
+    botao_clicado: params.buttonTitle || null,
+    ultima_mensagem: params.currentText || '',
+    contexto_recente: combined,
+  });
+
+  try {
+    const res = await fetch(LOVABLE_AI_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: user },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+    });
+    if (!res.ok) return safe;
+    const json = await res.json();
+    const raw = json?.choices?.[0]?.message?.content || '{}';
+    const parsed = JSON.parse(raw);
+    return {
+      is_pre_sale: parsed.is_pre_sale === true,
+      confidence: Number(parsed.confidence) || 0,
+      reason: String(parsed.reason || '').slice(0, 200),
+    };
+  } catch (e) {
+    console.warn('[detectPreSaleIntent] failed:', e);
+    return safe;
+  }
+}
+
 
 /**
  * Handles the opening flow. Returns:
