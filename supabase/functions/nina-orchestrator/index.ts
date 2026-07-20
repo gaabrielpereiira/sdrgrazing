@@ -1269,6 +1269,82 @@ async function fetchWooOrderStatus(supabase: any, orderNumber: string | null | u
 }
 
 
+/**
+ * Detects whether the lead's text really indicates pre-sale intent
+ * (novo pedido / orçamento / cardápio / disponibilidade), even when they
+ * clicked "Suporte pós-venda" by mistake.
+ * Safe fallback: on any failure or low confidence, returns { is_pre_sale: false }.
+ */
+async function detectPreSaleIntent(params: {
+  supabase: any;
+  conversationId: string;
+  currentText: string;
+  buttonTitle?: string | null;
+}): Promise<{ is_pre_sale: boolean; confidence: number; reason: string }> {
+  const safe = { is_pre_sale: false, confidence: 0, reason: '' };
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableApiKey) return safe;
+
+  // Gather up to 5 recent inbound messages for extra context
+  let recent: string[] = [];
+  try {
+    const { data } = await params.supabase
+      .from('messages')
+      .select('content, direction, created_at')
+      .eq('conversation_id', params.conversationId)
+      .eq('direction', 'inbound')
+      .order('created_at', { ascending: false })
+      .limit(5);
+    recent = (data || [])
+      .map((m: any) => String(m.content || '').trim())
+      .filter(Boolean)
+      .reverse();
+  } catch (_) { /* ignore */ }
+
+  const combined = Array.from(new Set([...recent, params.currentText].filter(Boolean))).join(' | ');
+
+  const sys =
+    'Você classifica a intenção real de um lead do WhatsApp da Grazing Table & Co (buffet de café da manhã / cestas / eventos). ' +
+    'Responda APENAS um JSON válido com as chaves: is_pre_sale (boolean), confidence (0-100), reason (string curta em PT-BR). ' +
+    'is_pre_sale=true quando o texto indica INTENÇÃO COMERCIAL / PRÉ-VENDA: novo pedido, orçamento, cotação, cardápio, disponibilidade, preço, "quero pedir", "preciso de uma cesta", evento futuro, dúvida sobre produtos, iFood, reserva. ' +
+    'is_pre_sale=false quando indica SUPORTE PÓS-VENDA REAL: pedido já feito com problema, atraso, item errado/faltando, troca, reembolso, reclamação, cancelamento, nota fiscal, rastreio, defeito. ' +
+    'Se o cliente clicou no botão "Suporte pós-venda" mas o texto claramente descreve um pedido novo/cotação, priorize o TEXTO e retorne is_pre_sale=true. ' +
+    'Se ambíguo ou vazio, retorne is_pre_sale=false com confidence baixa.';
+
+  const user = JSON.stringify({
+    botao_clicado: params.buttonTitle || null,
+    ultima_mensagem: params.currentText || '',
+    contexto_recente: combined,
+  });
+
+  try {
+    const res = await fetch(LOVABLE_AI_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: user },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+    });
+    if (!res.ok) return safe;
+    const json = await res.json();
+    const raw = json?.choices?.[0]?.message?.content || '{}';
+    const parsed = JSON.parse(raw);
+    return {
+      is_pre_sale: parsed.is_pre_sale === true,
+      confidence: Number(parsed.confidence) || 0,
+      reason: String(parsed.reason || '').slice(0, 200),
+    };
+  } catch (e) {
+    console.warn('[detectPreSaleIntent] failed:', e);
+    return safe;
+  }
+}
+
 
 /**
  * Handles the opening flow. Returns:
@@ -1379,6 +1455,28 @@ async function handleOnboarding(
     }
 
     if (choseSuporte) {
+      // Pre-sale override: se o texto do lead descreve pedido novo/orçamento,
+      // ignora o clique de "Suporte pós-venda" e devolve para o fluxo comercial.
+      const preSale = await detectPreSaleIntent({
+        supabase,
+        conversationId: conversation.id,
+        currentText: userText,
+        buttonTitle: 'Suporte pós-venda',
+      });
+      if (preSale.is_pre_sale && preSale.confidence >= 60) {
+        console.log('[Onboarding] pre-sale override @await_triage:', preSale.reason, preSale.confidence);
+        await setOnboardingStep(supabase, conversation, { step: 'done' });
+        try {
+          await supabase
+            .from('messages')
+            .update({
+              metadata: { ...(message.metadata || {}), onboarding_kickoff: true, pre_sale_override: true },
+            })
+            .eq('id', message.id);
+        } catch (_) { /* ignore */ }
+        return 'continue';
+      }
+
       await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.SUPPORT_ASK_ORDER, message.id);
       await setOnboardingStep(supabase, conversation, {
         step: 'await_support_order',
@@ -1386,6 +1484,7 @@ async function handleOnboarding(
       });
       return 'handled';
     }
+
 
     // Unrecognized text -> resend triage once, then default to Atendimento.
     const retries = (onboarding?.retries || 0) + 1;
@@ -1410,6 +1509,27 @@ async function handleOnboarding(
 
   // STEP: await_support_order -> capture order number (or "não tenho"), then ask issue
   if (step === 'await_support_order') {
+    // Pre-sale override: se, em vez de nº do pedido, o lead escreve algo comercial
+    const preSale = await detectPreSaleIntent({
+      supabase,
+      conversationId: conversation.id,
+      currentText: userText,
+      buttonTitle: null,
+    });
+    if (preSale.is_pre_sale && preSale.confidence >= 60) {
+      console.log('[Onboarding] pre-sale override @await_support_order:', preSale.reason, preSale.confidence);
+      await setOnboardingStep(supabase, conversation, { step: 'done', support_intake: null });
+      try {
+        await supabase
+          .from('messages')
+          .update({
+            metadata: { ...(message.metadata || {}), onboarding_kickoff: true, pre_sale_override: true },
+          })
+          .eq('id', message.id);
+      } catch (_) { /* ignore */ }
+      return 'continue';
+    }
+
     const cleaned = userText.replace(/[^\w\s#-]/g, '').trim();
     const intake = { ...(onboarding?.support_intake || {}), order_number: cleaned || null };
     await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.SUPPORT_ASK_ISSUE, message.id);
@@ -1422,7 +1542,29 @@ async function handleOnboarding(
 
   // STEP: await_support_issue -> classify, decide, transfer if needed
   if (step === 'await_support_issue') {
+    // Pre-sale override: última chance de sair antes de abrir caso de suporte
+    const preSaleCheck = await detectPreSaleIntent({
+      supabase,
+      conversationId: conversation.id,
+      currentText: userText,
+      buttonTitle: null,
+    });
+    if (preSaleCheck.is_pre_sale && preSaleCheck.confidence >= 60) {
+      console.log('[Onboarding] pre-sale override @await_support_issue:', preSaleCheck.reason, preSaleCheck.confidence);
+      await setOnboardingStep(supabase, conversation, { step: 'done', support_intake: null });
+      try {
+        await supabase
+          .from('messages')
+          .update({
+            metadata: { ...(message.metadata || {}), onboarding_kickoff: true, pre_sale_override: true },
+          })
+          .eq('id', message.id);
+      } catch (_) { /* ignore */ }
+      return 'continue';
+    }
+
     const intake = { ...(onboarding?.support_intake || {}), issue_text: userText };
+
 
     // Classify group + category + sentiment + side-channel via Lovable AI Gateway
     const classification = await classifySupportIntake(intake);
