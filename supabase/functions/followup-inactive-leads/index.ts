@@ -59,6 +59,36 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (!lastMsg || lastMsg.from_type === 'user') { skipped++; continue; }
 
+      // Only send follow-up when this is truly a brand-new lead that never
+      // engaged after the initial greeting. Skip if:
+      //  - the lead has already sent more than one inbound message, OR
+      //  - any recent outbound was a template/automation (e.g. PEDIDO_RETIRADO)
+      const { count: userMsgCount } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', conv.id)
+        .eq('from_type', 'user');
+      if ((userMsgCount ?? 0) !== 1) { skipped++; continue; }
+
+      const { data: recentOutbound } = await supabase
+        .from('messages')
+        .select('message_type, metadata')
+        .eq('conversation_id', conv.id)
+        .in('from_type', ['nina', 'human', 'system'])
+        .order('sent_at', { ascending: false })
+        .limit(10);
+
+      const hasAutomationOrTemplate = (recentOutbound || []).some((m: any) => {
+        if (m.message_type === 'template') return true;
+        const md = (m.metadata || {}) as Record<string, any>;
+        if (md.automation_rule_id) return true;
+        if (md.template_name) return true;
+        if (md.welcome_followup === true) return true;
+        if (md.kind === 'template' || md.kind === 'automation') return true;
+        return false;
+      });
+      if (hasAutomationOrTemplate) { skipped++; continue; }
+
       // Mark first (optimistic idempotency); if update affected 0 rows, skip
       const { data: claimed } = await supabase
         .from('conversations')
