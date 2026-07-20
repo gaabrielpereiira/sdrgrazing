@@ -81,8 +81,9 @@ Deno.serve(async (req) => {
       const hasAutomationOrTemplate = (recentOutbound || []).some((m: any) => {
         if (m.message_type === 'template') return true;
         const md = (m.metadata || {}) as Record<string, any>;
-        if (md.automation_rule_id) return true;
-        if (md.template_name) return true;
+        if (md.source === 'automation') return true;
+        if (md.automation_rule_id || md.rule_id) return true;
+        if (md.template_name || md.template) return true;
         if (md.welcome_followup === true) return true;
         if (md.kind === 'template' || md.kind === 'automation') return true;
         return false;
