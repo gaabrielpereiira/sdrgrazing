@@ -1509,6 +1509,27 @@ async function handleOnboarding(
 
   // STEP: await_support_order -> capture order number (or "não tenho"), then ask issue
   if (step === 'await_support_order') {
+    // Pre-sale override: se, em vez de nº do pedido, o lead escreve algo comercial
+    const preSale = await detectPreSaleIntent({
+      supabase,
+      conversationId: conversation.id,
+      currentText: userText,
+      buttonTitle: null,
+    });
+    if (preSale.is_pre_sale && preSale.confidence >= 60) {
+      console.log('[Onboarding] pre-sale override @await_support_order:', preSale.reason, preSale.confidence);
+      await setOnboardingStep(supabase, conversation, { step: 'done', support_intake: null });
+      try {
+        await supabase
+          .from('messages')
+          .update({
+            metadata: { ...(message.metadata || {}), onboarding_kickoff: true, pre_sale_override: true },
+          })
+          .eq('id', message.id);
+      } catch (_) { /* ignore */ }
+      return 'continue';
+    }
+
     const cleaned = userText.replace(/[^\w\s#-]/g, '').trim();
     const intake = { ...(onboarding?.support_intake || {}), order_number: cleaned || null };
     await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.SUPPORT_ASK_ISSUE, message.id);
@@ -1521,7 +1542,29 @@ async function handleOnboarding(
 
   // STEP: await_support_issue -> classify, decide, transfer if needed
   if (step === 'await_support_issue') {
+    // Pre-sale override: última chance de sair antes de abrir caso de suporte
+    const preSaleCheck = await detectPreSaleIntent({
+      supabase,
+      conversationId: conversation.id,
+      currentText: userText,
+      buttonTitle: null,
+    });
+    if (preSaleCheck.is_pre_sale && preSaleCheck.confidence >= 60) {
+      console.log('[Onboarding] pre-sale override @await_support_issue:', preSaleCheck.reason, preSaleCheck.confidence);
+      await setOnboardingStep(supabase, conversation, { step: 'done', support_intake: null });
+      try {
+        await supabase
+          .from('messages')
+          .update({
+            metadata: { ...(message.metadata || {}), onboarding_kickoff: true, pre_sale_override: true },
+          })
+          .eq('id', message.id);
+      } catch (_) { /* ignore */ }
+      return 'continue';
+    }
+
     const intake = { ...(onboarding?.support_intake || {}), issue_text: userText };
+
 
     // Classify group + category + sentiment + side-channel via Lovable AI Gateway
     const classification = await classifySupportIntake(intake);
