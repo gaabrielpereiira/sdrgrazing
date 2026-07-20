@@ -572,18 +572,30 @@ const ChatInterface: React.FC = () => {
 
   const handleToggleTag = async (tagKey: string) => {
     if (!activeChat) return;
-    
-    const currentTags = activeChat.tags || [];
-    const newTags = currentTags.includes(tagKey)
-      ? currentTags.filter(t => t !== tagKey)
-      : [...currentTags, tagKey];
-    
+
+    const currentContactTags = Array.from(new Set(activeChat.contactTags || []));
+    const newTags = currentContactTags.includes(tagKey)
+      ? currentContactTags.filter(t => t !== tagKey)
+      : [...currentContactTags, tagKey];
+
     try {
       await api.updateContactTags(activeChat.contactId, newTags);
       toast.success('Tag atualizada');
     } catch (error) {
       console.error('Error updating tag:', error);
       toast.error('Erro ao atualizar tag');
+    }
+  };
+
+  const handleClearAllTags = async () => {
+    if (!activeChat) return;
+    if (!confirm('Remover todas as tags deste contato?')) return;
+    try {
+      await api.updateContactTags(activeChat.contactId, []);
+      toast.success('Tags removidas');
+    } catch (error) {
+      console.error('Error clearing tags:', error);
+      toast.error('Erro ao remover tags');
     }
   };
 
@@ -2563,45 +2575,63 @@ const ChatInterface: React.FC = () => {
                 <div className="h-px bg-slate-800/50 w-full"></div>
 
                 {/* Tags */}
+                {(() => {
+                  const uniqueTags = Array.from(new Set(activeChat.tags || []));
+                  const uniqueContactTags = Array.from(new Set(activeChat.contactTags || []));
+                  return (
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-                    Tags
-                    <Popover open={isTagSelectorOpen} onOpenChange={setIsTagSelectorOpen}>
-                      <PopoverTrigger asChild>
-                        <button className="text-brand-gold-500 hover:text-brand-gold-400 transition-colors">
-                          <Plus className="w-4 h-4" />
+                    <span>Tags</span>
+                    <div className="flex items-center gap-2">
+                      {uniqueContactTags.length >= 2 && (
+                        <button
+                          onClick={handleClearAllTags}
+                          className="text-[10px] font-semibold text-slate-400 hover:text-red-400 transition-colors normal-case tracking-normal"
+                        >
+                          Limpar todas
                         </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-72 p-0 bg-slate-900 border-slate-700" align="end">
-                        <TagSelector 
-                          availableTags={availableTags}
-                          selectedTags={activeChat.tags || []}
-                          onToggleTag={handleToggleTag}
-                          onCreateTag={handleCreateTag}
-                        />
-                      </PopoverContent>
-                    </Popover>
+                      )}
+                      <Popover open={isTagSelectorOpen} onOpenChange={setIsTagSelectorOpen}>
+                        <PopoverTrigger asChild>
+                          <button className="text-brand-gold-500 hover:text-brand-gold-400 transition-colors">
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 p-0 bg-slate-900 border-slate-700" align="end">
+                          <TagSelector
+                            availableTags={availableTags}
+                            selectedTags={uniqueContactTags}
+                            onToggleTag={handleToggleTag}
+                            onCreateTag={handleCreateTag}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                   </h4>
                   <div className="flex flex-wrap gap-2">
-                    {activeChat.tags && activeChat.tags.length > 0 ? (
-                      activeChat.tags.map(tagKey => {
+                    {uniqueTags.length > 0 ? (
+                      uniqueTags.map(tagKey => {
                         const tagDef = availableTags.find(t => t.key === tagKey);
+                        const isContactTag = uniqueContactTags.includes(tagKey);
                         return (
-                          <span 
+                          <span
                             key={tagKey}
-                            style={{ 
+                            style={{
                               backgroundColor: tagDef?.color ? `${tagDef.color}20` : 'rgba(59, 130, 246, 0.2)',
                               borderColor: tagDef?.color || '#3b82f6'
                             }}
-                            className="px-2.5 py-1 rounded-md border text-xs font-medium flex items-center gap-1.5 group hover:brightness-110 transition-all"
+                            className="px-2.5 py-1 rounded-md border text-xs font-medium flex items-center gap-1.5 hover:brightness-110 transition-all"
                           >
                             <span className="text-slate-200">{tagDef?.label || tagKey}</span>
-                            <button
-                              onClick={() => handleToggleTag(tagKey)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <X className="w-3 h-3 text-slate-400 hover:text-slate-200" />
-                            </button>
+                            {isContactTag && (
+                              <button
+                                onClick={() => handleToggleTag(tagKey)}
+                                className="opacity-70 hover:opacity-100 transition-opacity"
+                                aria-label="Remover tag"
+                              >
+                                <X className="w-3 h-3 text-slate-300 hover:text-red-400" />
+                              </button>
+                            )}
                           </span>
                         );
                       })
@@ -2610,6 +2640,8 @@ const ChatInterface: React.FC = () => {
                     )}
                   </div>
                 </div>
+                  );
+                })()}
 
                 {/* Support Tickets History */}
                 <div className="space-y-3">

@@ -513,7 +513,8 @@ export function useConversations(options?: { active?: boolean; queue?: 'sales' |
               contactEmail: updated.email ?? conv.contactEmail,
               contactAvatar: updated.profile_picture_url
                 || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0ea5e9&color=fff`,
-              tags: [...(conv.tags?.filter((t: string) => !(conv as any)._contactTags?.includes(t)) || []), ...((updated.tags as string[]) || [])],
+              contactTags: Array.from(new Set((updated.tags as string[]) || [])),
+              tags: Array.from(new Set([...(((conv as any).conversationTags as string[]) || []), ...((updated.tags as string[]) || [])])),
               notes: updated.notes ?? conv.notes,
               clientMemory: updated.client_memory ?? conv.clientMemory,
               isBusiness: !!updated.is_business,

@@ -2710,9 +2710,10 @@ export const api = {
    * Update contact tags
    */
   updateContactTags: async (contactId: string, tags: string[]): Promise<void> => {
+    const deduped = Array.from(new Set((tags || []).filter(Boolean)));
     const { error } = await supabase
       .from('contacts')
-      .update({ tags })
+      .update({ tags: deduped })
       .eq('id', contactId);
     
     if (error) {
