@@ -1772,7 +1772,6 @@ async function handleOnboarding(
           intake.order_number ? `Pedido: ${intake.order_number}` : 'Pedido: (não informado)',
           `Resumo: ${summary}`,
         ].join('\n'),
-        priority: classification.sentiment_key === 'urgente' ? 'high' : 'normal',
         conversation_id: conversation.id,
         contact_id: conversation.contact_id,
         metadata: {
@@ -1784,6 +1783,7 @@ async function handleOnboarding(
           sentiment: classification.sentiment_key,
           order_number: intake.order_number,
           triggered_by: 'donatella_support_intake',
+          priority: classification.sentiment_key === 'urgente' ? 'high' : 'normal',
         },
       });
     } catch (notifErr) {
