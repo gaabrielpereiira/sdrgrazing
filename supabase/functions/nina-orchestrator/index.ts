@@ -941,11 +941,14 @@ async function dispatchSupportAlert(supabase: any, ctx: {
     .limit(1)
     .maybeSingle();
 
-  if (!settings?.support_alert_enabled) return;
+  if (!settings?.support_alert_enabled) {
+    console.log('[SupportAlert] disabled in nina_settings, skipping');
+    return;
+  }
   const phone = String(settings.support_alert_phone || '').replace(/\D/g, '');
   const templateName = String(settings.support_alert_template || '').trim();
   if (!phone || !templateName) {
-    console.warn('[SupportAlert] enabled but phone/template missing');
+    console.warn('[SupportAlert] enabled but phone/template missing', { phone: !!phone, templateName });
     return;
   }
 
