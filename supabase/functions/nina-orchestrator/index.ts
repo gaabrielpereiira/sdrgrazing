@@ -1037,8 +1037,7 @@ async function dispatchSupportAlert(supabase: any, ctx: {
       type: 'support_alert_failed',
       title: '⚠️ Falha ao enviar alerta de suporte',
       body: `Não foi possível enfileirar o WhatsApp para o plantão (${phone}). Detalhe: ${enqErr.message}`,
-      priority: 'high',
-      metadata: { template: templateName, phone, error: enqErr.message },
+      metadata: { template: templateName, phone, error: enqErr.message, priority: 'high' },
     });
     return;
   }
