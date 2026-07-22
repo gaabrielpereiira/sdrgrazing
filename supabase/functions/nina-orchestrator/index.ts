@@ -1484,6 +1484,92 @@ async function handleOnboarding(
         step: 'await_support_order',
         support_intake: {},
       });
+
+      // Handoff antecipado: já atribui responsável de Produção, notifica e
+      // dispara alerta WhatsApp no clique do botão (dispatchSupportAlert tem
+      // cooldown de 10 min por conversation, então a chamada final após a
+      // classificação completa não duplica).
+      try {
+        const clientLabel = contact?.call_name || contact?.name || contact?.phone_number || 'Cliente';
+
+        // Resolver producao_user_id e time de Produção
+        let earlyResponsavelId: string | null = null;
+        let earlyProducaoTeamId: string | null = null;
+        try {
+          const { data: ns } = await supabase
+            .from('nina_settings')
+            .select('producao_user_id')
+            .is('user_id', null)
+            .maybeSingle();
+          const prodUserId = (ns as any)?.producao_user_id || null;
+          if (prodUserId) {
+            const { data: tm } = await supabase
+              .from('team_members')
+              .select('id, status')
+              .eq('id', prodUserId)
+              .maybeSingle();
+            if (tm && (tm as any).status === 'active') {
+              earlyResponsavelId = (tm as any).id;
+            }
+          }
+          const { data: prodTeam } = await supabase
+            .from('teams')
+            .select('id')
+            .ilike('name', 'produ%')
+            .maybeSingle();
+          earlyProducaoTeamId = (prodTeam as any)?.id || null;
+        } catch (e) {
+          console.error('[Onboarding][EarlyHandoff] resolve producao failed:', e);
+        }
+
+        // Atribuir na conversa imediatamente (sem trocar status/is_active — o
+        // fluxo continua coletando pedido/problema).
+        const earlyUpdate: Record<string, any> = {};
+        if (earlyResponsavelId) earlyUpdate.assigned_user_id = earlyResponsavelId;
+        if (earlyProducaoTeamId) earlyUpdate.assigned_team = earlyProducaoTeamId;
+        const existingTags = Array.isArray(conversation.tags) ? conversation.tags : [];
+        const provisionalTags = Array.from(new Set([...existingTags, 'motivo:triagem_suporte']));
+        earlyUpdate.tags = provisionalTags;
+        if (Object.keys(earlyUpdate).length > 0) {
+          await supabase.from('conversations').update(earlyUpdate).eq('id', conversation.id);
+          console.log('[Onboarding][EarlyHandoff] assigned', {
+            conversation_id: conversation.id,
+            responsavel_id: earlyResponsavelId,
+            team_id: earlyProducaoTeamId,
+          });
+        }
+
+        // Notificação no sino
+        await supabase.from('notifications').insert({
+          type: 'handoff_requested',
+          title: `Novo chamado de suporte iniciado: ${clientLabel}`,
+          body: 'Lead clicou em "Suporte pós-venda". Aguardando número do pedido e descrição do problema.',
+          conversation_id: conversation.id,
+          contact_id: conversation.contact_id,
+          metadata: {
+            target_team_id: earlyProducaoTeamId,
+            target_team_name: 'Produção',
+            responsavel_id: earlyResponsavelId,
+            stage: 'triage_started',
+            triggered_by: 'donatella_support_triage_click',
+            priority: 'normal',
+          },
+        });
+
+        // Alerta WhatsApp para plantão (com labels provisórios)
+        await dispatchSupportAlert(supabase, {
+          contactId: conversation.contact_id,
+          conversationId: conversation.id,
+          clientLabel,
+          orderNumber: null,
+          reasonLabel: 'Triagem inicial',
+          sentimentLabel: 'a apurar',
+          summary: 'Lead abriu ticket de suporte. Coletando pedido/problema.',
+        });
+      } catch (earlyErr) {
+        console.error('[Onboarding][EarlyHandoff] failed:', earlyErr);
+      }
+
       return 'handled';
     }
 
