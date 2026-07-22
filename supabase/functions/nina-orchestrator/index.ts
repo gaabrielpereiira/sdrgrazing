@@ -1638,8 +1638,7 @@ async function handleOnboarding(
               type: 'support_producao_missing',
               title: 'Responsável de Produção indisponível',
               body: 'O usuário fixo de Produção configurado não está ativo. Configure em Settings → Agente.',
-              priority: 'high',
-              metadata: { producao_user_id: prodUserId, conversation_id: conversation.id },
+              metadata: { producao_user_id: prodUserId, conversation_id: conversation.id, priority: 'high' },
             });
           }
         } else {
@@ -1647,8 +1646,7 @@ async function handleOnboarding(
             type: 'support_producao_missing',
             title: 'Responsável de Produção não configurado',
             body: 'Nenhum usuário fixo de Produção definido em Settings → Agente.',
-            priority: 'normal',
-            metadata: { conversation_id: conversation.id },
+            metadata: { conversation_id: conversation.id, priority: 'normal' },
           });
         }
       } catch (e) {
