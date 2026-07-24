@@ -1,40 +1,48 @@
-## Diagnóstico
+## Diagnóstico (confirmado no banco)
 
-Investiguei a tabela `notifications`, `send_queue`, `support_cases`, `nina_settings` e o `nina-orchestrator`. Duas causas concretas:
+A conversa da Helena Perez está com `queue = 'support'`, `tags = []` e **nenhum registro em `support_cases`**. Ou seja:
 
-**1. Todos os `notifications.insert` do fluxo de suporte estão falhando silenciosamente.**
-A tabela `notifications` no banco atual tem apenas as colunas `id, type, title, body, conversation_id, contact_id, metadata, is_read, created_at`. Não existe coluna `priority`. Porém o `nina-orchestrator` insere com `priority: 'high' | 'normal'` em 4 pontos (`support_producao_missing` x2, `handoff_requested`/`handoff_urgent` do intake, `support_alert_failed`). Como cada insert está em `try/catch`, o erro é engolido — resultado: **nenhuma notificação de "Suporte → Produção" aparece no sininho** (confirmado no banco: zero linhas com `triggered_by = 'donatella_support_intake'`).
+- O chip vermelho "Suporte" na lista de conversas vem do campo `conversations.queue`, não de uma tag → por isso não aparece na seção TAGS e não dá para remover clicando no "x".
+- Como não existe `support_case` nem tag `motivo:*`, o painel "Tickets de Suporte" mostra "Nenhum ticket" e o chip fica como "Suporte" genérico (fallback), sem grupo/categoria.
 
-**2. O alerta WhatsApp (`dispatchSupportAlert`) só é enfileirado quando `requer_agente_humano = true`, e isso só acontece no final do intake completo (nome → botão Suporte → número do pedido → descrição do problema → classificação LLM).** Se o lead abandona no meio, ou se a classificação retorna `duvida_geral_pos_compra` com `requer_agente_humano = false` (o que aconteceu nos casos mais recentes — 19/07), a Donatella responde sozinha e nunca dispara nem alerta nem atribuição. As configs estão OK: `support_alert_enabled=true`, phone/template preenchidos, template `suporte` APPROVED, `producao_user_id` aponta para o Gabriel (ativo). Send_queue tem 0 linhas de alerta de suporte na retenção atual.
+Isso acontece quando a Donatella move para suporte mas a classificação falha, ou quando o handoff é feito manualmente (botão "→ Suporte") sem gerar `support_case`.
 
-O mesmo vale para `assigned_user_id`: ele só é setado no update final do intake completo. Enquanto o lead está em `await_support_order` ou `await_support_issue`, a conversa fica sem responsável e sem notificação.
+## Objetivo
 
-## Correções
+1. Permitir que o operador **remova o status de suporte** da conversa direto pelo chat (voltar para `sales` / Atendimento).
+2. Garantir que o painel "Informações do Lead" **sempre mostre o motivo do suporte** quando `queue = 'support'`, mesmo sem `support_case` (usar a tag `motivo:*` ou permitir escolher um motivo agora).
+3. Ao arquivar/finalizar a conversa, garantir também que `queue` volte para `sales` (já fazemos as tags, falta a fila).
 
-### 1. Remover `priority` de todos os `notifications.insert` do orchestrator
-Editar `supabase/functions/nina-orchestrator/index.ts` e limpar o campo `priority` das 4 chamadas (mover a sinalização de urgência para `metadata.priority` para preservar o dado sem quebrar o insert). Assim as notificações voltam a aparecer no sino.
+## Mudanças
 
-### 2. Marcar responsável e disparar alerta no início do handoff, não só no final
-Quando o lead clica no botão "Suporte pós-venda" (`choseSuporte` em `handleOnboarding`), passamos a:
-- Setar `conversations.assigned_user_id = producao_user_id` e `assigned_team = <Produção>` imediatamente (com uma tag provisória `motivo:triagem_suporte`).
-- Inserir uma notificação `handoff_requested` "Novo chamado de suporte iniciado" já nesse momento.
-- Chamar `dispatchSupportAlert` com labels provisórios (`reasonLabel: 'Triagem inicial'`, sem `orderNumber` ainda). Como o dispatch já tem cooldown de 10 min por conversation, a segunda chamada no final do intake não duplica.
+### 1. Botão "Remover suporte" no header do chat (`ChatInterface.tsx`)
 
-Depois, quando `classifySupportIntake` conclui, atualizamos os campos com o motivo/pedido reais (a atribuição já vai estar visível no chat desde o clique).
+Ao lado do botão "→ Suporte" existente, quando `activeChat.queue === 'support'` mostrar:
 
-### 3. Log explícito quando `dispatchSupportAlert` decide não enviar
-Adicionar logs claros nos guards (`support_alert_enabled=false`, template não encontrado, cooldown ativo, phone vazio) para facilitar debug futuro via `edge_function_logs`.
+- Botão **"← Atendimento"** que chama `api.moveConversationQueue(id, 'sales')` e limpa tags `motivo:*` e `sentimento:*`.
+- Esconder o botão "→ Suporte" quando já está em suporte (hoje aparece dos dois lados).
 
-### 4. Verificar depois do deploy
-- Simular via `simulate-webhook` um lead novo → clicar botão Suporte → conferir que:
-  - Conversa aparece com badge do Gabriel imediatamente.
-  - Aparece notificação no sino.
-  - Aparece linha em `send_queue` (message_type=template, name=suporte) para o número 5551980565345.
-- Consultar `edge_function_logs` do `nina-orchestrator` e do `whatsapp-sender` para confirmar envio.
+### 2. Painel "Informações do Lead" — sempre mostrar o motivo atual
+
+Na seção **Tickets de Suporte**, quando não houver `support_case` mas `activeChat.queue === 'support'`:
+
+- Renderizar um card "Suporte ativo" com o motivo derivado de `tags` (`motivo:*`) e o sentimento (`sentimento:*`).
+- Se não houver nenhuma tag de motivo, mostrar um seletor "Definir motivo" com as opções de `SUPPORT_REASONS` que grava a tag `motivo:xxx` na conversa.
+- Botão "Encerrar ticket" que remove o status de suporte (mesma ação do item 1).
+
+### 3. Chip da lista de conversas (`ChatInterface.tsx` linhas 1461-1494)
+
+Já tem fallback para tag `motivo:*`. Ok, mas quando o operador definir o motivo pelo painel (item 2) o chip vai passar a mostrar o rótulo correto automaticamente.
+
+### 4. `endConversation` em `src/services/api.ts`
+
+Ao arquivar/pausar a conversa, além de limpar `tags`, resetar `queue = 'sales'` para que a conversa não continue contando como suporte no histórico e nos filtros.
+
+### 5. Correção pontual dos dados da Helena
+
+Como parte da mesma migração, resetar `queue` para `'sales'` nas conversas hoje `queue='support'` **sem** `support_case` correspondente e sem tag `motivo:*` (limpeza única — inclui o caso da Helena).
 
 ## Detalhes técnicos
 
-- Arquivo único alterado: `supabase/functions/nina-orchestrator/index.ts`.
-- Nenhuma mudança de schema. Se no futuro quisermos `priority` de verdade em notificações, criar migration separada adicionando a coluna com default `'normal'`.
-- Sem impacto no fluxo pré-venda (`detectPreSaleIntent` continua interceptando antes do handoff).
-- Cooldown existente de 10 min em `dispatchSupportAlert` evita duplicação entre a chamada inicial (no clique do botão) e a final (após classificação).
+- `api.moveConversationQueue` já existe e aceita `reasonKey` opcional; adicionar suporte para "limpar" (passar `null` limpa `motivo:*`/`sentimento:*`).
+- Todas as edições ficam em frontend + `api.ts` + uma migração SQL curta de limpeza. Nenhuma mudança no orquestrador.

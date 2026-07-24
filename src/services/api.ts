@@ -1754,8 +1754,8 @@ export const api = {
     }
 
     const currentTags: string[] = Array.isArray(current?.tags) ? current!.tags as string[] : [];
-    // Strip any existing motivo:* tags
-    let nextTags = currentTags.filter((t) => !t.startsWith('motivo:'));
+    // Strip any existing motivo:*/sentimento:* tags (they only make sense while in support queue)
+    let nextTags = currentTags.filter((t) => !t.startsWith('motivo:') && !t.startsWith('sentimento:'));
     if (queue === 'support') {
       const key = opts?.reasonKey || 'nao_classificado';
       nextTags = [...nextTags, `motivo:${key}`];
@@ -2442,7 +2442,7 @@ export const api = {
 
     const { error } = await supabase
       .from('conversations')
-      .update({ is_active: false, status: 'paused', tags: [] })
+      .update({ is_active: false, status: 'paused', tags: [], queue: 'sales' })
       .eq('id', conversationId);
 
     if (error) {
