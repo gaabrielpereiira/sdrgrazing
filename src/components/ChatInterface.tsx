@@ -2654,8 +2654,73 @@ const ChatInterface: React.FC = () => {
                       </span>
                     )}
                   </h4>
+
+                  {/* Active support state (queue=support without an open support_case) */}
+                  {activeChat && activeChat.queue === 'support' && (() => {
+                    const sc = supportCaseMap[activeChat.id];
+                    const motivoTag = activeChat.tags.find((t) => isReasonTag(t));
+                    const motivoKey = motivoTag ? reasonKeyFromTag(motivoTag) : null;
+                    const motivoLabel = motivoKey ? labelForReasonKey(motivoKey) : null;
+                    return (
+                      <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-2.5 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-200 border border-rose-500/40 font-semibold uppercase tracking-wide">
+                            Suporte ativo
+                          </span>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.moveConversationQueue(activeChat.id, 'sales');
+                                toast.success('Suporte encerrado');
+                              } catch {
+                                toast.error('Não foi possível encerrar');
+                              }
+                            }}
+                            className="text-[10px] font-medium text-slate-300 hover:text-white underline underline-offset-2"
+                            title="Remover status de suporte"
+                          >
+                            Encerrar
+                          </button>
+                        </div>
+                        {sc ? (
+                          <p className="text-xs text-slate-200 leading-snug">
+                            {labelForGroup(sc.grupo)} • {labelForCategory(sc.categoria)}
+                          </p>
+                        ) : motivoLabel ? (
+                          <p className="text-xs text-slate-200 leading-snug">
+                            Motivo: <span className="font-medium">{motivoLabel}</span>
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <p className="text-[11px] text-slate-300">Sem motivo definido. Escolha um:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {SUPPORT_REASONS.map((r) => (
+                                <button
+                                  key={r.key}
+                                  onClick={async () => {
+                                    try {
+                                      await api.moveConversationQueue(activeChat.id, 'support', { reasonKey: r.key });
+                                      toast.success(`Motivo definido: ${r.label}`);
+                                    } catch {
+                                      toast.error('Não foi possível salvar');
+                                    }
+                                  }}
+                                  className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/60 hover:bg-rose-500/30 text-slate-200 border border-slate-700 hover:border-rose-500/50 transition-colors"
+                                >
+                                  {r.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {contactSupportCases.length === 0 ? (
-                    <p className="text-xs text-slate-500 italic">Nenhum ticket de suporte</p>
+                    activeChat?.queue !== 'support' && (
+                      <p className="text-xs text-slate-500 italic">Nenhum ticket de suporte</p>
+                    )
                   ) : (
                     <div className="space-y-2">
                       {contactSupportCases.map((sc) => {
@@ -2692,6 +2757,7 @@ const ChatInterface: React.FC = () => {
                     </div>
                   )}
                 </div>
+
 
 
 
