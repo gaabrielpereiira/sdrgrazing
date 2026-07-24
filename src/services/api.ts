@@ -1754,8 +1754,8 @@ export const api = {
     }
 
     const currentTags: string[] = Array.isArray(current?.tags) ? current!.tags as string[] : [];
-    // Strip any existing motivo:* tags
-    let nextTags = currentTags.filter((t) => !t.startsWith('motivo:'));
+    // Strip any existing motivo:*/sentimento:* tags (they only make sense while in support queue)
+    let nextTags = currentTags.filter((t) => !t.startsWith('motivo:') && !t.startsWith('sentimento:'));
     if (queue === 'support') {
       const key = opts?.reasonKey || 'nao_classificado';
       nextTags = [...nextTags, `motivo:${key}`];
