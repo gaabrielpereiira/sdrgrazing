@@ -3,7 +3,7 @@ import {
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck, 
   Smile, Play, Loader2, MessageSquare, Info, X, Mail, 
   Tag, Bot, User, Pause, Brain, Plus, XCircle, RotateCcw, ImageIcon, Bell, AlertTriangle,
-  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate, Mic, Trash2, LifeBuoy, ChevronLeft, Building2, ExternalLink, CornerDownLeft, Users
+  FileText, Music, Reply, Pencil, Upload, AlertCircle, LayoutTemplate, Mic, Trash2, LifeBuoy, ChevronLeft, ChevronDown, Building2, ExternalLink, CornerDownLeft, Users
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition, formatRelativeTime } from '../types';
 import { Button } from './Button';
@@ -34,7 +34,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useSupportCaseByConversation } from '@/hooks/useSupportCaseByConversation';
 import { useSupportCasesByContact } from '@/hooks/useSupportCasesByContact';
-import { labelForGroup, labelForCategory } from '@/lib/supportCategories';
+import { labelForGroup, labelForCategory, SUPPORT_GROUPS, SUPPORT_CATEGORIES } from '@/lib/supportCategories';
 
 
 const SUPPORT_GROUP_CHIP: Record<string, string> = {
@@ -190,6 +190,14 @@ const ChatInterface: React.FC = () => {
   const [closeNoteOpen, setCloseNoteOpen] = useState(false);
   const [closeNote, setCloseNote] = useState('');
   const [closingSupport, setClosingSupport] = useState(false);
+  // Manual support ticket opening
+  const [openTicketForm, setOpenTicketForm] = useState(false);
+  const [ticketGroup, setTicketGroup] = useState<string>('entrega');
+  const [ticketCategory, setTicketCategory] = useState<string>('atraso_entrega');
+  const [ticketOrder, setTicketOrder] = useState('');
+  const [ticketResumo, setTicketResumo] = useState('');
+  const [openingTicket, setOpeningTicket] = useState(false);
+  const [showClosedHistory, setShowClosedHistory] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [showProfileInfo, setShowProfileInfo] = useState(true);
@@ -2680,12 +2688,109 @@ const ChatInterface: React.FC = () => {
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                     <LifeBuoy className="w-3.5 h-3.5" />
                     Histórico de Suporte
-                    {contactSupportCases.length > 0 && (
-                      <span className="ml-auto text-[10px] font-semibold text-slate-400 bg-slate-800/60 border border-slate-700 rounded-full px-2 py-0.5">
-                        {contactSupportCases.length}
-                      </span>
-                    )}
+                    <span className="ml-auto flex items-center gap-2">
+                      {contactSupportCases.length > 0 && (
+                        <span className="text-[10px] font-semibold text-slate-400 bg-slate-800/60 border border-slate-700 rounded-full px-2 py-0.5">
+                          {contactSupportCases.length}
+                        </span>
+                      )}
+                      {activeChat && (
+                        <button
+                          onClick={() => setOpenTicketForm((v) => !v)}
+                          className="text-[10px] font-semibold normal-case text-rose-300 hover:text-rose-200 border border-rose-500/40 hover:border-rose-500/70 rounded-full px-2 py-0.5 transition-colors"
+                          title="Abrir um novo ticket de suporte para este cliente"
+                        >
+                          + Abrir ticket
+                        </button>
+                      )}
+                    </span>
                   </h4>
+
+                  {/* Manual ticket creation form */}
+                  {openTicketForm && activeChat && (
+                    <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-2.5 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-slate-400 font-medium">Grupo</label>
+                          <select
+                            value={ticketGroup}
+                            onChange={(e) => {
+                              const g = e.target.value;
+                              setTicketGroup(g);
+                              const first = SUPPORT_CATEGORIES.find((c) => c.group === g);
+                              if (first) setTicketCategory(first.key);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-md px-2 py-1 text-[11px] text-slate-200 outline-none focus:border-rose-500/50"
+                          >
+                            {SUPPORT_GROUPS.map((g) => (
+                              <option key={g.key} value={g.key}>{g.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-slate-400 font-medium">Categoria</label>
+                          <select
+                            value={ticketCategory}
+                            onChange={(e) => setTicketCategory(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-md px-2 py-1 text-[11px] text-slate-200 outline-none focus:border-rose-500/50"
+                          >
+                            {SUPPORT_CATEGORIES.filter((c) => c.group === ticketGroup).map((c) => (
+                              <option key={c.key} value={c.key}>{c.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <input
+                        value={ticketOrder}
+                        onChange={(e) => setTicketOrder(e.target.value)}
+                        placeholder="Nº do pedido (opcional)"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-md px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-500 outline-none focus:border-rose-500/50"
+                      />
+                      <textarea
+                        value={ticketResumo}
+                        onChange={(e) => setTicketResumo(e.target.value)}
+                        rows={2}
+                        placeholder="Resumo do problema (opcional)"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-md px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-500 outline-none focus:border-rose-500/50 resize-none"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={openingTicket}
+                          onClick={async () => {
+                            setOpeningTicket(true);
+                            try {
+                              await api.openSupportCase(activeChat.id, {
+                                grupo: ticketGroup,
+                                categoria: ticketCategory,
+                                orderNumber: ticketOrder,
+                                resumo: ticketResumo,
+                              });
+                              setOpenTicketForm(false);
+                              setTicketOrder('');
+                              setTicketResumo('');
+                              toast.success('Ticket de suporte aberto');
+                            } catch {
+                              toast.error('Não foi possível abrir o ticket');
+                            } finally {
+                              setOpeningTicket(false);
+                            }
+                          }}
+                          className="px-2 py-1 rounded-md text-[10px] font-semibold bg-rose-500/25 text-rose-100 border border-rose-500/50 hover:bg-rose-500/40 disabled:opacity-60 flex items-center gap-1"
+                        >
+                          {openingTicket && <Loader2 className="w-3 h-3 animate-spin" />}
+                          Abrir ticket
+                        </button>
+                        <button
+                          onClick={() => setOpenTicketForm(false)}
+                          className="text-[10px] text-slate-400 hover:text-slate-200"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+
 
                   {/* Active support state (queue=support without an open support_case) */}
                   {activeChat && activeChat.queue === 'support' && (() => {
@@ -2786,54 +2891,79 @@ const ChatInterface: React.FC = () => {
                     activeChat?.queue !== 'support' && (
                       <p className="text-xs text-slate-500 italic">Nenhum ticket de suporte registrado</p>
                     )
-                  ) : (
-                    <div className="space-y-2">
-                      {contactSupportCases.map((sc) => {
-                        const fmt = (iso: string) => {
-                          const dt = new Date(iso);
-                          return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
-                            ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                        };
-                        const chipCls = SUPPORT_GROUP_CHIP[sc.grupo_suporte] || SUPPORT_GROUP_CHIP.outros;
-                        const closed = !!sc.closed_at;
-                        return (
-                          <div key={sc.id} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 space-y-1.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${chipCls} font-medium`}>
-                                {labelForGroup(sc.grupo_suporte)}
-                              </span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${closed ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40' : 'bg-orange-500/15 text-orange-300 border border-orange-500/40'}`}>
-                                {closed ? 'Encerrado' : 'Em aberto'}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-300 font-medium leading-snug">
-                              {labelForCategory(sc.categoria_suporte)}
+                  ) : (() => {
+                    const fmt = (iso: string) => {
+                      const dt = new Date(iso);
+                      return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
+                        ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    };
+                    const renderCase = (sc: typeof contactSupportCases[number]) => {
+                      const chipCls = SUPPORT_GROUP_CHIP[sc.grupo_suporte] || SUPPORT_GROUP_CHIP.outros;
+                      const closed = !!sc.closed_at;
+                      return (
+                        <div key={sc.id} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${chipCls} font-medium`}>
+                              {labelForGroup(sc.grupo_suporte)}
+                            </span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${closed ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40' : 'bg-orange-500/15 text-orange-300 border border-orange-500/40'}`}>
+                              {closed ? 'Encerrado' : 'Em aberto'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 font-medium leading-snug">
+                            {labelForCategory(sc.categoria_suporte)}
+                          </p>
+                          {sc.resumo && (
+                            <p className="text-[11px] text-slate-400 leading-snug line-clamp-3">{sc.resumo}</p>
+                          )}
+                          {sc.resolution_note && (
+                            <p className="text-[11px] text-emerald-300/80 leading-snug">
+                              Resolução: {sc.resolution_note}
                             </p>
-                            {sc.resumo && (
-                              <p className="text-[11px] text-slate-400 leading-snug line-clamp-3">{sc.resumo}</p>
-                            )}
-                            {sc.resolution_note && (
-                              <p className="text-[11px] text-emerald-300/80 leading-snug">
-                                Resolução: {sc.resolution_note}
-                              </p>
-                            )}
-                            <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                              <span>
-                                {fmt(sc.created_at)}
-                                {closed && ` → ${fmt(sc.closed_at!)}`}
-                              </span>
-                              {sc.order_number && (
-                                <span className="font-mono">#{sc.order_number}</span>
-                              )}
-                            </div>
-                            {sc.responsavel_name && (
-                              <p className="text-[10px] text-slate-500">Responsável: {sc.responsavel_name}</p>
+                          )}
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
+                            <span>
+                              {fmt(sc.created_at)}
+                              {closed && ` → ${fmt(sc.closed_at!)}`}
+                            </span>
+                            {sc.order_number && (
+                              <span className="font-mono">#{sc.order_number}</span>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          {sc.responsavel_name && (
+                            <p className="text-[10px] text-slate-500">Responsável: {sc.responsavel_name}</p>
+                          )}
+                        </div>
+                      );
+                    };
+                    const openCases = contactSupportCases.filter((c) => !c.closed_at);
+                    const closedCases = contactSupportCases.filter((c) => !!c.closed_at);
+                    return (
+                      <div className="space-y-3">
+                        {openCases.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-semibold text-orange-300/80 uppercase tracking-wider">
+                              Em aberto ({openCases.length})
+                            </p>
+                            {openCases.map(renderCase)}
+                          </div>
+                        )}
+
+                        {closedCases.length > 0 && (
+                          <div className="space-y-2">
+                            <button
+                              onClick={() => setShowClosedHistory((v) => !v)}
+                              className="w-full flex items-center justify-between text-[10px] font-semibold text-slate-400 hover:text-slate-200 uppercase tracking-wider"
+                            >
+                              <span>Encerrados ({closedCases.length})</span>
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showClosedHistory ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showClosedHistory && closedCases.map(renderCase)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
 
