@@ -1772,6 +1772,58 @@ export const api = {
   },
 
   /**
+   * Manually opens a support ticket for a conversation (agent-initiated, no AI).
+   * Creates an open `support_cases` row and moves the conversation to the support queue.
+   */
+  openSupportCase: async (
+    conversationId: string,
+    input: { grupo: string; categoria: string; orderNumber?: string | null; resumo?: string | null },
+  ): Promise<void> => {
+    let responsavelId: string | null = null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        const { data: member } = await supabase
+          .from('team_members')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        responsavelId = member?.id ?? null;
+      }
+    } catch { /* ignore */ }
+
+    const { data: conv, error: convErr } = await supabase
+      .from('conversations')
+      .select('id, contact_id')
+      .eq('id', conversationId)
+      .maybeSingle();
+    if (convErr || !conv?.contact_id) {
+      console.error('[API] Error resolving conversation for support case:', convErr);
+      throw convErr || new Error('Conversa não encontrada');
+    }
+
+    const { error } = await supabase.from('support_cases').insert({
+      conversation_id: conversationId,
+      contact_id: conv.contact_id,
+      grupo_suporte: input.grupo,
+      categoria_suporte: input.categoria,
+      requer_agente_humano: true,
+      status_resolucao: 'encaminhado_agente',
+      responsavel_id: responsavelId,
+      order_number: (input.orderNumber || '').trim() || null,
+      resumo: (input.resumo || '').trim() || null,
+      metadata: { created_from: 'manual_open' },
+    } as any);
+    if (error) {
+      console.error('[API] Error opening support case:', error);
+      throw error;
+    }
+
+    await api.moveConversationQueue(conversationId, 'support', { reasonKey: input.categoria });
+  },
+
+
+  /**
    * Closes the support ticket(s) of a conversation, keeping a permanent record in
    * `support_cases` (the lead's support history). If no case exists yet (support was
    * flagged manually), one is created from the `motivo:*` tag so nothing is lost.
