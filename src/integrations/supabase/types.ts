@@ -1299,6 +1299,8 @@ export type Database = {
         Row: {
           categoria_suporte: string
           causa: string | null
+          closed_at: string | null
+          closed_by: string | null
           contact_id: string | null
           conversation_id: string | null
           created_at: string
@@ -1307,6 +1309,7 @@ export type Database = {
           metadata: Json
           order_number: string | null
           requer_agente_humano: boolean
+          resolution_note: string | null
           responsavel_id: string | null
           resumo: string | null
           sentimento: string | null
@@ -1316,6 +1319,8 @@ export type Database = {
         Insert: {
           categoria_suporte: string
           causa?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
           contact_id?: string | null
           conversation_id?: string | null
           created_at?: string
@@ -1324,6 +1329,7 @@ export type Database = {
           metadata?: Json
           order_number?: string | null
           requer_agente_humano: boolean
+          resolution_note?: string | null
           responsavel_id?: string | null
           resumo?: string | null
           sentimento?: string | null
@@ -1333,6 +1339,8 @@ export type Database = {
         Update: {
           categoria_suporte?: string
           causa?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
           contact_id?: string | null
           conversation_id?: string | null
           created_at?: string
@@ -1341,6 +1349,7 @@ export type Database = {
           metadata?: Json
           order_number?: string | null
           requer_agente_humano?: boolean
+          resolution_note?: string | null
           responsavel_id?: string | null
           resumo?: string | null
           sentimento?: string | null
@@ -1348,6 +1357,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "support_cases_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "support_cases_contact_id_fkey"
             columns: ["contact_id"]
