@@ -10,6 +10,9 @@ export interface SupportCaseRow {
   resumo: string | null;
   order_number: string | null;
   causa: string | null;
+  closed_at: string | null;
+  resolution_note: string | null;
+  responsavel_name: string | null;
 }
 
 /**
@@ -31,7 +34,7 @@ export function useSupportCasesByContact(contactId: string | null | undefined) {
       setLoading(true);
       const { data, error } = await supabase
         .from('support_cases')
-        .select('id, created_at, grupo_suporte, categoria_suporte, status_resolucao, resumo, order_number, causa')
+        .select('id, created_at, grupo_suporte, categoria_suporte, status_resolucao, resumo, order_number, causa, closed_at, resolution_note, responsavel:team_members(name)')
         .eq('contact_id', contactId)
         .order('created_at', { ascending: false });
       if (!alive) return;
@@ -40,7 +43,10 @@ export function useSupportCasesByContact(contactId: string | null | undefined) {
         console.warn('[useSupportCasesByContact] error:', error);
         return;
       }
-      setCases((data || []) as SupportCaseRow[]);
+      setCases(((data || []) as any[]).map((r) => ({
+        ...r,
+        responsavel_name: r.responsavel?.name ?? null,
+      })) as SupportCaseRow[]);
     };
 
     load();
