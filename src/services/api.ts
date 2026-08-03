@@ -1816,8 +1816,9 @@ export const api = {
         .update({ closed_at: nowIso, closed_by: closedBy, resolution_note: note })
         .in('id', openCases.map((c: any) => c.id));
       if (error) console.error('[API] Error closing support cases:', error);
-    } else if (conv?.contact_id) {
+    } else if (conv?.contact_id && conv.queue === 'support') {
       // No case registered — create a historical record from the reason tag
+
       const tags: string[] = Array.isArray(conv.tags) ? (conv.tags as string[]) : [];
       const reasonTag = tags.find((t) => t.startsWith('motivo:'));
       const reasonKey = reasonTag ? reasonTag.slice('motivo:'.length) : 'nao_classificado';
