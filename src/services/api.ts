@@ -1772,6 +1772,78 @@ export const api = {
   },
 
   /**
+   * Closes the support ticket(s) of a conversation, keeping a permanent record in
+   * `support_cases` (the lead's support history). If no case exists yet (support was
+   * flagged manually), one is created from the `motivo:*` tag so nothing is lost.
+   * When `moveToSales` is true (default) the conversation returns to the sales queue.
+   */
+  closeSupportCase: async (
+    conversationId: string,
+    opts?: { note?: string | null; moveToSales?: boolean },
+  ): Promise<void> => {
+    const note = (opts?.note || '').trim() || null;
+    const nowIso = new Date().toISOString();
+
+    // Resolve current team member (may be null when auth is bypassed)
+    let closedBy: string | null = null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        const { data: member } = await supabase
+          .from('team_members')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        closedBy = member?.id ?? null;
+      }
+    } catch { /* ignore */ }
+
+    const { data: conv } = await supabase
+      .from('conversations')
+      .select('id, contact_id, tags, queue')
+      .eq('id', conversationId)
+      .maybeSingle();
+
+    const { data: openCases } = await supabase
+      .from('support_cases')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .is('closed_at', null);
+
+    if (openCases && openCases.length > 0) {
+      const { error } = await supabase
+        .from('support_cases')
+        .update({ closed_at: nowIso, closed_by: closedBy, resolution_note: note })
+        .in('id', openCases.map((c: any) => c.id));
+      if (error) console.error('[API] Error closing support cases:', error);
+    } else if (conv?.contact_id) {
+      // No case registered — create a historical record from the reason tag
+      const tags: string[] = Array.isArray(conv.tags) ? (conv.tags as string[]) : [];
+      const reasonTag = tags.find((t) => t.startsWith('motivo:'));
+      const reasonKey = reasonTag ? reasonTag.slice('motivo:'.length) : 'nao_classificado';
+      const { error } = await supabase.from('support_cases').insert({
+        conversation_id: conversationId,
+        contact_id: conv.contact_id,
+        grupo_suporte: 'outros',
+        categoria_suporte: reasonKey,
+        requer_agente_humano: true,
+        status_resolucao: 'encaminhado_agente',
+        responsavel_id: closedBy,
+        closed_at: nowIso,
+        closed_by: closedBy,
+        resolution_note: note,
+        metadata: { created_from: 'manual_close' },
+      } as any);
+      if (error) console.error('[API] Error creating historical support case:', error);
+    }
+
+    if (opts?.moveToSales !== false) {
+      await api.moveConversationQueue(conversationId, 'sales');
+    }
+  },
+
+
+  /**
    * Aggregate support ticket counts and reason breakdown for the dashboard.
    */
   fetchSupportSummary: async (
