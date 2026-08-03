@@ -34,7 +34,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useSupportCaseByConversation } from '@/hooks/useSupportCaseByConversation';
 import { useSupportCasesByContact } from '@/hooks/useSupportCasesByContact';
-import { labelForGroup, labelForCategory } from '@/lib/supportCategories';
+import { labelForGroup, labelForCategory, SUPPORT_GROUPS, SUPPORT_CATEGORIES } from '@/lib/supportCategories';
 
 
 const SUPPORT_GROUP_CHIP: Record<string, string> = {
