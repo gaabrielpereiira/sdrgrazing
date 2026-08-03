@@ -179,9 +179,13 @@ const ChatInterface: React.FC = () => {
   const [filterTeam, setFilterTeam] = useState<string>(() => {
     try { return localStorage.getItem('chat.filters.team') || 'all'; } catch { return 'all'; }
   });
+  const [onlySupport, setOnlySupport] = useState<boolean>(() => {
+    try { return localStorage.getItem('chat.filters.onlySupport') === '1'; } catch { return false; }
+  });
   useEffect(() => { try { localStorage.setItem('chat.filters.responsible', filterResponsible); } catch {} }, [filterResponsible]);
   useEffect(() => { try { localStorage.setItem('chat.filters.team', filterTeam); } catch {} }, [filterTeam]);
-  const filtersActive = filterResponsible !== 'all' || filterTeam !== 'all';
+  useEffect(() => { try { localStorage.setItem('chat.filters.onlySupport', onlySupport ? '1' : '0'); } catch {} }, [onlySupport]);
+  const filtersActive = filterResponsible !== 'all' || filterTeam !== 'all' || onlySupport;
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [showProfileInfo, setShowProfileInfo] = useState(true);
