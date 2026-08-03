@@ -907,6 +907,8 @@ const ChatInterface: React.FC = () => {
       if (mainTab === 'meus') {
         if (!myMemberId || chat.assignedUserId !== myMemberId) return false;
       }
+      // Filtro: somente conversas com ticket de suporte
+      if (onlySupport && chat.queue !== 'support') return false;
       // Filtro: Responsável
       if (filterResponsible === 'unassigned') {
         if (chat.assignedUserId) return false;
