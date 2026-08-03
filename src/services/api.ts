@@ -2512,10 +2512,18 @@ export const api = {
       }
     }
 
+    // Any still-open support ticket gets closed so it stays in the lead's history
+    try {
+      await api.closeSupportCase(conversationId, { moveToSales: false });
+    } catch (e) {
+      console.warn('[API] Could not close support case while archiving:', e);
+    }
+
     const { error } = await supabase
       .from('conversations')
       .update({ is_active: false, status: 'paused', tags: [], queue: 'sales' })
       .eq('id', conversationId);
+
 
     if (error) {
       console.error('[API] Error ending conversation:', error);
