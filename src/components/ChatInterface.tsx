@@ -190,6 +190,14 @@ const ChatInterface: React.FC = () => {
   const [closeNoteOpen, setCloseNoteOpen] = useState(false);
   const [closeNote, setCloseNote] = useState('');
   const [closingSupport, setClosingSupport] = useState(false);
+  // Manual support ticket opening
+  const [openTicketForm, setOpenTicketForm] = useState(false);
+  const [ticketGroup, setTicketGroup] = useState<string>('entrega');
+  const [ticketCategory, setTicketCategory] = useState<string>('atraso_entrega');
+  const [ticketOrder, setTicketOrder] = useState('');
+  const [ticketResumo, setTicketResumo] = useState('');
+  const [openingTicket, setOpeningTicket] = useState(false);
+  const [showClosedHistory, setShowClosedHistory] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [showProfileInfo, setShowProfileInfo] = useState(true);
