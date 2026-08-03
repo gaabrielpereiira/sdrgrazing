@@ -186,6 +186,10 @@ const ChatInterface: React.FC = () => {
   useEffect(() => { try { localStorage.setItem('chat.filters.team', filterTeam); } catch {} }, [filterTeam]);
   useEffect(() => { try { localStorage.setItem('chat.filters.onlySupport', onlySupport ? '1' : '0'); } catch {} }, [onlySupport]);
   const filtersActive = filterResponsible !== 'all' || filterTeam !== 'all' || onlySupport;
+  // Support ticket closing (note + loading)
+  const [closeNoteOpen, setCloseNoteOpen] = useState(false);
+  const [closeNote, setCloseNote] = useState('');
+  const [closingSupport, setClosingSupport] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [showProfileInfo, setShowProfileInfo] = useState(true);
