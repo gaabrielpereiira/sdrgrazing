@@ -179,9 +179,13 @@ const ChatInterface: React.FC = () => {
   const [filterTeam, setFilterTeam] = useState<string>(() => {
     try { return localStorage.getItem('chat.filters.team') || 'all'; } catch { return 'all'; }
   });
+  const [onlySupport, setOnlySupport] = useState<boolean>(() => {
+    try { return localStorage.getItem('chat.filters.onlySupport') === '1'; } catch { return false; }
+  });
   useEffect(() => { try { localStorage.setItem('chat.filters.responsible', filterResponsible); } catch {} }, [filterResponsible]);
   useEffect(() => { try { localStorage.setItem('chat.filters.team', filterTeam); } catch {} }, [filterTeam]);
-  const filtersActive = filterResponsible !== 'all' || filterTeam !== 'all';
+  useEffect(() => { try { localStorage.setItem('chat.filters.onlySupport', onlySupport ? '1' : '0'); } catch {} }, [onlySupport]);
+  const filtersActive = filterResponsible !== 'all' || filterTeam !== 'all' || onlySupport;
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [showProfileInfo, setShowProfileInfo] = useState(true);
@@ -903,6 +907,8 @@ const ChatInterface: React.FC = () => {
       if (mainTab === 'meus') {
         if (!myMemberId || chat.assignedUserId !== myMemberId) return false;
       }
+      // Filtro: somente conversas com ticket de suporte
+      if (onlySupport && chat.queue !== 'support') return false;
       // Filtro: Responsável
       if (filterResponsible === 'unassigned') {
         if (chat.assignedUserId) return false;
@@ -1331,7 +1337,7 @@ const ChatInterface: React.FC = () => {
             {filtersActive && (
               <button
                 type="button"
-                onClick={() => { setFilterResponsible('all'); setFilterTeam('all'); }}
+                onClick={() => { setFilterResponsible('all'); setFilterTeam('all'); setOnlySupport(false); }}
                 className="text-[10px] text-slate-400 hover:text-brand-gold-300 px-1.5 py-1 rounded border border-slate-800 hover:border-brand-gold-500/40 transition-colors flex-shrink-0"
                 title="Limpar filtros"
               >
@@ -1339,6 +1345,28 @@ const ChatInterface: React.FC = () => {
               </button>
             )}
           </div>
+
+          {/* Filtro rápido: somente conversas com ticket de suporte */}
+          <div className="flex items-center gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => setOnlySupport(v => !v)}
+              aria-pressed={onlySupport}
+              title="Mostrar apenas conversas com ticket de suporte"
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium border flex items-center gap-1.5 transition-colors ${
+                onlySupport
+                  ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                  : 'bg-slate-950/50 text-slate-400 border-slate-800 hover:text-red-300 hover:border-red-500/30'
+              }`}
+            >
+              <LifeBuoy className="w-3.5 h-3.5" />
+              Somente suporte
+              <span className="min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                {mainTab === 'arquivados' ? tabCounts.finishedSupport : tabCounts.activeSupport}
+              </span>
+            </button>
+          </div>
+
 
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-brand-gold-400 transition-colors" />
