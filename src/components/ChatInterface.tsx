@@ -2891,53 +2891,80 @@ const ChatInterface: React.FC = () => {
                     activeChat?.queue !== 'support' && (
                       <p className="text-xs text-slate-500 italic">Nenhum ticket de suporte registrado</p>
                     )
-                  ) : (
-                    <div className="space-y-2">
-                      {contactSupportCases.map((sc) => {
-                        const fmt = (iso: string) => {
-                          const dt = new Date(iso);
-                          return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
-                            ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                        };
-                        const chipCls = SUPPORT_GROUP_CHIP[sc.grupo_suporte] || SUPPORT_GROUP_CHIP.outros;
-                        const closed = !!sc.closed_at;
-                        return (
-                          <div key={sc.id} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 space-y-1.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${chipCls} font-medium`}>
-                                {labelForGroup(sc.grupo_suporte)}
-                              </span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${closed ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40' : 'bg-orange-500/15 text-orange-300 border border-orange-500/40'}`}>
-                                {closed ? 'Encerrado' : 'Em aberto'}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-300 font-medium leading-snug">
-                              {labelForCategory(sc.categoria_suporte)}
+                  ) : (() => {
+                    const fmt = (iso: string) => {
+                      const dt = new Date(iso);
+                      return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
+                        ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    };
+                    const renderCase = (sc: typeof contactSupportCases[number]) => {
+                      const chipCls = SUPPORT_GROUP_CHIP[sc.grupo_suporte] || SUPPORT_GROUP_CHIP.outros;
+                      const closed = !!sc.closed_at;
+                      return (
+                        <div key={sc.id} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${chipCls} font-medium`}>
+                              {labelForGroup(sc.grupo_suporte)}
+                            </span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${closed ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40' : 'bg-orange-500/15 text-orange-300 border border-orange-500/40'}`}>
+                              {closed ? 'Encerrado' : 'Em aberto'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 font-medium leading-snug">
+                            {labelForCategory(sc.categoria_suporte)}
+                          </p>
+                          {sc.resumo && (
+                            <p className="text-[11px] text-slate-400 leading-snug line-clamp-3">{sc.resumo}</p>
+                          )}
+                          {sc.resolution_note && (
+                            <p className="text-[11px] text-emerald-300/80 leading-snug">
+                              Resolução: {sc.resolution_note}
                             </p>
-                            {sc.resumo && (
-                              <p className="text-[11px] text-slate-400 leading-snug line-clamp-3">{sc.resumo}</p>
-                            )}
-                            {sc.resolution_note && (
-                              <p className="text-[11px] text-emerald-300/80 leading-snug">
-                                Resolução: {sc.resolution_note}
-                              </p>
-                            )}
-                            <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                              <span>
-                                {fmt(sc.created_at)}
-                                {closed && ` → ${fmt(sc.closed_at!)}`}
-                              </span>
-                              {sc.order_number && (
-                                <span className="font-mono">#{sc.order_number}</span>
-                              )}
-                            </div>
-                            {sc.responsavel_name && (
-                              <p className="text-[10px] text-slate-500">Responsável: {sc.responsavel_name}</p>
+                          )}
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
+                            <span>
+                              {fmt(sc.created_at)}
+                              {closed && ` → ${fmt(sc.closed_at!)}`}
+                            </span>
+                            {sc.order_number && (
+                              <span className="font-mono">#{sc.order_number}</span>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
+                          {sc.responsavel_name && (
+                            <p className="text-[10px] text-slate-500">Responsável: {sc.responsavel_name}</p>
+                          )}
+                        </div>
+                      );
+                    };
+                    const openCases = contactSupportCases.filter((c) => !c.closed_at);
+                    const closedCases = contactSupportCases.filter((c) => !!c.closed_at);
+                    return (
+                      <div className="space-y-3">
+                        {openCases.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-semibold text-orange-300/80 uppercase tracking-wider">
+                              Em aberto ({openCases.length})
+                            </p>
+                            {openCases.map(renderCase)}
+                          </div>
+                        )}
+
+                        {closedCases.length > 0 && (
+                          <div className="space-y-2">
+                            <button
+                              onClick={() => setShowClosedHistory((v) => !v)}
+                              className="w-full flex items-center justify-between text-[10px] font-semibold text-slate-400 hover:text-slate-200 uppercase tracking-wider"
+                            >
+                              <span>Encerrados ({closedCases.length})</span>
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showClosedHistory ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showClosedHistory && closedCases.map(renderCase)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   )}
                 </div>
 
