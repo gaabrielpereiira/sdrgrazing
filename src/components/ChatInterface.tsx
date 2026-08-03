@@ -2679,7 +2679,7 @@ const ChatInterface: React.FC = () => {
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                     <LifeBuoy className="w-3.5 h-3.5" />
-                    Tickets de Suporte
+                    Histórico de Suporte
                     {contactSupportCases.length > 0 && (
                       <span className="ml-auto text-[10px] font-semibold text-slate-400 bg-slate-800/60 border border-slate-700 rounded-full px-2 py-0.5">
                         {contactSupportCases.length}
@@ -2700,16 +2700,9 @@ const ChatInterface: React.FC = () => {
                             Suporte ativo
                           </span>
                           <button
-                            onClick={async () => {
-                              try {
-                                await api.moveConversationQueue(activeChat.id, 'sales');
-                                toast.success('Suporte encerrado');
-                              } catch {
-                                toast.error('Não foi possível encerrar');
-                              }
-                            }}
+                            onClick={() => { setCloseNote(''); setCloseNoteOpen((v) => !v); }}
                             className="text-[10px] font-medium text-slate-300 hover:text-white underline underline-offset-2"
-                            title="Remover status de suporte"
+                            title="Encerrar ticket e registrar no histórico"
                           >
                             Encerrar
                           </button>
@@ -2745,30 +2738,72 @@ const ChatInterface: React.FC = () => {
                             </div>
                           </div>
                         )}
+
+                        {closeNoteOpen && (
+                          <div className="space-y-1.5 pt-1 border-t border-rose-500/30">
+                            <textarea
+                              value={closeNote}
+                              onChange={(e) => setCloseNote(e.target.value)}
+                              rows={2}
+                              placeholder="Como foi resolvido? (opcional)"
+                              className="w-full bg-slate-950/60 border border-slate-800 rounded-md p-2 text-[11px] text-slate-200 placeholder:text-slate-500 outline-none focus:border-rose-500/50 resize-none"
+                            />
+                            <div className="flex items-center gap-2">
+                              <button
+                                disabled={closingSupport}
+                                onClick={async () => {
+                                  setClosingSupport(true);
+                                  try {
+                                    await api.closeSupportCase(activeChat.id, { note: closeNote });
+                                    setCloseNoteOpen(false);
+                                    setCloseNote('');
+                                    toast.success('Ticket encerrado e salvo no histórico');
+                                  } catch {
+                                    toast.error('Não foi possível encerrar');
+                                  } finally {
+                                    setClosingSupport(false);
+                                  }
+                                }}
+                                className="px-2 py-1 rounded-md text-[10px] font-semibold bg-rose-500/25 text-rose-100 border border-rose-500/50 hover:bg-rose-500/40 disabled:opacity-60 flex items-center gap-1"
+                              >
+                                {closingSupport && <Loader2 className="w-3 h-3 animate-spin" />}
+                                Confirmar encerramento
+                              </button>
+                              <button
+                                onClick={() => { setCloseNoteOpen(false); setCloseNote(''); }}
+                                className="text-[10px] text-slate-400 hover:text-slate-200"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
 
                   {contactSupportCases.length === 0 ? (
                     activeChat?.queue !== 'support' && (
-                      <p className="text-xs text-slate-500 italic">Nenhum ticket de suporte</p>
+                      <p className="text-xs text-slate-500 italic">Nenhum ticket de suporte registrado</p>
                     )
                   ) : (
                     <div className="space-y-2">
                       {contactSupportCases.map((sc) => {
-                        const dt = new Date(sc.created_at);
-                        const dateLabel = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
-                          ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                        const fmt = (iso: string) => {
+                          const dt = new Date(iso);
+                          return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
+                            ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                        };
                         const chipCls = SUPPORT_GROUP_CHIP[sc.grupo_suporte] || SUPPORT_GROUP_CHIP.outros;
-                        const resolved = sc.status_resolucao === 'resolvido' || sc.status_resolucao === 'closed' || sc.status_resolucao === 'resolved';
+                        const closed = !!sc.closed_at;
                         return (
                           <div key={sc.id} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 space-y-1.5">
                             <div className="flex items-center justify-between gap-2">
                               <span className={`text-[10px] px-1.5 py-0.5 rounded border ${chipCls} font-medium`}>
                                 {labelForGroup(sc.grupo_suporte)}
                               </span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${resolved ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40' : 'bg-orange-500/15 text-orange-300 border border-orange-500/40'}`}>
-                                {resolved ? 'Resolvido' : 'Em aberto'}
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${closed ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40' : 'bg-orange-500/15 text-orange-300 border border-orange-500/40'}`}>
+                                {closed ? 'Encerrado' : 'Em aberto'}
                               </span>
                             </div>
                             <p className="text-xs text-slate-300 font-medium leading-snug">
@@ -2777,18 +2812,30 @@ const ChatInterface: React.FC = () => {
                             {sc.resumo && (
                               <p className="text-[11px] text-slate-400 leading-snug line-clamp-3">{sc.resumo}</p>
                             )}
+                            {sc.resolution_note && (
+                              <p className="text-[11px] text-emerald-300/80 leading-snug">
+                                Resolução: {sc.resolution_note}
+                              </p>
+                            )}
                             <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                              <span>{dateLabel}</span>
+                              <span>
+                                {fmt(sc.created_at)}
+                                {closed && ` → ${fmt(sc.closed_at!)}`}
+                              </span>
                               {sc.order_number && (
                                 <span className="font-mono">#{sc.order_number}</span>
                               )}
                             </div>
+                            {sc.responsavel_name && (
+                              <p className="text-[10px] text-slate-500">Responsável: {sc.responsavel_name}</p>
+                            )}
                           </div>
                         );
                       })}
                     </div>
                   )}
                 </div>
+
 
 
 
