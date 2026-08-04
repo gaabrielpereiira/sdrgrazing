@@ -1792,14 +1792,14 @@ async function handleOnboarding(
     // ============================================================
     // (e) requer_agente_humano = true → transferir para Produção
     // ============================================================
+    // Support classification is stored in `support_cases` only (no conversation tags).
     const existingTags = Array.isArray(conversation.tags) ? conversation.tags : [];
-    const newTags = Array.from(
-      new Set([
-        ...existingTags,
-        `motivo:${classification.category_key}`,
-        `grupo:${classification.group_key}`,
-        `sentimento:${classification.sentiment_key}`,
-      ]),
+    const newTags = existingTags.filter(
+      (t: string) =>
+        typeof t === 'string' &&
+        !t.startsWith('motivo:') &&
+        !t.startsWith('grupo:') &&
+        !t.startsWith('sentimento:'),
     );
 
     try {
@@ -1809,6 +1809,7 @@ async function handleOnboarding(
         is_active: false,
         tags: newTags,
       };
+
       if (producaoTeamId) update.assigned_team = producaoTeamId;
       if (responsavelId) update.assigned_user_id = responsavelId;
       await supabase.from('conversations').update(update).eq('id', conversation.id);
