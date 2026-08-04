@@ -1527,7 +1527,7 @@ const ChatInterface: React.FC = () => {
                     })()}
 
 
-                    {chat.tags.slice(0, 1).map(tag => (
+                    {chat.tags.filter((t) => !isSupportSystemTag(t)).slice(0, 1).map(tag => (
                       <span key={tag} className="px-2 py-0.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-[10px] rounded-md font-medium">
                         {tag}
                       </span>
