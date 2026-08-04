@@ -2343,6 +2343,81 @@ async function processQueueItem(
           },
         });
 
+        // 3b) Post-sale handoff → abre ticket de suporte classificado, atribui
+        //     Produção e dispara o alerta de plantão (mesmo fluxo da triagem antiga).
+        if (isPostSale) {
+          try {
+            const issueText = [args.summary, message?.content].filter(Boolean).join(' — ');
+            const classification = await classifySupportIntake({ issue_text: issueText });
+
+            let responsavelId: string | null = null;
+            let producaoTeamId: string | null = null;
+            try {
+              const { data: ns } = await supabase
+                .from('nina_settings')
+                .select('producao_user_id')
+                .is('user_id', null)
+                .maybeSingle();
+              const prodUserId = (ns as any)?.producao_user_id || null;
+              if (prodUserId) {
+                const { data: tm } = await supabase
+                  .from('team_members')
+                  .select('id, status')
+                  .eq('id', prodUserId)
+                  .maybeSingle();
+                if (tm && (tm as any).status === 'active') responsavelId = (tm as any).id;
+              }
+              const { data: prodTeam } = await supabase
+                .from('teams')
+                .select('id')
+                .ilike('name', 'produ%')
+                .maybeSingle();
+              producaoTeamId = (prodTeam as any)?.id || null;
+            } catch (e) {
+              console.error('[Handoff] resolve produção failed:', e);
+            }
+
+            const routeUpdate: Record<string, any> = {};
+            if (responsavelId) routeUpdate.assigned_user_id = responsavelId;
+            if (producaoTeamId) routeUpdate.assigned_team = producaoTeamId;
+            if (Object.keys(routeUpdate).length > 0) {
+              await supabase.from('conversations').update(routeUpdate).eq('id', conversation.id);
+            }
+
+            await supabase.from('support_cases').insert({
+              conversation_id: conversation.id,
+              contact_id: conversation.contact_id,
+              grupo_suporte: classification.group_key,
+              categoria_suporte: classification.category_key,
+              requer_agente_humano: true,
+              status_resolucao: 'encaminhado_agente',
+              responsavel_id: responsavelId,
+              causa: classification.causa,
+              resumo: classification.summary || args.summary || null,
+              sentimento: classification.sentiment_key,
+              order_number: null,
+              metadata: {
+                client_label: contactName,
+                triggered_by: 'donatella_handoff_tool',
+                handoff_reason: args.reason,
+              },
+            });
+
+            await dispatchSupportAlert(supabase, {
+              contactId: conversation.contact_id,
+              conversationId: conversation.id,
+              clientLabel: contactName,
+              orderNumber: null,
+              reasonLabel: classification.category_label || reasonLabel,
+              sentimentLabel: classification.sentiment_label || (isUrgent ? 'urgente' : 'neutro'),
+              summary: classification.summary || args.summary || 'Cliente solicitou suporte.',
+            });
+          } catch (supErr) {
+            console.error('[Handoff] support case flow failed:', supErr);
+          }
+        }
+
+
         // 4) Replace any AI text content with the safe customer-facing message.
         //    Critical: prevents the model's internal "🔔 ATENDIMENTO NECESSÁRIO ..."
         //    text from ever reaching the customer's WhatsApp.
