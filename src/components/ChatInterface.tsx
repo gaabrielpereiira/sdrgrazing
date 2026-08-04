@@ -44,6 +44,12 @@ const SUPPORT_GROUP_CHIP: Record<string, string> = {
   outros: 'bg-slate-500/15 text-slate-300 border-slate-500/40',
 };
 
+// Legacy technical tags (support reason / sentiment) are no longer shown —
+// support classification lives exclusively in support tickets.
+const isSupportSystemTag = (tag: string) =>
+  typeof tag === 'string' && (tag.startsWith('motivo:') || tag.startsWith('sentimento:'));
+
+
 // Editable row used inside the chat sidebar "Dados de Contato"
 interface EditableRowProps {
   icon: React.ReactNode;
