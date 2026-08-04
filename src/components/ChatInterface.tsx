@@ -2587,8 +2587,9 @@ const ChatInterface: React.FC = () => {
 
                 {/* Tags */}
                 {(() => {
-                  const uniqueTags = Array.from(new Set(activeChat.tags || []));
-                  const uniqueContactTags = Array.from(new Set(activeChat.contactTags || []));
+                  const uniqueTags = Array.from(new Set(activeChat.tags || [])).filter((t) => !isSupportSystemTag(t));
+                  const uniqueContactTags = Array.from(new Set(activeChat.contactTags || [])).filter((t) => !isSupportSystemTag(t));
+
                   return (
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
