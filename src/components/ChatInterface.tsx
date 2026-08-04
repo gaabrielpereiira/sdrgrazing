@@ -1676,40 +1676,17 @@ const ChatInterface: React.FC = () => {
                 <div className="h-6 w-px bg-slate-800 mx-1"></div>
                 {isAdmin && activeChat && (
                   effectiveQueue === 'sales' ? (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-slate-400 hover:text-rose-400 text-xs px-2"
-                          title="Mover para Suporte"
-                        >
-                          → Suporte
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-64 bg-slate-900 border-slate-800 p-3">
-                        <p className="text-xs font-medium text-slate-300 mb-2">Motivo do suporte</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {SUPPORT_REASONS.map((r) => (
-                            <button
-                              key={r.key}
-                              onClick={async () => {
-                                try {
-                                  await api.moveConversationQueue(activeChat.id, 'support', { reasonKey: r.key });
-                                  toast.success(`Movida para Suporte • ${r.label}`);
-                                } catch {
-                                  toast.error('Não foi possível mover a conversa');
-                                }
-                              }}
-                              className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 hover:bg-rose-500/20 hover:text-rose-300 text-slate-300 border border-slate-700 hover:border-rose-500/40 transition-colors"
-                            >
-                              {r.label}
-                            </button>
-                          ))}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-slate-400 hover:text-rose-400 text-xs px-2"
+                      title="Abrir ticket de suporte"
+                      onClick={() => setOpenTicketForm(true)}
+                    >
+                      → Suporte
+                    </Button>
                   ) : (
+
                     <Button
                       variant="ghost"
                       size="sm"
