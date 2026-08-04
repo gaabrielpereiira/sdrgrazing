@@ -1739,10 +1739,9 @@ export const api = {
   /** Move a conversation to a different queue ('sales' | 'support'). */
   moveConversationQueue: async (
     conversationId: string,
-    queue: 'sales' | 'support',
-    opts?: { reasonKey?: string | null }
+    queue: 'sales' | 'support'
   ): Promise<void> => {
-    // Fetch current tags so we can add/remove `motivo:*` tags accordingly
+    // Fetch current tags so we can strip legacy support tags (motivo:*/sentimento:*)
     const { data: current, error: fetchErr } = await supabase
       .from('conversations')
       .select('tags')
@@ -1754,12 +1753,8 @@ export const api = {
     }
 
     const currentTags: string[] = Array.isArray(current?.tags) ? current!.tags as string[] : [];
-    // Strip any existing motivo:*/sentimento:* tags (they only make sense while in support queue)
-    let nextTags = currentTags.filter((t) => !t.startsWith('motivo:') && !t.startsWith('sentimento:'));
-    if (queue === 'support') {
-      const key = opts?.reasonKey || 'nao_classificado';
-      nextTags = [...nextTags, `motivo:${key}`];
-    }
+    // Support classification now lives exclusively in `support_cases` — no support tags.
+    const nextTags = currentTags.filter((t) => !t.startsWith('motivo:') && !t.startsWith('sentimento:'));
 
     const { error } = await supabase
       .from('conversations')
@@ -1770,6 +1765,7 @@ export const api = {
       throw error;
     }
   },
+
 
   /**
    * Manually opens a support ticket for a conversation (agent-initiated, no AI).
