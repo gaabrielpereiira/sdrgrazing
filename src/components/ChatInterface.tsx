@@ -1500,27 +1500,14 @@ const ChatInterface: React.FC = () => {
                     })()}
                     {chat.queue === 'support' && (() => {
                       const sc = supportCaseMap[chat.id];
-                      const motivoTag = chat.tags.find((t) => isReasonTag(t));
-                      const motivoLabel = motivoTag ? labelForReasonKey(reasonKeyFromTag(motivoTag)) : null;
 
-                      let label: string;
-                      let tooltip: string;
-                      let chipClass: string;
-
-                      if (sc) {
-                        label = labelForGroup(sc.grupo);
-                        const catLabel = labelForCategory(sc.categoria);
-                        tooltip = catLabel ? `Suporte • ${catLabel}` : 'Necessita suporte';
-                        chipClass = SUPPORT_GROUP_CHIP[sc.grupo] || SUPPORT_GROUP_CHIP.outros;
-                      } else if (motivoLabel) {
-                        label = motivoLabel;
-                        tooltip = `Motivo: ${motivoLabel}`;
-                        chipClass = 'bg-amber-500/15 text-amber-300 border-amber-500/40';
-                      } else {
-                        label = 'Suporte';
-                        tooltip = 'Necessita suporte';
-                        chipClass = 'bg-red-500/15 text-red-300 border-red-500/40';
-                      }
+                      const label = sc ? labelForGroup(sc.grupo) : 'Suporte';
+                      const tooltip = sc
+                        ? `Suporte • ${labelForCategory(sc.categoria)}`
+                        : 'Necessita suporte';
+                      const chipClass = sc
+                        ? (SUPPORT_GROUP_CHIP[sc.grupo] || SUPPORT_GROUP_CHIP.outros)
+                        : 'bg-red-500/15 text-red-300 border-red-500/40';
 
                       return (
                         <span
@@ -1532,6 +1519,7 @@ const ChatInterface: React.FC = () => {
                         </span>
                       );
                     })()}
+
 
                     {chat.tags.slice(0, 1).map(tag => (
                       <span key={tag} className="px-2 py-0.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-[10px] rounded-md font-medium">
