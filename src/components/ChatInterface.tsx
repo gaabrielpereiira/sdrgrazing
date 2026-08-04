@@ -13,8 +13,8 @@ import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { api } from '@/services/api';
 import { TagSelector } from './TagSelector';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { SUPPORT_REASONS, isReasonTag, reasonKeyFromTag, labelForReasonKey } from '@/lib/supportReasons';
 import { renderTextWithLinks } from '@/lib/linkify';
+
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -43,6 +43,12 @@ const SUPPORT_GROUP_CHIP: Record<string, string> = {
   pedido_pagamento: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
   outros: 'bg-slate-500/15 text-slate-300 border-slate-500/40',
 };
+
+// Legacy technical tags (support reason / sentiment) are no longer shown —
+// support classification lives exclusively in support tickets.
+const isSupportSystemTag = (tag: string) =>
+  typeof tag === 'string' && (tag.startsWith('motivo:') || tag.startsWith('sentimento:'));
+
 
 // Editable row used inside the chat sidebar "Dados de Contato"
 interface EditableRowProps {
@@ -1500,27 +1506,14 @@ const ChatInterface: React.FC = () => {
                     })()}
                     {chat.queue === 'support' && (() => {
                       const sc = supportCaseMap[chat.id];
-                      const motivoTag = chat.tags.find((t) => isReasonTag(t));
-                      const motivoLabel = motivoTag ? labelForReasonKey(reasonKeyFromTag(motivoTag)) : null;
 
-                      let label: string;
-                      let tooltip: string;
-                      let chipClass: string;
-
-                      if (sc) {
-                        label = labelForGroup(sc.grupo);
-                        const catLabel = labelForCategory(sc.categoria);
-                        tooltip = catLabel ? `Suporte • ${catLabel}` : 'Necessita suporte';
-                        chipClass = SUPPORT_GROUP_CHIP[sc.grupo] || SUPPORT_GROUP_CHIP.outros;
-                      } else if (motivoLabel) {
-                        label = motivoLabel;
-                        tooltip = `Motivo: ${motivoLabel}`;
-                        chipClass = 'bg-amber-500/15 text-amber-300 border-amber-500/40';
-                      } else {
-                        label = 'Suporte';
-                        tooltip = 'Necessita suporte';
-                        chipClass = 'bg-red-500/15 text-red-300 border-red-500/40';
-                      }
+                      const label = sc ? labelForGroup(sc.grupo) : 'Suporte';
+                      const tooltip = sc
+                        ? `Suporte • ${labelForCategory(sc.categoria)}`
+                        : 'Necessita suporte';
+                      const chipClass = sc
+                        ? (SUPPORT_GROUP_CHIP[sc.grupo] || SUPPORT_GROUP_CHIP.outros)
+                        : 'bg-red-500/15 text-red-300 border-red-500/40';
 
                       return (
                         <span
@@ -1533,7 +1526,8 @@ const ChatInterface: React.FC = () => {
                       );
                     })()}
 
-                    {chat.tags.slice(0, 1).map(tag => (
+
+                    {chat.tags.filter((t) => !isSupportSystemTag(t)).slice(0, 1).map(tag => (
                       <span key={tag} className="px-2 py-0.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-[10px] rounded-md font-medium">
                         {tag}
                       </span>
@@ -1688,40 +1682,17 @@ const ChatInterface: React.FC = () => {
                 <div className="h-6 w-px bg-slate-800 mx-1"></div>
                 {isAdmin && activeChat && (
                   effectiveQueue === 'sales' ? (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-slate-400 hover:text-rose-400 text-xs px-2"
-                          title="Mover para Suporte"
-                        >
-                          → Suporte
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-64 bg-slate-900 border-slate-800 p-3">
-                        <p className="text-xs font-medium text-slate-300 mb-2">Motivo do suporte</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {SUPPORT_REASONS.map((r) => (
-                            <button
-                              key={r.key}
-                              onClick={async () => {
-                                try {
-                                  await api.moveConversationQueue(activeChat.id, 'support', { reasonKey: r.key });
-                                  toast.success(`Movida para Suporte • ${r.label}`);
-                                } catch {
-                                  toast.error('Não foi possível mover a conversa');
-                                }
-                              }}
-                              className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 hover:bg-rose-500/20 hover:text-rose-300 text-slate-300 border border-slate-700 hover:border-rose-500/40 transition-colors"
-                            >
-                              {r.label}
-                            </button>
-                          ))}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-slate-400 hover:text-rose-400 text-xs px-2"
+                      title="Abrir ticket de suporte"
+                      onClick={() => setOpenTicketForm(true)}
+                    >
+                      → Suporte
+                    </Button>
                   ) : (
+
                     <Button
                       variant="ghost"
                       size="sm"
@@ -2616,8 +2587,9 @@ const ChatInterface: React.FC = () => {
 
                 {/* Tags */}
                 {(() => {
-                  const uniqueTags = Array.from(new Set(activeChat.tags || []));
-                  const uniqueContactTags = Array.from(new Set(activeChat.contactTags || []));
+                  const uniqueTags = Array.from(new Set(activeChat.tags || [])).filter((t) => !isSupportSystemTag(t));
+                  const uniqueContactTags = Array.from(new Set(activeChat.contactTags || [])).filter((t) => !isSupportSystemTag(t));
+
                   return (
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
@@ -2792,12 +2764,9 @@ const ChatInterface: React.FC = () => {
 
 
 
-                  {/* Active support state (queue=support without an open support_case) */}
+                  {/* Active support state (queue=support) */}
                   {activeChat && activeChat.queue === 'support' && (() => {
                     const sc = supportCaseMap[activeChat.id];
-                    const motivoTag = activeChat.tags.find((t) => isReasonTag(t));
-                    const motivoKey = motivoTag ? reasonKeyFromTag(motivoTag) : null;
-                    const motivoLabel = motivoKey ? labelForReasonKey(motivoKey) : null;
                     return (
                       <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-2.5 space-y-2">
                         <div className="flex items-center justify-between gap-2">
@@ -2816,33 +2785,18 @@ const ChatInterface: React.FC = () => {
                           <p className="text-xs text-slate-200 leading-snug">
                             {labelForGroup(sc.grupo)} • {labelForCategory(sc.categoria)}
                           </p>
-                        ) : motivoLabel ? (
-                          <p className="text-xs text-slate-200 leading-snug">
-                            Motivo: <span className="font-medium">{motivoLabel}</span>
-                          </p>
                         ) : (
                           <div className="space-y-1.5">
-                            <p className="text-[11px] text-slate-300">Sem motivo definido. Escolha um:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {SUPPORT_REASONS.map((r) => (
-                                <button
-                                  key={r.key}
-                                  onClick={async () => {
-                                    try {
-                                      await api.moveConversationQueue(activeChat.id, 'support', { reasonKey: r.key });
-                                      toast.success(`Motivo definido: ${r.label}`);
-                                    } catch {
-                                      toast.error('Não foi possível salvar');
-                                    }
-                                  }}
-                                  className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/60 hover:bg-rose-500/30 text-slate-200 border border-slate-700 hover:border-rose-500/50 transition-colors"
-                                >
-                                  {r.label}
-                                </button>
-                              ))}
-                            </div>
+                            <p className="text-[11px] text-slate-300">Nenhum ticket registrado para este atendimento.</p>
+                            <button
+                              onClick={() => setOpenTicketForm(true)}
+                              className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-900/60 hover:bg-rose-500/30 text-slate-200 border border-slate-700 hover:border-rose-500/50 transition-colors"
+                            >
+                              Abrir ticket
+                            </button>
                           </div>
                         )}
+
 
                         {closeNoteOpen && (
                           <div className="space-y-1.5 pt-1 border-t border-rose-500/30">

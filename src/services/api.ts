@@ -1739,10 +1739,9 @@ export const api = {
   /** Move a conversation to a different queue ('sales' | 'support'). */
   moveConversationQueue: async (
     conversationId: string,
-    queue: 'sales' | 'support',
-    opts?: { reasonKey?: string | null }
+    queue: 'sales' | 'support'
   ): Promise<void> => {
-    // Fetch current tags so we can add/remove `motivo:*` tags accordingly
+    // Fetch current tags so we can strip legacy support tags (motivo:*/sentimento:*)
     const { data: current, error: fetchErr } = await supabase
       .from('conversations')
       .select('tags')
@@ -1754,12 +1753,8 @@ export const api = {
     }
 
     const currentTags: string[] = Array.isArray(current?.tags) ? current!.tags as string[] : [];
-    // Strip any existing motivo:*/sentimento:* tags (they only make sense while in support queue)
-    let nextTags = currentTags.filter((t) => !t.startsWith('motivo:') && !t.startsWith('sentimento:'));
-    if (queue === 'support') {
-      const key = opts?.reasonKey || 'nao_classificado';
-      nextTags = [...nextTags, `motivo:${key}`];
-    }
+    // Support classification now lives exclusively in `support_cases` — no support tags.
+    const nextTags = currentTags.filter((t) => !t.startsWith('motivo:') && !t.startsWith('sentimento:'));
 
     const { error } = await supabase
       .from('conversations')
@@ -1770,6 +1765,7 @@ export const api = {
       throw error;
     }
   },
+
 
   /**
    * Manually opens a support ticket for a conversation (agent-initiated, no AI).
@@ -1819,14 +1815,13 @@ export const api = {
       throw error;
     }
 
-    await api.moveConversationQueue(conversationId, 'support', { reasonKey: input.categoria });
+    await api.moveConversationQueue(conversationId, 'support');
   },
 
 
   /**
-   * Closes the support ticket(s) of a conversation, keeping a permanent record in
-   * `support_cases` (the lead's support history). If no case exists yet (support was
-   * flagged manually), one is created from the `motivo:*` tag so nothing is lost.
+   * Closes the open support ticket(s) of a conversation, keeping a permanent record in
+   * `support_cases` (the lead's support history).
    * When `moveToSales` is true (default) the conversation returns to the sales queue.
    */
   closeSupportCase: async (
@@ -1850,12 +1845,6 @@ export const api = {
       }
     } catch { /* ignore */ }
 
-    const { data: conv } = await supabase
-      .from('conversations')
-      .select('id, contact_id, tags, queue')
-      .eq('id', conversationId)
-      .maybeSingle();
-
     const { data: openCases } = await supabase
       .from('support_cases')
       .select('id')
@@ -1868,32 +1857,13 @@ export const api = {
         .update({ closed_at: nowIso, closed_by: closedBy, resolution_note: note })
         .in('id', openCases.map((c: any) => c.id));
       if (error) console.error('[API] Error closing support cases:', error);
-    } else if (conv?.contact_id && conv.queue === 'support') {
-      // No case registered — create a historical record from the reason tag
-
-      const tags: string[] = Array.isArray(conv.tags) ? (conv.tags as string[]) : [];
-      const reasonTag = tags.find((t) => t.startsWith('motivo:'));
-      const reasonKey = reasonTag ? reasonTag.slice('motivo:'.length) : 'nao_classificado';
-      const { error } = await supabase.from('support_cases').insert({
-        conversation_id: conversationId,
-        contact_id: conv.contact_id,
-        grupo_suporte: 'outros',
-        categoria_suporte: reasonKey,
-        requer_agente_humano: true,
-        status_resolucao: 'encaminhado_agente',
-        responsavel_id: closedBy,
-        closed_at: nowIso,
-        closed_by: closedBy,
-        resolution_note: note,
-        metadata: { created_from: 'manual_close' },
-      } as any);
-      if (error) console.error('[API] Error creating historical support case:', error);
     }
 
     if (opts?.moveToSales !== false) {
       await api.moveConversationQueue(conversationId, 'sales');
     }
   },
+
 
 
   /**
@@ -1922,9 +1892,9 @@ export const api = {
     const prevPeriodEndStr = prevPeriodEnd.toISOString();
 
     try {
-      const { labelForReasonKey } = await import('@/lib/supportReasons');
+      const { labelForCategory } = await import('@/lib/supportCategories');
 
-      const [periodRes, prevRes] = await Promise.all([
+      const [periodRes, prevRes, casesRes] = await Promise.all([
         supabase
           .from('conversations')
           .select('id, is_active, tags')
@@ -1936,6 +1906,10 @@ export const api = {
           .eq('queue', 'support')
           .gte('started_at', prevPeriodStartStr)
           .lt('started_at', periodStartStr),
+        supabase
+          .from('support_cases')
+          .select('categoria_suporte')
+          .gte('created_at', periodStartStr),
       ]);
 
       const rows = (periodRes.data || []) as Array<{ id: string; is_active: boolean; tags: string[] | null }>;
@@ -1944,25 +1918,18 @@ export const api = {
       const finished = total - active;
       const prevTotal = prevRes.count || 0;
 
-      // Aggregate motivo:* tags
+      // Aggregate support case categories (tickets are the single source of truth)
       const counts = new Map<string, number>();
-      for (const r of rows) {
-        const tags = Array.isArray(r.tags) ? r.tags : [];
-        const motivos = tags.filter((t) => typeof t === 'string' && t.startsWith('motivo:'));
-        if (motivos.length === 0) {
-          counts.set('nao_classificado', (counts.get('nao_classificado') || 0) + 1);
-        } else {
-          for (const m of motivos) {
-            const key = m.slice('motivo:'.length);
-            counts.set(key, (counts.get(key) || 0) + 1);
-          }
-        }
+      for (const c of (casesRes.data || []) as Array<{ categoria_suporte: string | null }>) {
+        const key = c.categoria_suporte || 'outro';
+        counts.set(key, (counts.get(key) || 0) + 1);
       }
 
       const reasons = Array.from(counts.entries())
-        .map(([key, count]) => ({ key, label: labelForReasonKey(key), count }))
+        .map(([key, count]) => ({ key, label: labelForCategory(key), count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 6);
+
 
       return {
         total,
