@@ -933,10 +933,8 @@ const ChatInterface: React.FC = () => {
       } else if (filterResponsible !== 'all') {
         if (chat.assignedUserId !== filterResponsible) return false;
       }
-      // Filtro: Departamento (assigned_team é o id do time)
-      if (filterTeam !== 'all') {
-        if (chat.assignedTeam !== filterTeam) return false;
-      }
+      // Filtro de departamento removido da UI (a restrição por time continua acima)
+
       if (!searchQuery) return true;
       const query = searchQuery.toLowerCase();
       return (
