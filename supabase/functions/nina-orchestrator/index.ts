@@ -832,99 +832,6 @@ async function sendFixedText(
   });
 }
 
-// Send a WhatsApp interactive reply-buttons message directly via the Graph API
-// (whatsapp-sender does not yet support interactive types). Also persists the
-// outgoing message in the messages table so the chat UI renders it.
-async function sendInteractiveButtons(
-  supabase: any,
-  conversation: any,
-  settings: any,
-  bodyText: string,
-  buttons: { id: string; title: string }[],
-) {
-  try {
-    const { data: contact } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('id', conversation.contact_id)
-      .maybeSingle();
-    if (!contact) {
-      console.error('[Onboarding] Contact not found for interactive send');
-      return;
-    }
-    if (!settings?.whatsapp_phone_number_id || !settings?.whatsapp_access_token) {
-      console.warn('[Onboarding] Missing WhatsApp credentials; falling back to plain text');
-      const fallback = `${bodyText}\n\n${buttons.map((b, i) => `${i + 1}. ${b.title}`).join('\n')}`;
-      await sendFixedText(supabase, conversation, fallback);
-      return;
-    }
-
-    const payload = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: contact.whatsapp_id || contact.phone_number,
-      type: 'interactive',
-      interactive: {
-        type: 'button',
-        body: { text: bodyText },
-        action: {
-          buttons: buttons.slice(0, 3).map((b) => ({
-            type: 'reply',
-            reply: { id: b.id, title: b.title.slice(0, 20) },
-          })),
-        },
-      },
-    };
-
-    const res = await fetch(
-      `https://graph.facebook.com/v20.0/${settings.whatsapp_phone_number_id}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${settings.whatsapp_access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      },
-    );
-
-    const data = await res.json();
-    if (!res.ok) {
-      console.error('[Onboarding] Interactive send failed:', JSON.stringify(data));
-      // Fallback: plain text with numbered options so the user can still reply
-      const fallback = `${bodyText}\n\n${buttons.map((b, i) => `${i + 1}. ${b.title}`).join('\n')}`;
-      await sendFixedText(supabase, conversation, fallback);
-      return;
-    }
-
-    const waId = data.messages?.[0]?.id || null;
-
-    await supabase.from('messages').insert({
-      conversation_id: conversation.id,
-      whatsapp_message_id: waId,
-      content: bodyText,
-      type: 'text',
-      from_type: 'nina',
-      status: 'sent',
-      sent_at: new Date().toISOString(),
-      metadata: {
-        onboarding: true,
-        interactive: {
-          kind: 'button',
-          buttons: buttons.map((b) => ({ id: b.id, title: b.title })),
-        },
-      },
-    });
-
-    await supabase
-      .from('conversations')
-      .update({ last_message_at: new Date().toISOString() })
-      .eq('id', conversation.id);
-  } catch (err) {
-    console.error('[Onboarding] sendInteractiveButtons exception:', err);
-  }
-}
-
 async function setOnboardingStep(supabase: any, conversation: any, patch: Record<string, any>) {
   const ninaCtx = (conversation.nina_context as any) || {};
   const prev = ninaCtx.onboarding || {};
@@ -934,12 +841,6 @@ async function setOnboardingStep(supabase: any, conversation: any, patch: Record
     .update({ nina_context: newCtx })
     .eq('id', conversation.id);
   conversation.nina_context = newCtx;
-}
-
-function getInteractiveButtonId(message: any): string | null {
-  const inter = message?.metadata?.interactive;
-  if (inter && inter.kind === 'button_reply' && inter.id) return String(inter.id);
-  return null;
 }
 
 // ============================================================
