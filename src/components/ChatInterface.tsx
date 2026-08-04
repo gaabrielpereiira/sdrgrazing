@@ -1320,7 +1320,7 @@ const ChatInterface: React.FC = () => {
             </TabsList>
           </Tabs>
 
-          {/* Filtros: Responsável + Departamento */}
+          {/* Filtro: Responsável */}
           <div className="flex items-center gap-2 mb-3">
             <Select value={filterResponsible} onValueChange={setFilterResponsible}>
               <SelectTrigger className="h-8 text-xs bg-slate-950/50 border-slate-800 text-slate-200 flex-1 min-w-0">
@@ -1334,24 +1334,7 @@ const ChatInterface: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              value={restrictedToTeamId ? restrictedToTeamId : filterTeam}
-              onValueChange={setFilterTeam}
-              disabled={!!restrictedToTeamId}
-            >
-              <SelectTrigger
-                className="h-8 text-xs bg-slate-950/50 border-slate-800 text-slate-200 flex-1 min-w-0 disabled:opacity-70"
-                title={restrictedToTeamId ? `Restrito ao seu departamento (${myTeamName})` : undefined}
-              >
-                <SelectValue placeholder="Departamento" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
-                {!restrictedToTeamId && <SelectItem value="all">Todos depart.</SelectItem>}
-                {teamsList.map(t => (
-                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
             {filtersActive && (
               <button
                 type="button"
