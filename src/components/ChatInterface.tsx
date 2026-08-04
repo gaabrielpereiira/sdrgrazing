@@ -191,7 +191,7 @@ const ChatInterface: React.FC = () => {
   useEffect(() => { try { localStorage.setItem('chat.filters.responsible', filterResponsible); } catch {} }, [filterResponsible]);
   useEffect(() => { try { localStorage.setItem('chat.filters.team', filterTeam); } catch {} }, [filterTeam]);
   useEffect(() => { try { localStorage.setItem('chat.filters.onlySupport', onlySupport ? '1' : '0'); } catch {} }, [onlySupport]);
-  const filtersActive = filterResponsible !== 'all' || filterTeam !== 'all' || onlySupport;
+  const filtersActive = filterResponsible !== 'all' || onlySupport;
   // Support ticket closing (note + loading)
   const [closeNoteOpen, setCloseNoteOpen] = useState(false);
   const [closeNote, setCloseNote] = useState('');
