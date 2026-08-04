@@ -49,11 +49,11 @@ Deno.serve(async (req) => {
       const meta = (conv.metadata || {}) as Record<string, any>;
       if (meta.welcome_followup_sent === true) { skipped++; continue; }
 
-      // Must still be in triage step (lead hasn't clicked any button yet)
+      // Must still be in the opening flow (lead never engaged after Donatella's greeting)
       const step = ((conv.nina_context as any)?.onboarding?.step) || null;
-      if (step !== 'await_triage') { skipped++; continue; }
+      if (step !== 'opening' && step !== 'await_name') { skipped++; continue; }
 
-      // Last outbound must be exactly the triage buttons message
+      // Last outbound must exist (Donatella already greeted the lead)
       const { data: lastOutbound } = await supabase
         .from('messages')
         .select('from_type, metadata')
@@ -62,9 +62,8 @@ Deno.serve(async (req) => {
         .order('sent_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      const md = ((lastOutbound?.metadata as any) || {}) as Record<string, any>;
-      const isTriage = md.onboarding === true && md?.interactive?.kind === 'button';
-      if (!lastOutbound || !isTriage) { skipped++; continue; }
+      if (!lastOutbound || lastOutbound.from_type !== 'nina') { skipped++; continue; }
+
 
       // And the client must not have replied after the triage message
       const { data: lastMsg } = await supabase

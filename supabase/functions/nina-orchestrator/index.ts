@@ -761,12 +761,6 @@ async function cancelAppointmentFromAI(
 // ============================================================
 
 const ONBOARDING_TEXTS = {
-  WELCOME_ASK_NAME:
-    'Olá! 🧀✨ Eu sou a Donatella, sua concierge de experiências gastronômicas da Grazing Table & Co. Pra te atender do jeitinho certo, como é o seu nome e sobrenome?',
-  ASK_NAME_RETRY:
-    'Pra te cadastrar certinho, me manda só seu nome e sobrenome, por favor 💛',
-  triage: (firstName: string) =>
-    `Prazer, ${firstName}! 💛 Me conta: como posso te ajudar hoje?`,
   SUPPORT_ASK_ORDER:
     'Sem problema, vou te direcionar para o nosso time da Produção. 💛 Pra agilizar, me envia o *número do pedido*? (se não tiver em mãos, é só responder "não tenho")',
   SUPPORT_ASK_ISSUE:
@@ -774,6 +768,33 @@ const ONBOARDING_TEXTS = {
   SUPPORT_HANDOFF_FALLBACK:
     'Recebi! Já estou acionando o time da Produção pra cuidar de você. ✨',
 };
+
+// Directives injected into the system prompt for the opening turns.
+// The AI writes the actual wording — there are no fixed menu messages anymore.
+const OPENING_DIRECTIVES = {
+  firstTurn: (companyName: string, agentName: string) =>
+    `\n\n<abertura_da_conversa>
+Esta é a PRIMEIRA mensagem desta pessoa. Nesta resposta você deve:
+1. Se apresentar de forma calorosa e breve como ${agentName}, concierge da ${companyName}.
+2. Já responder/acolher o que a pessoa disse (não ignore o conteúdo da mensagem dela).
+3. Pedir o nome e sobrenome dela de forma natural, no final da mensagem ("pra eu te chamar do jeitinho certo, como é seu nome e sobrenome?").
+Não use menus, listas de opções ou botões. Não pergunte se é atendimento ou suporte — conduza a conversa naturalmente.
+Máximo 4 linhas.
+</abertura_da_conversa>`,
+  askNameAgain:
+    `\n\n<abertura_da_conversa>
+Você ainda não sabe o nome completo desta pessoa. Continue ajudando normalmente e, ao final desta resposta, peça de forma leve o nome e sobrenome dela. Não insista mais de uma vez por mensagem e nunca bloqueie o atendimento por causa disso.
+</abertura_da_conversa>`,
+  nameCaptured: (fullName: string) =>
+    `\n\n<abertura_da_conversa>
+A pessoa acabou de informar o nome: ${fullName}. Agradeça rapidamente, use o primeiro nome dela e siga o atendimento com uma pergunta útil sobre o que ela precisa. Não peça o nome novamente.
+</abertura_da_conversa>`,
+  returning: (firstName: string) =>
+    `\n\n<abertura_da_conversa>
+Início de uma nova conversa com um contato já conhecido (${firstName}). Cumprimente pelo primeiro nome, de forma calorosa e breve, e siga direto no que ela precisa. Sem menus nem opções.
+</abertura_da_conversa>`,
+};
+
 
 
 function looksLikeName(raw: string): boolean {
@@ -789,6 +810,28 @@ function looksLikeName(raw: string): boolean {
 function extractFirstName(raw: string): string {
   return raw.trim().split(/\s+/)[0] || raw.trim();
 }
+
+// Tenta extrair nome (e sobrenome) de uma mensagem em texto livre.
+// Aceita "meu nome é Ana Souza", "sou o João Pedro", "Ana Souza".
+function extractNameFromText(raw: string): string | null {
+  if (!raw) return null;
+  let s = raw.replace(/\s+/g, ' ').trim();
+  const intro = s.match(
+    /(?:meu nome (?:é|eh|e)|me chamo|aqui (?:é|eh|e) (?:a|o)?|sou (?:a|o)?|nome:)\s*(.+)$/i,
+  );
+  if (intro) s = intro[1].trim();
+  s = s.replace(/[.,;!?"'”“]+$/g, '').trim();
+  if (!looksLikeName(s)) return null;
+  const parts = s
+    .split(/\s+/)
+    .filter((p) => /^[A-Za-zÀ-ÿ'’\-]{2,}$/.test(p))
+    .slice(0, 4);
+  if (parts.length < 2) return null;
+  return parts
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(' ');
+}
+
 
 async function sendFixedText(
   supabase: any,
@@ -811,99 +854,6 @@ async function sendFixedText(
   });
 }
 
-// Send a WhatsApp interactive reply-buttons message directly via the Graph API
-// (whatsapp-sender does not yet support interactive types). Also persists the
-// outgoing message in the messages table so the chat UI renders it.
-async function sendInteractiveButtons(
-  supabase: any,
-  conversation: any,
-  settings: any,
-  bodyText: string,
-  buttons: { id: string; title: string }[],
-) {
-  try {
-    const { data: contact } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('id', conversation.contact_id)
-      .maybeSingle();
-    if (!contact) {
-      console.error('[Onboarding] Contact not found for interactive send');
-      return;
-    }
-    if (!settings?.whatsapp_phone_number_id || !settings?.whatsapp_access_token) {
-      console.warn('[Onboarding] Missing WhatsApp credentials; falling back to plain text');
-      const fallback = `${bodyText}\n\n${buttons.map((b, i) => `${i + 1}. ${b.title}`).join('\n')}`;
-      await sendFixedText(supabase, conversation, fallback);
-      return;
-    }
-
-    const payload = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: contact.whatsapp_id || contact.phone_number,
-      type: 'interactive',
-      interactive: {
-        type: 'button',
-        body: { text: bodyText },
-        action: {
-          buttons: buttons.slice(0, 3).map((b) => ({
-            type: 'reply',
-            reply: { id: b.id, title: b.title.slice(0, 20) },
-          })),
-        },
-      },
-    };
-
-    const res = await fetch(
-      `https://graph.facebook.com/v20.0/${settings.whatsapp_phone_number_id}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${settings.whatsapp_access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      },
-    );
-
-    const data = await res.json();
-    if (!res.ok) {
-      console.error('[Onboarding] Interactive send failed:', JSON.stringify(data));
-      // Fallback: plain text with numbered options so the user can still reply
-      const fallback = `${bodyText}\n\n${buttons.map((b, i) => `${i + 1}. ${b.title}`).join('\n')}`;
-      await sendFixedText(supabase, conversation, fallback);
-      return;
-    }
-
-    const waId = data.messages?.[0]?.id || null;
-
-    await supabase.from('messages').insert({
-      conversation_id: conversation.id,
-      whatsapp_message_id: waId,
-      content: bodyText,
-      type: 'text',
-      from_type: 'nina',
-      status: 'sent',
-      sent_at: new Date().toISOString(),
-      metadata: {
-        onboarding: true,
-        interactive: {
-          kind: 'button',
-          buttons: buttons.map((b) => ({ id: b.id, title: b.title })),
-        },
-      },
-    });
-
-    await supabase
-      .from('conversations')
-      .update({ last_message_at: new Date().toISOString() })
-      .eq('id', conversation.id);
-  } catch (err) {
-    console.error('[Onboarding] sendInteractiveButtons exception:', err);
-  }
-}
-
 async function setOnboardingStep(supabase: any, conversation: any, patch: Record<string, any>) {
   const ninaCtx = (conversation.nina_context as any) || {};
   const prev = ninaCtx.onboarding || {};
@@ -913,12 +863,6 @@ async function setOnboardingStep(supabase: any, conversation: any, patch: Record
     .update({ nina_context: newCtx })
     .eq('id', conversation.id);
   conversation.nina_context = newCtx;
-}
-
-function getInteractiveButtonId(message: any): string | null {
-  const inter = message?.metadata?.interactive;
-  if (inter && inter.kind === 'button_reply' && inter.id) return String(inter.id);
-  return null;
 }
 
 // ============================================================
@@ -1371,228 +1315,57 @@ async function handleOnboarding(
     .maybeSingle();
 
   const userText = (message.content || '').trim();
-  const btnId = getInteractiveButtonId(message);
 
-  // STEP: ask_name (first turn for a new lead) -> send fixed welcome, wait for name
-  if (step === 'ask_name') {
-    await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.WELCOME_ASK_NAME, message.id);
-    await setOnboardingStep(supabase, conversation, { step: 'await_name', retries: 0 });
-    return 'handled';
+  // Company/agent labels for the opening directive
+  const companyName = settings?.company_name || 'Grazing Table & Co.';
+  const agentName = settings?.sdr_name || 'Donatella';
+
+  // STEP: opening -> Donatella assume a conversa desde a primeira mensagem.
+  // Não há menu de triagem: apenas injetamos uma diretiva de abertura no prompt
+  // e deixamos a IA responder normalmente.
+  if (step === 'opening') {
+    const hasFullName = !!(contact?.name && String(contact.name).trim().split(/\s+/).length >= 2);
+    if (hasFullName) {
+      await setOnboardingStep(supabase, conversation, { step: 'done' });
+      const firstName = contact?.call_name || extractFirstName(contact?.name || '');
+      (conversation as any).__opening_directive = OPENING_DIRECTIVES.returning(firstName);
+    } else {
+      await setOnboardingStep(supabase, conversation, { step: 'await_name', retries: 0 });
+      (conversation as any).__opening_directive = OPENING_DIRECTIVES.firstTurn(companyName, agentName);
+    }
+    return 'continue';
   }
 
-  // STEP: await_name -> validate and save
+  // STEP: await_name -> tenta capturar nome/sobrenome do texto livre, sem bloquear
   if (step === 'await_name') {
-    if (looksLikeName(userText)) {
-      const fullName = userText.replace(/\s+/g, ' ').trim();
-      const firstName = extractFirstName(fullName);
+    const captured = extractNameFromText(userText);
+    if (captured) {
+      const parts = captured.split(/\s+/);
+      const firstName = parts[0];
+      const lastName = parts.slice(1).join(' ') || null;
       await supabase
         .from('contacts')
-        .update({ name: fullName, call_name: firstName })
+        .update({ name: captured, call_name: firstName, last_name: lastName })
         .eq('id', conversation.contact_id);
-      await sendInteractiveButtons(
-        supabase,
-        conversation,
-        settings,
-        ONBOARDING_TEXTS.triage(firstName),
-        [
-          { id: 'menu_atendimento', title: 'Atendimento' },
-          { id: 'menu_suporte', title: 'Suporte pós-venda' },
-        ],
-      );
-      await setOnboardingStep(supabase, conversation, { step: 'await_triage' });
-      return 'handled';
+      if (conversation.contact) {
+        conversation.contact.name = captured;
+        conversation.contact.call_name = firstName;
+        conversation.contact.last_name = lastName;
+      }
+      await setOnboardingStep(supabase, conversation, { step: 'done' });
+      (conversation as any).__opening_directive = OPENING_DIRECTIVES.nameCaptured(captured);
     } else {
-      await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.ASK_NAME_RETRY, message.id);
       const retries = (onboarding?.retries || 0) + 1;
-      await setOnboardingStep(supabase, conversation, { step: 'await_name', retries });
-      return 'handled';
-    }
-  }
-
-  // STEP: triage -> send triage buttons greeting by first name
-  if (step === 'triage') {
-    const firstName = contact?.call_name || extractFirstName(contact?.name || 'tudo bem');
-    await sendInteractiveButtons(
-      supabase,
-      conversation,
-      settings,
-      ONBOARDING_TEXTS.triage(firstName),
-      [
-        { id: 'menu_atendimento', title: 'Atendimento' },
-        { id: 'menu_suporte', title: 'Suporte pós-venda' },
-      ],
-    );
-    await setOnboardingStep(supabase, conversation, { step: 'await_triage' });
-    return 'handled';
-  }
-
-  // STEP: await_triage -> route based on button (or text fallback)
-  if (step === 'await_triage') {
-    const lower = userText.toLowerCase();
-    const choseAtendimento =
-      btnId === 'menu_atendimento' ||
-      /\batendimento\b/.test(lower) ||
-      /^1\b/.test(lower);
-    const choseSuporte =
-      btnId === 'menu_suporte' ||
-      /\bsuporte\b/.test(lower) ||
-      /p[óo]s[\s-]?venda/.test(lower) ||
-      /^2\b/.test(lower);
-
-    if (choseAtendimento) {
-      await setOnboardingStep(supabase, conversation, { step: 'done' });
-      // Let the AI run — flag the message so the orchestrator knows it's the kickoff turn.
-      try {
-        await supabase
-          .from('messages')
-          .update({
-            metadata: {
-              ...(message.metadata || {}),
-              onboarding_kickoff: true,
-            },
-          })
-          .eq('id', message.id);
-      } catch (_) { /* ignore */ }
-      return 'continue';
-    }
-
-    if (choseSuporte) {
-      // Pre-sale override: se o texto do lead descreve pedido novo/orçamento,
-      // ignora o clique de "Suporte pós-venda" e devolve para o fluxo comercial.
-      const preSale = await detectPreSaleIntent({
-        supabase,
-        conversationId: conversation.id,
-        currentText: userText,
-        buttonTitle: 'Suporte pós-venda',
-      });
-      if (preSale.is_pre_sale && preSale.confidence >= 60) {
-        console.log('[Onboarding] pre-sale override @await_triage:', preSale.reason, preSale.confidence);
+      if (retries >= 3) {
         await setOnboardingStep(supabase, conversation, { step: 'done' });
-        try {
-          await supabase
-            .from('messages')
-            .update({
-              metadata: { ...(message.metadata || {}), onboarding_kickoff: true, pre_sale_override: true },
-            })
-            .eq('id', message.id);
-        } catch (_) { /* ignore */ }
-        return 'continue';
+      } else {
+        await setOnboardingStep(supabase, conversation, { step: 'await_name', retries });
+        (conversation as any).__opening_directive = OPENING_DIRECTIVES.askNameAgain;
       }
-
-      await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.SUPPORT_ASK_ORDER, message.id);
-      await setOnboardingStep(supabase, conversation, {
-        step: 'await_support_order',
-        support_intake: {},
-      });
-
-      // Handoff antecipado: já atribui responsável de Produção, notifica e
-      // dispara alerta WhatsApp no clique do botão (dispatchSupportAlert tem
-      // cooldown de 10 min por conversation, então a chamada final após a
-      // classificação completa não duplica).
-      try {
-        const clientLabel = contact?.call_name || contact?.name || contact?.phone_number || 'Cliente';
-
-        // Resolver producao_user_id e time de Produção
-        let earlyResponsavelId: string | null = null;
-        let earlyProducaoTeamId: string | null = null;
-        try {
-          const { data: ns } = await supabase
-            .from('nina_settings')
-            .select('producao_user_id')
-            .is('user_id', null)
-            .maybeSingle();
-          const prodUserId = (ns as any)?.producao_user_id || null;
-          if (prodUserId) {
-            const { data: tm } = await supabase
-              .from('team_members')
-              .select('id, status')
-              .eq('id', prodUserId)
-              .maybeSingle();
-            if (tm && (tm as any).status === 'active') {
-              earlyResponsavelId = (tm as any).id;
-            }
-          }
-          const { data: prodTeam } = await supabase
-            .from('teams')
-            .select('id')
-            .ilike('name', 'produ%')
-            .maybeSingle();
-          earlyProducaoTeamId = (prodTeam as any)?.id || null;
-        } catch (e) {
-          console.error('[Onboarding][EarlyHandoff] resolve producao failed:', e);
-        }
-
-        // Atribuir na conversa imediatamente (sem trocar status/is_active — o
-        // fluxo continua coletando pedido/problema).
-        const earlyUpdate: Record<string, any> = {};
-        if (earlyResponsavelId) earlyUpdate.assigned_user_id = earlyResponsavelId;
-        if (earlyProducaoTeamId) earlyUpdate.assigned_team = earlyProducaoTeamId;
-        // Support classification lives in `support_cases` — no tags are written.
-
-        if (Object.keys(earlyUpdate).length > 0) {
-          await supabase.from('conversations').update(earlyUpdate).eq('id', conversation.id);
-          console.log('[Onboarding][EarlyHandoff] assigned', {
-            conversation_id: conversation.id,
-            responsavel_id: earlyResponsavelId,
-            team_id: earlyProducaoTeamId,
-          });
-        }
-
-        // Notificação no sino
-        await supabase.from('notifications').insert({
-          type: 'handoff_requested',
-          title: `Novo chamado de suporte iniciado: ${clientLabel}`,
-          body: 'Lead clicou em "Suporte pós-venda". Aguardando número do pedido e descrição do problema.',
-          conversation_id: conversation.id,
-          contact_id: conversation.contact_id,
-          metadata: {
-            target_team_id: earlyProducaoTeamId,
-            target_team_name: 'Produção',
-            responsavel_id: earlyResponsavelId,
-            stage: 'triage_started',
-            triggered_by: 'donatella_support_triage_click',
-            priority: 'normal',
-          },
-        });
-
-        // Alerta WhatsApp para plantão (com labels provisórios)
-        await dispatchSupportAlert(supabase, {
-          contactId: conversation.contact_id,
-          conversationId: conversation.id,
-          clientLabel,
-          orderNumber: null,
-          reasonLabel: 'Triagem inicial',
-          sentimentLabel: 'a apurar',
-          summary: 'Lead abriu ticket de suporte. Coletando pedido/problema.',
-        });
-      } catch (earlyErr) {
-        console.error('[Onboarding][EarlyHandoff] failed:', earlyErr);
-      }
-
-      return 'handled';
     }
-
-
-    // Unrecognized text -> resend triage once, then default to Atendimento.
-    const retries = (onboarding?.retries || 0) + 1;
-    if (retries >= 2) {
-      await setOnboardingStep(supabase, conversation, { step: 'done' });
-      return 'continue';
-    }
-    const firstName = contact?.call_name || extractFirstName(contact?.name || '');
-    await sendInteractiveButtons(
-      supabase,
-      conversation,
-      settings,
-      ONBOARDING_TEXTS.triage(firstName || 'tudo bem'),
-      [
-        { id: 'menu_atendimento', title: 'Atendimento' },
-        { id: 'menu_suporte', title: 'Suporte pós-venda' },
-      ],
-    );
-    await setOnboardingStep(supabase, conversation, { step: 'await_triage', retries });
-    return 'handled';
+    return 'continue';
   }
+
 
   // STEP: await_support_order -> capture order number (or "não tenho"), then ask issue
   if (step === 'await_support_order') {
@@ -2190,6 +1963,14 @@ async function processQueueItem(
     processedPrompt = `${processedPrompt}\n\n${resumptionSystemNote}`;
   }
 
+  // Append opening directive (apresentação / coleta de nome) when the onboarding
+  // handler flagged this turn. Replaces the old fixed triage menu.
+  const openingDirective = (conversation as any).__opening_directive;
+  if (openingDirective) {
+    processedPrompt = `${processedPrompt}${openingDirective}`;
+  }
+
+
   // Inject business-hours awareness so the AI can decide handoff correctly.
   // Team-aware: uses team_business_hours/team_holidays for the conversation's
   // assigned team (Produção for suporte, Comercial otherwise) and falls back
@@ -2561,6 +2342,81 @@ async function processQueueItem(
             triggered_by: 'nina',
           },
         });
+
+        // 3b) Post-sale handoff → abre ticket de suporte classificado, atribui
+        //     Produção e dispara o alerta de plantão (mesmo fluxo da triagem antiga).
+        if (isPostSale) {
+          try {
+            const issueText = [args.summary, message?.content].filter(Boolean).join(' — ');
+            const classification = await classifySupportIntake({ issue_text: issueText });
+
+            let responsavelId: string | null = null;
+            let producaoTeamId: string | null = null;
+            try {
+              const { data: ns } = await supabase
+                .from('nina_settings')
+                .select('producao_user_id')
+                .is('user_id', null)
+                .maybeSingle();
+              const prodUserId = (ns as any)?.producao_user_id || null;
+              if (prodUserId) {
+                const { data: tm } = await supabase
+                  .from('team_members')
+                  .select('id, status')
+                  .eq('id', prodUserId)
+                  .maybeSingle();
+                if (tm && (tm as any).status === 'active') responsavelId = (tm as any).id;
+              }
+              const { data: prodTeam } = await supabase
+                .from('teams')
+                .select('id')
+                .ilike('name', 'produ%')
+                .maybeSingle();
+              producaoTeamId = (prodTeam as any)?.id || null;
+            } catch (e) {
+              console.error('[Handoff] resolve produção failed:', e);
+            }
+
+            const routeUpdate: Record<string, any> = {};
+            if (responsavelId) routeUpdate.assigned_user_id = responsavelId;
+            if (producaoTeamId) routeUpdate.assigned_team = producaoTeamId;
+            if (Object.keys(routeUpdate).length > 0) {
+              await supabase.from('conversations').update(routeUpdate).eq('id', conversation.id);
+            }
+
+            await supabase.from('support_cases').insert({
+              conversation_id: conversation.id,
+              contact_id: conversation.contact_id,
+              grupo_suporte: classification.group_key,
+              categoria_suporte: classification.category_key,
+              requer_agente_humano: true,
+              status_resolucao: 'encaminhado_agente',
+              responsavel_id: responsavelId,
+              causa: classification.causa,
+              resumo: classification.summary || args.summary || null,
+              sentimento: classification.sentiment_key,
+              order_number: null,
+              metadata: {
+                client_label: contactName,
+                triggered_by: 'donatella_handoff_tool',
+                handoff_reason: args.reason,
+              },
+            });
+
+            await dispatchSupportAlert(supabase, {
+              contactId: conversation.contact_id,
+              conversationId: conversation.id,
+              clientLabel: contactName,
+              orderNumber: null,
+              reasonLabel: classification.category_label || reasonLabel,
+              sentimentLabel: classification.sentiment_label || (isUrgent ? 'urgente' : 'neutro'),
+              summary: classification.summary || args.summary || 'Cliente solicitou suporte.',
+            });
+          } catch (supErr) {
+            console.error('[Handoff] support case flow failed:', supErr);
+          }
+        }
+
 
         // 4) Replace any AI text content with the safe customer-facing message.
         //    Critical: prevents the model's internal "🔔 ATENDIMENTO NECESSÁRIO ..."

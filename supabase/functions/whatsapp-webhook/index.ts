@@ -297,21 +297,20 @@ serve(async (req) => {
 
           // Seed onboarding step on the conversation if it isn't set yet.
           // We use nina_context.onboarding to drive the opening flow in nina-orchestrator.
-          // - 'ask_name'  -> contact has no name on file (true new lead)
-          // - 'triage'    -> contact already has a name (returning, but new/reopened conv)
+          // - 'opening' -> Donatella assume a conversa desde a primeira mensagem
+          //   (apresentação + coleta natural de nome). Não há menu de triagem.
           try {
             const ninaCtx = (conversation as any).nina_context || {};
             if (!ninaCtx.onboarding || !ninaCtx.onboarding.step) {
-              const hasName = !!(contact.name && String(contact.name).trim().length > 0);
-              const nextStep = hasName ? 'triage' : 'ask_name';
-              const newCtx = { ...ninaCtx, onboarding: { step: nextStep } };
+              const newCtx = { ...ninaCtx, onboarding: { step: 'opening' } };
               await supabase
                 .from('conversations')
                 .update({ nina_context: newCtx })
                 .eq('id', conversation.id);
               (conversation as any).nina_context = newCtx;
-              console.log('[Webhook] Seeded onboarding step:', nextStep, 'for conv', conversation.id);
+              console.log('[Webhook] Seeded onboarding step: opening for conv', conversation.id);
             }
+
           } catch (seedErr) {
             console.error('[Webhook] Error seeding onboarding step:', seedErr);
           }

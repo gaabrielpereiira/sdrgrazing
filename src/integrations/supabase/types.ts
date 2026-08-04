@@ -300,6 +300,7 @@ export type Database = {
           is_blocked: boolean | null
           is_business: boolean | null
           last_activity: string
+          last_name: string | null
           name: string | null
           notes: string | null
           phone_number: string
@@ -322,6 +323,7 @@ export type Database = {
           is_blocked?: boolean | null
           is_business?: boolean | null
           last_activity?: string
+          last_name?: string | null
           name?: string | null
           notes?: string | null
           phone_number: string
@@ -344,6 +346,7 @@ export type Database = {
           is_blocked?: boolean | null
           is_business?: boolean | null
           last_activity?: string
+          last_name?: string | null
           name?: string | null
           notes?: string | null
           phone_number?: string
