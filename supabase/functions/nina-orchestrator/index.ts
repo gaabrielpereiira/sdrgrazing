@@ -811,6 +811,28 @@ function extractFirstName(raw: string): string {
   return raw.trim().split(/\s+/)[0] || raw.trim();
 }
 
+// Tenta extrair nome (e sobrenome) de uma mensagem em texto livre.
+// Aceita "meu nome é Ana Souza", "sou o João Pedro", "Ana Souza".
+function extractNameFromText(raw: string): string | null {
+  if (!raw) return null;
+  let s = raw.replace(/\s+/g, ' ').trim();
+  const intro = s.match(
+    /(?:meu nome (?:é|eh|e)|me chamo|aqui (?:é|eh|e) (?:a|o)?|sou (?:a|o)?|nome:)\s*(.+)$/i,
+  );
+  if (intro) s = intro[1].trim();
+  s = s.replace(/[.,;!?"'”“]+$/g, '').trim();
+  if (!looksLikeName(s)) return null;
+  const parts = s
+    .split(/\s+/)
+    .filter((p) => /^[A-Za-zÀ-ÿ'’\-]{2,}$/.test(p))
+    .slice(0, 4);
+  if (parts.length < 2) return null;
+  return parts
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(' ');
+}
+
+
 async function sendFixedText(
   supabase: any,
   conversation: any,
