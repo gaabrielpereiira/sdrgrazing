@@ -1293,228 +1293,57 @@ async function handleOnboarding(
     .maybeSingle();
 
   const userText = (message.content || '').trim();
-  const btnId = getInteractiveButtonId(message);
 
-  // STEP: ask_name (first turn for a new lead) -> send fixed welcome, wait for name
-  if (step === 'ask_name') {
-    await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.WELCOME_ASK_NAME, message.id);
-    await setOnboardingStep(supabase, conversation, { step: 'await_name', retries: 0 });
-    return 'handled';
+  // Company/agent labels for the opening directive
+  const companyName = settings?.company_name || 'Grazing Table & Co.';
+  const agentName = settings?.sdr_name || 'Donatella';
+
+  // STEP: opening -> Donatella assume a conversa desde a primeira mensagem.
+  // Não há menu de triagem: apenas injetamos uma diretiva de abertura no prompt
+  // e deixamos a IA responder normalmente.
+  if (step === 'opening') {
+    const hasFullName = !!(contact?.name && String(contact.name).trim().split(/\s+/).length >= 2);
+    if (hasFullName) {
+      await setOnboardingStep(supabase, conversation, { step: 'done' });
+      const firstName = contact?.call_name || extractFirstName(contact?.name || '');
+      (conversation as any).__opening_directive = OPENING_DIRECTIVES.returning(firstName);
+    } else {
+      await setOnboardingStep(supabase, conversation, { step: 'await_name', retries: 0 });
+      (conversation as any).__opening_directive = OPENING_DIRECTIVES.firstTurn(companyName, agentName);
+    }
+    return 'continue';
   }
 
-  // STEP: await_name -> validate and save
+  // STEP: await_name -> tenta capturar nome/sobrenome do texto livre, sem bloquear
   if (step === 'await_name') {
-    if (looksLikeName(userText)) {
-      const fullName = userText.replace(/\s+/g, ' ').trim();
-      const firstName = extractFirstName(fullName);
+    const captured = extractNameFromText(userText);
+    if (captured) {
+      const parts = captured.split(/\s+/);
+      const firstName = parts[0];
+      const lastName = parts.slice(1).join(' ') || null;
       await supabase
         .from('contacts')
-        .update({ name: fullName, call_name: firstName })
+        .update({ name: captured, call_name: firstName, last_name: lastName })
         .eq('id', conversation.contact_id);
-      await sendInteractiveButtons(
-        supabase,
-        conversation,
-        settings,
-        ONBOARDING_TEXTS.triage(firstName),
-        [
-          { id: 'menu_atendimento', title: 'Atendimento' },
-          { id: 'menu_suporte', title: 'Suporte pós-venda' },
-        ],
-      );
-      await setOnboardingStep(supabase, conversation, { step: 'await_triage' });
-      return 'handled';
+      if (conversation.contact) {
+        conversation.contact.name = captured;
+        conversation.contact.call_name = firstName;
+        conversation.contact.last_name = lastName;
+      }
+      await setOnboardingStep(supabase, conversation, { step: 'done' });
+      (conversation as any).__opening_directive = OPENING_DIRECTIVES.nameCaptured(captured);
     } else {
-      await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.ASK_NAME_RETRY, message.id);
       const retries = (onboarding?.retries || 0) + 1;
-      await setOnboardingStep(supabase, conversation, { step: 'await_name', retries });
-      return 'handled';
-    }
-  }
-
-  // STEP: triage -> send triage buttons greeting by first name
-  if (step === 'triage') {
-    const firstName = contact?.call_name || extractFirstName(contact?.name || 'tudo bem');
-    await sendInteractiveButtons(
-      supabase,
-      conversation,
-      settings,
-      ONBOARDING_TEXTS.triage(firstName),
-      [
-        { id: 'menu_atendimento', title: 'Atendimento' },
-        { id: 'menu_suporte', title: 'Suporte pós-venda' },
-      ],
-    );
-    await setOnboardingStep(supabase, conversation, { step: 'await_triage' });
-    return 'handled';
-  }
-
-  // STEP: await_triage -> route based on button (or text fallback)
-  if (step === 'await_triage') {
-    const lower = userText.toLowerCase();
-    const choseAtendimento =
-      btnId === 'menu_atendimento' ||
-      /\batendimento\b/.test(lower) ||
-      /^1\b/.test(lower);
-    const choseSuporte =
-      btnId === 'menu_suporte' ||
-      /\bsuporte\b/.test(lower) ||
-      /p[óo]s[\s-]?venda/.test(lower) ||
-      /^2\b/.test(lower);
-
-    if (choseAtendimento) {
-      await setOnboardingStep(supabase, conversation, { step: 'done' });
-      // Let the AI run — flag the message so the orchestrator knows it's the kickoff turn.
-      try {
-        await supabase
-          .from('messages')
-          .update({
-            metadata: {
-              ...(message.metadata || {}),
-              onboarding_kickoff: true,
-            },
-          })
-          .eq('id', message.id);
-      } catch (_) { /* ignore */ }
-      return 'continue';
-    }
-
-    if (choseSuporte) {
-      // Pre-sale override: se o texto do lead descreve pedido novo/orçamento,
-      // ignora o clique de "Suporte pós-venda" e devolve para o fluxo comercial.
-      const preSale = await detectPreSaleIntent({
-        supabase,
-        conversationId: conversation.id,
-        currentText: userText,
-        buttonTitle: 'Suporte pós-venda',
-      });
-      if (preSale.is_pre_sale && preSale.confidence >= 60) {
-        console.log('[Onboarding] pre-sale override @await_triage:', preSale.reason, preSale.confidence);
+      if (retries >= 3) {
         await setOnboardingStep(supabase, conversation, { step: 'done' });
-        try {
-          await supabase
-            .from('messages')
-            .update({
-              metadata: { ...(message.metadata || {}), onboarding_kickoff: true, pre_sale_override: true },
-            })
-            .eq('id', message.id);
-        } catch (_) { /* ignore */ }
-        return 'continue';
+      } else {
+        await setOnboardingStep(supabase, conversation, { step: 'await_name', retries });
+        (conversation as any).__opening_directive = OPENING_DIRECTIVES.askNameAgain;
       }
-
-      await sendFixedText(supabase, conversation, ONBOARDING_TEXTS.SUPPORT_ASK_ORDER, message.id);
-      await setOnboardingStep(supabase, conversation, {
-        step: 'await_support_order',
-        support_intake: {},
-      });
-
-      // Handoff antecipado: já atribui responsável de Produção, notifica e
-      // dispara alerta WhatsApp no clique do botão (dispatchSupportAlert tem
-      // cooldown de 10 min por conversation, então a chamada final após a
-      // classificação completa não duplica).
-      try {
-        const clientLabel = contact?.call_name || contact?.name || contact?.phone_number || 'Cliente';
-
-        // Resolver producao_user_id e time de Produção
-        let earlyResponsavelId: string | null = null;
-        let earlyProducaoTeamId: string | null = null;
-        try {
-          const { data: ns } = await supabase
-            .from('nina_settings')
-            .select('producao_user_id')
-            .is('user_id', null)
-            .maybeSingle();
-          const prodUserId = (ns as any)?.producao_user_id || null;
-          if (prodUserId) {
-            const { data: tm } = await supabase
-              .from('team_members')
-              .select('id, status')
-              .eq('id', prodUserId)
-              .maybeSingle();
-            if (tm && (tm as any).status === 'active') {
-              earlyResponsavelId = (tm as any).id;
-            }
-          }
-          const { data: prodTeam } = await supabase
-            .from('teams')
-            .select('id')
-            .ilike('name', 'produ%')
-            .maybeSingle();
-          earlyProducaoTeamId = (prodTeam as any)?.id || null;
-        } catch (e) {
-          console.error('[Onboarding][EarlyHandoff] resolve producao failed:', e);
-        }
-
-        // Atribuir na conversa imediatamente (sem trocar status/is_active — o
-        // fluxo continua coletando pedido/problema).
-        const earlyUpdate: Record<string, any> = {};
-        if (earlyResponsavelId) earlyUpdate.assigned_user_id = earlyResponsavelId;
-        if (earlyProducaoTeamId) earlyUpdate.assigned_team = earlyProducaoTeamId;
-        // Support classification lives in `support_cases` — no tags are written.
-
-        if (Object.keys(earlyUpdate).length > 0) {
-          await supabase.from('conversations').update(earlyUpdate).eq('id', conversation.id);
-          console.log('[Onboarding][EarlyHandoff] assigned', {
-            conversation_id: conversation.id,
-            responsavel_id: earlyResponsavelId,
-            team_id: earlyProducaoTeamId,
-          });
-        }
-
-        // Notificação no sino
-        await supabase.from('notifications').insert({
-          type: 'handoff_requested',
-          title: `Novo chamado de suporte iniciado: ${clientLabel}`,
-          body: 'Lead clicou em "Suporte pós-venda". Aguardando número do pedido e descrição do problema.',
-          conversation_id: conversation.id,
-          contact_id: conversation.contact_id,
-          metadata: {
-            target_team_id: earlyProducaoTeamId,
-            target_team_name: 'Produção',
-            responsavel_id: earlyResponsavelId,
-            stage: 'triage_started',
-            triggered_by: 'donatella_support_triage_click',
-            priority: 'normal',
-          },
-        });
-
-        // Alerta WhatsApp para plantão (com labels provisórios)
-        await dispatchSupportAlert(supabase, {
-          contactId: conversation.contact_id,
-          conversationId: conversation.id,
-          clientLabel,
-          orderNumber: null,
-          reasonLabel: 'Triagem inicial',
-          sentimentLabel: 'a apurar',
-          summary: 'Lead abriu ticket de suporte. Coletando pedido/problema.',
-        });
-      } catch (earlyErr) {
-        console.error('[Onboarding][EarlyHandoff] failed:', earlyErr);
-      }
-
-      return 'handled';
     }
-
-
-    // Unrecognized text -> resend triage once, then default to Atendimento.
-    const retries = (onboarding?.retries || 0) + 1;
-    if (retries >= 2) {
-      await setOnboardingStep(supabase, conversation, { step: 'done' });
-      return 'continue';
-    }
-    const firstName = contact?.call_name || extractFirstName(contact?.name || '');
-    await sendInteractiveButtons(
-      supabase,
-      conversation,
-      settings,
-      ONBOARDING_TEXTS.triage(firstName || 'tudo bem'),
-      [
-        { id: 'menu_atendimento', title: 'Atendimento' },
-        { id: 'menu_suporte', title: 'Suporte pós-venda' },
-      ],
-    );
-    await setOnboardingStep(supabase, conversation, { step: 'await_triage', retries });
-    return 'handled';
+    return 'continue';
   }
+
 
   // STEP: await_support_order -> capture order number (or "não tenho"), then ask issue
   if (step === 'await_support_order') {
