@@ -191,7 +191,7 @@ const ChatInterface: React.FC = () => {
   useEffect(() => { try { localStorage.setItem('chat.filters.responsible', filterResponsible); } catch {} }, [filterResponsible]);
   useEffect(() => { try { localStorage.setItem('chat.filters.team', filterTeam); } catch {} }, [filterTeam]);
   useEffect(() => { try { localStorage.setItem('chat.filters.onlySupport', onlySupport ? '1' : '0'); } catch {} }, [onlySupport]);
-  const filtersActive = filterResponsible !== 'all' || filterTeam !== 'all' || onlySupport;
+  const filtersActive = filterResponsible !== 'all' || onlySupport;
   // Support ticket closing (note + loading)
   const [closeNoteOpen, setCloseNoteOpen] = useState(false);
   const [closeNote, setCloseNote] = useState('');
@@ -933,10 +933,8 @@ const ChatInterface: React.FC = () => {
       } else if (filterResponsible !== 'all') {
         if (chat.assignedUserId !== filterResponsible) return false;
       }
-      // Filtro: Departamento (assigned_team é o id do time)
-      if (filterTeam !== 'all') {
-        if (chat.assignedTeam !== filterTeam) return false;
-      }
+      // Filtro de departamento removido da UI (a restrição por time continua acima)
+
       if (!searchQuery) return true;
       const query = searchQuery.toLowerCase();
       return (
@@ -1320,7 +1318,7 @@ const ChatInterface: React.FC = () => {
             </TabsList>
           </Tabs>
 
-          {/* Filtros: Responsável + Departamento */}
+          {/* Filtro: Responsável */}
           <div className="flex items-center gap-2 mb-3">
             <Select value={filterResponsible} onValueChange={setFilterResponsible}>
               <SelectTrigger className="h-8 text-xs bg-slate-950/50 border-slate-800 text-slate-200 flex-1 min-w-0">
@@ -1334,24 +1332,7 @@ const ChatInterface: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              value={restrictedToTeamId ? restrictedToTeamId : filterTeam}
-              onValueChange={setFilterTeam}
-              disabled={!!restrictedToTeamId}
-            >
-              <SelectTrigger
-                className="h-8 text-xs bg-slate-950/50 border-slate-800 text-slate-200 flex-1 min-w-0 disabled:opacity-70"
-                title={restrictedToTeamId ? `Restrito ao seu departamento (${myTeamName})` : undefined}
-              >
-                <SelectValue placeholder="Departamento" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
-                {!restrictedToTeamId && <SelectItem value="all">Todos depart.</SelectItem>}
-                {teamsList.map(t => (
-                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
             {filtersActive && (
               <button
                 type="button"
