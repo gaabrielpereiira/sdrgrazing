@@ -1892,9 +1892,9 @@ export const api = {
     const prevPeriodEndStr = prevPeriodEnd.toISOString();
 
     try {
-      const { labelForReasonKey } = await import('@/lib/supportReasons');
+      const { labelForCategory } = await import('@/lib/supportCategories');
 
-      const [periodRes, prevRes] = await Promise.all([
+      const [periodRes, prevRes, casesRes] = await Promise.all([
         supabase
           .from('conversations')
           .select('id, is_active, tags')
@@ -1906,6 +1906,10 @@ export const api = {
           .eq('queue', 'support')
           .gte('started_at', prevPeriodStartStr)
           .lt('started_at', periodStartStr),
+        supabase
+          .from('support_cases')
+          .select('categoria_suporte')
+          .gte('created_at', periodStartStr),
       ]);
 
       const rows = (periodRes.data || []) as Array<{ id: string; is_active: boolean; tags: string[] | null }>;
@@ -1914,25 +1918,18 @@ export const api = {
       const finished = total - active;
       const prevTotal = prevRes.count || 0;
 
-      // Aggregate motivo:* tags
+      // Aggregate support case categories (tickets are the single source of truth)
       const counts = new Map<string, number>();
-      for (const r of rows) {
-        const tags = Array.isArray(r.tags) ? r.tags : [];
-        const motivos = tags.filter((t) => typeof t === 'string' && t.startsWith('motivo:'));
-        if (motivos.length === 0) {
-          counts.set('nao_classificado', (counts.get('nao_classificado') || 0) + 1);
-        } else {
-          for (const m of motivos) {
-            const key = m.slice('motivo:'.length);
-            counts.set(key, (counts.get(key) || 0) + 1);
-          }
-        }
+      for (const c of (casesRes.data || []) as Array<{ categoria_suporte: string | null }>) {
+        const key = c.categoria_suporte || 'outro';
+        counts.set(key, (counts.get(key) || 0) + 1);
       }
 
       const reasons = Array.from(counts.entries())
-        .map(([key, count]) => ({ key, label: labelForReasonKey(key), count }))
+        .map(([key, count]) => ({ key, label: labelForCategory(key), count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 6);
+
 
       return {
         total,
