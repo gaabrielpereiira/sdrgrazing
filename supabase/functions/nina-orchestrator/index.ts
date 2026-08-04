@@ -1963,6 +1963,14 @@ async function processQueueItem(
     processedPrompt = `${processedPrompt}\n\n${resumptionSystemNote}`;
   }
 
+  // Append opening directive (apresentação / coleta de nome) when the onboarding
+  // handler flagged this turn. Replaces the old fixed triage menu.
+  const openingDirective = (conversation as any).__opening_directive;
+  if (openingDirective) {
+    processedPrompt = `${processedPrompt}${openingDirective}`;
+  }
+
+
   // Inject business-hours awareness so the AI can decide handoff correctly.
   // Team-aware: uses team_business_hours/team_holidays for the conversation's
   // assigned team (Produção for suporte, Comercial otherwise) and falls back
