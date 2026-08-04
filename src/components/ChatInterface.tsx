@@ -13,7 +13,7 @@ import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { api } from '@/services/api';
 import { TagSelector } from './TagSelector';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-const isSupportSystemTag = (tag: string) => tag.startsWith('motivo:') || tag.startsWith('sentimento:');
+import { renderTextWithLinks } from '@/lib/linkify';
 import { renderTextWithLinks } from '@/lib/linkify';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import {
