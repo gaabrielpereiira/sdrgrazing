@@ -1527,9 +1527,8 @@ async function handleOnboarding(
         const earlyUpdate: Record<string, any> = {};
         if (earlyResponsavelId) earlyUpdate.assigned_user_id = earlyResponsavelId;
         if (earlyProducaoTeamId) earlyUpdate.assigned_team = earlyProducaoTeamId;
-        const existingTags = Array.isArray(conversation.tags) ? conversation.tags : [];
-        const provisionalTags = Array.from(new Set([...existingTags, 'motivo:triagem_suporte']));
-        earlyUpdate.tags = provisionalTags;
+        // Support classification lives in `support_cases` — no tags are written.
+
         if (Object.keys(earlyUpdate).length > 0) {
           await supabase.from('conversations').update(earlyUpdate).eq('id', conversation.id);
           console.log('[Onboarding][EarlyHandoff] assigned', {
