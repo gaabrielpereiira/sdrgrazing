@@ -761,12 +761,6 @@ async function cancelAppointmentFromAI(
 // ============================================================
 
 const ONBOARDING_TEXTS = {
-  WELCOME_ASK_NAME:
-    'Olá! 🧀✨ Eu sou a Donatella, sua concierge de experiências gastronômicas da Grazing Table & Co. Pra te atender do jeitinho certo, como é o seu nome e sobrenome?',
-  ASK_NAME_RETRY:
-    'Pra te cadastrar certinho, me manda só seu nome e sobrenome, por favor 💛',
-  triage: (firstName: string) =>
-    `Prazer, ${firstName}! 💛 Me conta: como posso te ajudar hoje?`,
   SUPPORT_ASK_ORDER:
     'Sem problema, vou te direcionar para o nosso time da Produção. 💛 Pra agilizar, me envia o *número do pedido*? (se não tiver em mãos, é só responder "não tenho")',
   SUPPORT_ASK_ISSUE:
@@ -774,6 +768,33 @@ const ONBOARDING_TEXTS = {
   SUPPORT_HANDOFF_FALLBACK:
     'Recebi! Já estou acionando o time da Produção pra cuidar de você. ✨',
 };
+
+// Directives injected into the system prompt for the opening turns.
+// The AI writes the actual wording — there are no fixed menu messages anymore.
+const OPENING_DIRECTIVES = {
+  firstTurn: (companyName: string, agentName: string) =>
+    `\n\n<abertura_da_conversa>
+Esta é a PRIMEIRA mensagem desta pessoa. Nesta resposta você deve:
+1. Se apresentar de forma calorosa e breve como ${agentName}, concierge da ${companyName}.
+2. Já responder/acolher o que a pessoa disse (não ignore o conteúdo da mensagem dela).
+3. Pedir o nome e sobrenome dela de forma natural, no final da mensagem ("pra eu te chamar do jeitinho certo, como é seu nome e sobrenome?").
+Não use menus, listas de opções ou botões. Não pergunte se é atendimento ou suporte — conduza a conversa naturalmente.
+Máximo 4 linhas.
+</abertura_da_conversa>`,
+  askNameAgain:
+    `\n\n<abertura_da_conversa>
+Você ainda não sabe o nome completo desta pessoa. Continue ajudando normalmente e, ao final desta resposta, peça de forma leve o nome e sobrenome dela. Não insista mais de uma vez por mensagem e nunca bloqueie o atendimento por causa disso.
+</abertura_da_conversa>`,
+  nameCaptured: (fullName: string) =>
+    `\n\n<abertura_da_conversa>
+A pessoa acabou de informar o nome: ${fullName}. Agradeça rapidamente, use o primeiro nome dela e siga o atendimento com uma pergunta útil sobre o que ela precisa. Não peça o nome novamente.
+</abertura_da_conversa>`,
+  returning: (firstName: string) =>
+    `\n\n<abertura_da_conversa>
+Início de uma nova conversa com um contato já conhecido (${firstName}). Cumprimente pelo primeiro nome, de forma calorosa e breve, e siga direto no que ela precisa. Sem menus nem opções.
+</abertura_da_conversa>`,
+};
+
 
 
 function looksLikeName(raw: string): boolean {
