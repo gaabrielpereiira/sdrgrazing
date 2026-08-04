@@ -2757,12 +2757,9 @@ const ChatInterface: React.FC = () => {
 
 
 
-                  {/* Active support state (queue=support without an open support_case) */}
+                  {/* Active support state (queue=support) */}
                   {activeChat && activeChat.queue === 'support' && (() => {
                     const sc = supportCaseMap[activeChat.id];
-                    const motivoTag = activeChat.tags.find((t) => isReasonTag(t));
-                    const motivoKey = motivoTag ? reasonKeyFromTag(motivoTag) : null;
-                    const motivoLabel = motivoKey ? labelForReasonKey(motivoKey) : null;
                     return (
                       <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-2.5 space-y-2">
                         <div className="flex items-center justify-between gap-2">
@@ -2781,33 +2778,18 @@ const ChatInterface: React.FC = () => {
                           <p className="text-xs text-slate-200 leading-snug">
                             {labelForGroup(sc.grupo)} • {labelForCategory(sc.categoria)}
                           </p>
-                        ) : motivoLabel ? (
-                          <p className="text-xs text-slate-200 leading-snug">
-                            Motivo: <span className="font-medium">{motivoLabel}</span>
-                          </p>
                         ) : (
                           <div className="space-y-1.5">
-                            <p className="text-[11px] text-slate-300">Sem motivo definido. Escolha um:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {SUPPORT_REASONS.map((r) => (
-                                <button
-                                  key={r.key}
-                                  onClick={async () => {
-                                    try {
-                                      await api.moveConversationQueue(activeChat.id, 'support', { reasonKey: r.key });
-                                      toast.success(`Motivo definido: ${r.label}`);
-                                    } catch {
-                                      toast.error('Não foi possível salvar');
-                                    }
-                                  }}
-                                  className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900/60 hover:bg-rose-500/30 text-slate-200 border border-slate-700 hover:border-rose-500/50 transition-colors"
-                                >
-                                  {r.label}
-                                </button>
-                              ))}
-                            </div>
+                            <p className="text-[11px] text-slate-300">Nenhum ticket registrado para este atendimento.</p>
+                            <button
+                              onClick={() => setOpenTicketForm(true)}
+                              className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-900/60 hover:bg-rose-500/30 text-slate-200 border border-slate-700 hover:border-rose-500/50 transition-colors"
+                            >
+                              Abrir ticket
+                            </button>
                           </div>
                         )}
+
 
                         {closeNoteOpen && (
                           <div className="space-y-1.5 pt-1 border-t border-rose-500/30">
