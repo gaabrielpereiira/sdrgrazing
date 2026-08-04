@@ -1815,14 +1815,13 @@ export const api = {
       throw error;
     }
 
-    await api.moveConversationQueue(conversationId, 'support', { reasonKey: input.categoria });
+    await api.moveConversationQueue(conversationId, 'support');
   },
 
 
   /**
-   * Closes the support ticket(s) of a conversation, keeping a permanent record in
-   * `support_cases` (the lead's support history). If no case exists yet (support was
-   * flagged manually), one is created from the `motivo:*` tag so nothing is lost.
+   * Closes the open support ticket(s) of a conversation, keeping a permanent record in
+   * `support_cases` (the lead's support history).
    * When `moveToSales` is true (default) the conversation returns to the sales queue.
    */
   closeSupportCase: async (
@@ -1846,12 +1845,6 @@ export const api = {
       }
     } catch { /* ignore */ }
 
-    const { data: conv } = await supabase
-      .from('conversations')
-      .select('id, contact_id, tags, queue')
-      .eq('id', conversationId)
-      .maybeSingle();
-
     const { data: openCases } = await supabase
       .from('support_cases')
       .select('id')
@@ -1864,32 +1857,13 @@ export const api = {
         .update({ closed_at: nowIso, closed_by: closedBy, resolution_note: note })
         .in('id', openCases.map((c: any) => c.id));
       if (error) console.error('[API] Error closing support cases:', error);
-    } else if (conv?.contact_id && conv.queue === 'support') {
-      // No case registered — create a historical record from the reason tag
-
-      const tags: string[] = Array.isArray(conv.tags) ? (conv.tags as string[]) : [];
-      const reasonTag = tags.find((t) => t.startsWith('motivo:'));
-      const reasonKey = reasonTag ? reasonTag.slice('motivo:'.length) : 'nao_classificado';
-      const { error } = await supabase.from('support_cases').insert({
-        conversation_id: conversationId,
-        contact_id: conv.contact_id,
-        grupo_suporte: 'outros',
-        categoria_suporte: reasonKey,
-        requer_agente_humano: true,
-        status_resolucao: 'encaminhado_agente',
-        responsavel_id: closedBy,
-        closed_at: nowIso,
-        closed_by: closedBy,
-        resolution_note: note,
-        metadata: { created_from: 'manual_close' },
-      } as any);
-      if (error) console.error('[API] Error creating historical support case:', error);
     }
 
     if (opts?.moveToSales !== false) {
       await api.moveConversationQueue(conversationId, 'sales');
     }
   },
+
 
 
   /**
