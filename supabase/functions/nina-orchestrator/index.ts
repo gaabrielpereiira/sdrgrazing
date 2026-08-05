@@ -787,7 +787,19 @@ Você ainda não sabe o nome completo desta pessoa. Continue ajudando normalment
 </abertura_da_conversa>`,
   nameCaptured: (fullName: string) =>
     `\n\n<abertura_da_conversa>
-A pessoa acabou de informar o nome: ${fullName}. Agradeça rapidamente, use o primeiro nome dela e siga o atendimento com uma pergunta útil sobre o que ela precisa. Não peça o nome novamente.
+A pessoa se chama ${fullName}. Use o PRIMEIRO nome dela dentro da próxima frase útil e siga o atendimento com uma pergunta que avance a conversa.
+PROIBIDO: cumprimento isolado repetindo o nome ("Muito prazer, X!", "Olá, X!", "Prazer, X!") ou qualquer mensagem cujo único conteúdo seja reagir ao nome. Não confirme o nome, não agradeça pelo nome, não peça o nome novamente.
+Exemplo do tom: "Perfeito, Maria! Me conta: a tábua é pra presentear ou pra compartilhar com convidados?"
+</abertura_da_conversa>`,
+  confirmName: (candidate: string) =>
+    `\n\n<abertura_da_conversa>
+A pessoa respondeu algo que PARECE um nome/apelido: "${candidate}", mas há dúvida. Nesta resposta, confirme UMA única vez, de forma leve e curta, no final da mensagem: "Só pra registrar certinho — posso te chamar de ${candidate}?".
+Continue atendendo normalmente o que ela pediu. Não insista, não repita a pergunta em mensagens futuras e nunca bloqueie o atendimento por causa disso.
+</abertura_da_conversa>`,
+  answerFirstAskNameLater:
+    `\n\n<abertura_da_conversa>
+A última mensagem da pessoa é um pedido/pergunta/intenção — NÃO é o nome dela. Atenda primeiro exatamente o que ela pediu, com utilidade.
+Só se fizer sentido, no final, retome o nome de forma leve e não obrigatória (uma única vez). Nunca trate o pedido dela como se fosse um nome próprio.
 </abertura_da_conversa>`,
   returning: (firstName: string) =>
     `\n\n<abertura_da_conversa>
@@ -795,42 +807,139 @@ Início de uma nova conversa com um contato já conhecido (${firstName}). Cumpri
 </abertura_da_conversa>`,
 };
 
+const NAME_BLOCK_WORDS = [
+  // verbos de desejo/pedido
+  'quero', 'queria', 'gostaria', 'preciso', 'precisava', 'pode', 'poderia', 'podia',
+  'tem', 'teria', 'manda', 'mandar', 'envia', 'enviar', 'me ve', 'fazer', 'faz',
+  // intenção comercial / suporte
+  'valores', 'valor', 'preco', 'precos', 'quanto', 'custa', 'custo', 'cardapio', 'menu',
+  'catalogo', 'comprar', 'compra', 'pedido', 'pedidos', 'encomenda', 'entrega', 'entregar',
+  'orcamento', 'suporte', 'reclamacao', 'troca', 'trocar', 'nota fiscal', 'nf',
+  'informacoes', 'duvida', 'ajuda', 'atendimento', 'disponivel', 'disponibilidade',
+];
 
+const NAME_GREETINGS = [
+  'oi', 'ola', 'oie', 'oii', 'opa', 'eae', 'e ai', 'hey', 'alo',
+  'bom dia', 'boa tarde', 'boa noite', 'boa madrugada', 'tudo bem', 'tudo bom',
+];
 
-function looksLikeName(raw: string): boolean {
-  if (!raw) return false;
-  const s = raw.trim();
-  if (s.length < 3 || s.length > 80) return false;
-  if (/[?!@#$%&*()_=+<>{}\[\]\\\/]/.test(s)) return false;
-  if (/\d/.test(s)) return false;
-  const parts = s.split(/\s+/).filter((p) => /^[A-Za-zÀ-ÿ'’\-]{2,}$/.test(p));
-  return parts.length >= 2;
+function deaccent(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-function extractFirstName(raw: string): string {
-  return raw.trim().split(/\s+/)[0] || raw.trim();
-}
+const NAME_STOP_TOKENS = new Set([
+  'de', 'da', 'do', 'dos', 'das', 'e',
+]);
 
-// Tenta extrair nome (e sobrenome) de uma mensagem em texto livre.
-// Aceita "meu nome é Ana Souza", "sou o João Pedro", "Ana Souza".
-function extractNameFromText(raw: string): string | null {
-  if (!raw) return null;
-  let s = raw.replace(/\s+/g, ' ').trim();
-  const intro = s.match(
-    /(?:meu nome (?:é|eh|e)|me chamo|aqui (?:é|eh|e) (?:a|o)?|sou (?:a|o)?|nome:)\s*(.+)$/i,
-  );
-  if (intro) s = intro[1].trim();
-  s = s.replace(/[.,;!?"'”“]+$/g, '').trim();
-  if (!looksLikeName(s)) return null;
-  const parts = s
-    .split(/\s+/)
-    .filter((p) => /^[A-Za-zÀ-ÿ'’\-]{2,}$/.test(p))
-    .slice(0, 4);
-  if (parts.length < 2) return null;
+type NameCandidate =
+  | { kind: 'not_name' }
+  | {
+      kind: 'name' | 'maybe';
+      fullName: string;
+      firstName: string;
+      lastName: string | null;
+    };
+
+function titleCaseName(parts: string[]): string {
   return parts
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .map((p) =>
+      NAME_STOP_TOKENS.has(deaccent(p).toLowerCase())
+        ? p.toLowerCase()
+        : p.charAt(0).toUpperCase() + p.slice(1).toLowerCase(),
+    )
     .join(' ');
 }
+
+function countVowelGroups(word: string): number {
+  const m = deaccent(word).toLowerCase().match(/[aeiouy]+/g);
+  return m ? m.length : 0;
+}
+
+/**
+ * Classifica uma mensagem livre em: nome claro, nome duvidoso ou não-nome.
+ * Regra de ouro: intenção (pedido/pergunta) NUNCA é nome.
+ */
+function classifyNameCandidate(raw: string): NameCandidate {
+  if (!raw) return { kind: 'not_name' };
+  const original = raw.replace(/\s+/g, ' ').trim();
+  if (!original) return { kind: 'not_name' };
+
+  // Regra 2: pergunta
+  if (original.includes('?')) return { kind: 'not_name' };
+
+  const flat = deaccent(original).toLowerCase().replace(/[.,;!"'”“]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Regra 2: saudação isolada
+  if (NAME_GREETINGS.some((g) => flat === g || flat === `${g} `.trim())) {
+    return { kind: 'not_name' };
+  }
+
+  // Prefixos de apresentação ("meu nome é X", "sou a Ju", "aqui é a Carla")
+  let body = original;
+  let hadIntro = false;
+  const intro = original.match(
+    /^(?:meu nome (?:é|eh|e)|me chamo|aqui (?:é|eh|e)(?: (?:a|o))?|sou(?: (?:a|o))?|nome:|pode me chamar de|me chama de)\s+(.+)$/i,
+  );
+  if (intro) {
+    body = intro[1].trim();
+    hadIntro = true;
+  }
+  body = body.replace(/[.,;!"'”“]+$/g, '').trim();
+  if (!body) return { kind: 'not_name' };
+
+  const bodyFlat = deaccent(body).toLowerCase();
+
+  // Regra 2: dígitos ou símbolos
+  if (/\d/.test(body)) return { kind: 'not_name' };
+  if (/[@#$%&*()_=+<>{}\[\]\\\/]/.test(body)) return { kind: 'not_name' };
+
+  // Regra 2: verbos/palavras de intenção (no texto original completo)
+  const haystack = ` ${flat} `;
+  if (NAME_BLOCK_WORDS.some((w) => haystack.includes(` ${w} `))) {
+    return { kind: 'not_name' };
+  }
+
+  const words = body.split(/\s+/);
+  // Regra 2: mais de 4 palavras
+  if (words.length > 4) return { kind: 'not_name' };
+
+  // Regra 2 (saudação como corpo)
+  if (NAME_GREETINGS.includes(bodyFlat)) return { kind: 'not_name' };
+
+  // Tokens que parecem nome próprio
+  const parts = words.filter((p) => /^[A-Za-zÀ-ÿ'’\-]{2,}$/.test(p));
+  if (parts.length === 0 || parts.length !== words.length) return { kind: 'not_name' };
+
+  const nameParts = parts.filter((p) => !NAME_STOP_TOKENS.has(deaccent(p).toLowerCase()));
+  if (nameParts.length === 0) return { kind: 'not_name' };
+
+  const fullName = titleCaseName(parts);
+  const firstName = titleCaseName([nameParts[0]]);
+  const lastName = nameParts.length > 1
+    ? titleCaseName(parts.slice(parts.indexOf(nameParts[0]) + 1))
+    : null;
+
+  // Nome claro: 2+ tokens nominais, ou prefixo explícito, ou nome com >=4 letras e 2+ sílabas
+  const single = nameParts[0];
+  const clear =
+    nameParts.length >= 2 ||
+    hadIntro ||
+    (single.length >= 4 && countVowelGroups(single) >= 2);
+
+  return {
+    kind: clear ? 'name' : 'maybe',
+    fullName,
+    firstName,
+    lastName,
+  };
+}
+
+function isAffirmative(raw: string): boolean {
+  const f = deaccent((raw || '').toLowerCase()).replace(/[^a-z\s👍]/g, ' ').trim();
+  if (!f) return false;
+  return /^(sim|isso|isso ai|exato|exatamente|pode|pode sim|pode chamar|claro|claro que sim|aham|aha|uhum|ok|okay|certo|correto|perfeito|e isso|eh isso|sou eu|positivo|👍)\b/.test(f);
+}
+
 
 
 async function sendFixedText(
