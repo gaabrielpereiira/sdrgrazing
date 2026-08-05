@@ -898,10 +898,13 @@ function classifyNameCandidate(raw: string): NameCandidate {
   if (/[@#$%&*()_=+<>{}\[\]\\\/]/.test(body)) return { kind: 'not_name' };
 
   // Regra 2: verbos/palavras de intenção (no texto original completo)
-  const haystack = ` ${flat} `;
+  // Após remover o prefixo de apresentação, avalia o corpo (assim "pode me chamar
+  // de Ju" não é bloqueado pelo verbo do prefixo).
+  const haystack = ` ${hadIntro ? bodyFlat : flat} `;
   if (NAME_BLOCK_WORDS.some((w) => haystack.includes(` ${w} `))) {
     return { kind: 'not_name' };
   }
+
 
   const words = body.split(/\s+/);
   // Regra 2: mais de 4 palavras
