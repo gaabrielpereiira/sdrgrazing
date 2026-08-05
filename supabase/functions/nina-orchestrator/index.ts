@@ -807,6 +807,10 @@ Início de uma nova conversa com um contato já conhecido (${firstName}). Cumpri
 </abertura_da_conversa>`,
 };
 
+function extractFirstName(raw: string): string {
+  return raw.trim().split(/\s+/)[0] || raw.trim();
+}
+
 const NAME_BLOCK_WORDS = [
   // verbos de desejo/pedido
   'quero', 'queria', 'gostaria', 'preciso', 'precisava', 'pode', 'poderia', 'podia',
