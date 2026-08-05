@@ -1449,35 +1449,85 @@ async function handleOnboarding(
     return 'continue';
   }
 
-  // STEP: await_name -> tenta capturar nome/sobrenome do texto livre, sem bloquear
+  // Helper local: grava nome/sobrenome no contato
+  const persistName = async (fullName: string, firstName: string, lastName: string | null) => {
+    await supabase
+      .from('contacts')
+      .update({ name: fullName, call_name: firstName, last_name: lastName })
+      .eq('id', conversation.contact_id);
+    if (conversation.contact) {
+      conversation.contact.name = fullName;
+      conversation.contact.call_name = firstName;
+      conversation.contact.last_name = lastName;
+    }
+  };
+
+  // STEP: await_name -> intenção vem antes de nome; só grava nome claro.
   if (step === 'await_name') {
-    const captured = extractNameFromText(userText);
-    if (captured) {
-      const parts = captured.split(/\s+/);
-      const firstName = parts[0];
-      const lastName = parts.slice(1).join(' ') || null;
-      await supabase
-        .from('contacts')
-        .update({ name: captured, call_name: firstName, last_name: lastName })
-        .eq('id', conversation.contact_id);
-      if (conversation.contact) {
-        conversation.contact.name = captured;
-        conversation.contact.call_name = firstName;
-        conversation.contact.last_name = lastName;
-      }
+    const candidate = classifyNameCandidate(userText);
+
+    if (candidate.kind === 'name') {
+      await persistName(candidate.fullName, candidate.firstName, candidate.lastName);
+      await setOnboardingStep(supabase, conversation, { step: 'done', pending_name: null });
+      (conversation as any).__opening_directive = OPENING_DIRECTIVES.nameCaptured(candidate.fullName);
+      return 'continue';
+    }
+
+    if (candidate.kind === 'maybe') {
+      // Não grava ainda: confirma uma única vez.
+      await setOnboardingStep(supabase, conversation, {
+        step: 'confirm_name',
+        pending_name: {
+          fullName: candidate.fullName,
+          firstName: candidate.firstName,
+          lastName: candidate.lastName,
+        },
+      });
+      (conversation as any).__opening_directive = OPENING_DIRECTIVES.confirmName(candidate.firstName);
+      return 'continue';
+    }
+
+    // not_name -> é intenção/pergunta/saudação: atende primeiro, nome fica pra depois
+    const retries = (onboarding?.retries || 0) + 1;
+    if (retries >= 3) {
       await setOnboardingStep(supabase, conversation, { step: 'done' });
-      (conversation as any).__opening_directive = OPENING_DIRECTIVES.nameCaptured(captured);
+      (conversation as any).__opening_directive = OPENING_DIRECTIVES.answerFirstAskNameLater;
     } else {
-      const retries = (onboarding?.retries || 0) + 1;
-      if (retries >= 3) {
-        await setOnboardingStep(supabase, conversation, { step: 'done' });
-      } else {
-        await setOnboardingStep(supabase, conversation, { step: 'await_name', retries });
-        (conversation as any).__opening_directive = OPENING_DIRECTIVES.askNameAgain;
-      }
+      await setOnboardingStep(supabase, conversation, { step: 'await_name', retries });
+      (conversation as any).__opening_directive =
+        retries === 1
+          ? OPENING_DIRECTIVES.answerFirstAskNameLater
+          : OPENING_DIRECTIVES.askNameAgain;
     }
     return 'continue';
   }
+
+  // STEP: confirm_name -> confirmação única de um nome duvidoso
+  if (step === 'confirm_name') {
+    const pending = onboarding?.pending_name;
+    const candidate = classifyNameCandidate(userText);
+
+    if (candidate.kind === 'name') {
+      // Correção explícita ("não, é Bruna Lima")
+      await persistName(candidate.fullName, candidate.firstName, candidate.lastName);
+      await setOnboardingStep(supabase, conversation, { step: 'done', pending_name: null });
+      (conversation as any).__opening_directive = OPENING_DIRECTIVES.nameCaptured(candidate.fullName);
+      return 'continue';
+    }
+
+    if (pending?.fullName && isAffirmative(userText)) {
+      await persistName(pending.fullName, pending.firstName, pending.lastName || null);
+      await setOnboardingStep(supabase, conversation, { step: 'done', pending_name: null });
+      (conversation as any).__opening_directive = OPENING_DIRECTIVES.nameCaptured(pending.fullName);
+      return 'continue';
+    }
+
+    // Ignorou / mudou de assunto -> deixa pra lá e atende o assunto
+    await setOnboardingStep(supabase, conversation, { step: 'done', pending_name: null });
+    (conversation as any).__opening_directive = OPENING_DIRECTIVES.answerFirstAskNameLater;
+    return 'continue';
+  }
+
 
 
   // STEP: await_support_order -> capture order number (or "não tenho"), then ask issue
