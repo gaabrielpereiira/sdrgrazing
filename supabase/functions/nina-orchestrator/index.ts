@@ -1496,7 +1496,7 @@ async function handleOnboarding(
 
   // STEP: await_name -> intenção vem antes de nome; só grava nome claro.
   if (step === 'await_name') {
-    const candidate = classifyNameCandidate(userText);
+    const candidate = classifyNameFromText(nameText);
 
     if (candidate.kind === 'name') {
       await persistName(candidate.fullName, candidate.firstName, candidate.lastName);
