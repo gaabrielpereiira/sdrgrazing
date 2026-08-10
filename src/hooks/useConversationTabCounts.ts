@@ -6,6 +6,8 @@ export interface ConversationTabCounts {
   finishedSales: number;
   activeSupport: number;
   finishedSupport: number;
+  activeSupportTickets: number;
+  finishedSupportTickets: number;
   activeTotal: number;
   finishedTotal: number;
   mine: number;
@@ -16,6 +18,8 @@ const ZERO: ConversationTabCounts = {
   finishedSales: 0,
   activeSupport: 0,
   finishedSupport: 0,
+  activeSupportTickets: 0,
+  finishedSupportTickets: 0,
   activeTotal: 0,
   finishedTotal: 0,
   mine: 0,
@@ -34,16 +38,27 @@ export function useConversationTabCounts(
 
   const refresh = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('conversations')
-        .select('id, queue, is_active, assigned_user_id, assigned_team')
-        .limit(5000);
-      if (error) {
-        console.warn('[useConversationTabCounts] error:', error);
+      const [convRes, ticketsRes] = await Promise.all([
+        supabase
+          .from('conversations')
+          .select('id, queue, is_active, assigned_user_id, assigned_team')
+          .limit(5000),
+        supabase
+          .from('support_cases')
+          .select('id, closed_at')
+          .limit(5000),
+      ]);
+
+      if (convRes.error) {
+        console.warn('[useConversationTabCounts] conversations error:', convRes.error);
         return;
       }
+      if (ticketsRes.error) {
+        console.warn('[useConversationTabCounts] tickets error:', ticketsRes.error);
+      }
+
       const next = { ...ZERO };
-      for (const row of (data || []) as any[]) {
+      for (const row of (convRes.data || []) as any[]) {
         if (restrictTeamId && row.assigned_team !== restrictTeamId) continue;
         const isSupport = row.queue === 'support';
         const isActive = row.is_active !== false;
@@ -58,6 +73,12 @@ export function useConversationTabCounts(
           else next.finishedSales++;
         }
       }
+
+      for (const row of (ticketsRes.data || []) as any[]) {
+        if (row.closed_at === null) next.activeSupportTickets++;
+        else next.finishedSupportTickets++;
+      }
+
       setCounts(next);
     } catch (e) {
       console.warn('[useConversationTabCounts] refresh failed:', e);
@@ -71,6 +92,7 @@ export function useConversationTabCounts(
     const channel = supabase
       .channel('conversation-tab-counts')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_cases' }, refresh)
       .subscribe();
 
     return () => {
