@@ -1879,34 +1879,38 @@ async function processQueueItem(
     throw new Error('Conversation not found');
   }
 
-  // Check if conversation is still in Nina mode
-  if (conversation.status !== 'nina') {
-    console.log('[Nina] Conversation no longer in Nina mode, skipping');
+  const isSilentMonitoring = item.context_data?.is_silent_monitoring === true;
+
+  // Allow processing if Nina is active OR if we're silently monitoring a human-handled conversation.
+  if (conversation.status !== 'nina' && !isSilentMonitoring) {
+    console.log('[Nina] Conversation no longer in Nina mode and not silent monitoring, skipping');
     return;
   }
 
   // === OPENING / ONBOARDING FLOW ===
   // Driven by conversation.nina_context.onboarding.step.
   // Handles: ask name (new leads), triage buttons, support topic, handoff to Suporte/Produção.
-  try {
-    const onboardingResult = await handleOnboarding(supabase, conversation, message, settings);
-    if (onboardingResult === 'handled') {
-      // Onboarding produced a fixed reply (or routed conversation). Mark message processed
-      // and skip the AI pipeline entirely for this turn.
-      await supabase
-        .from('messages')
-        .update({ processed_by_nina: true })
-        .eq('id', message.id);
-      return;
+  // Skip onboarding in silent monitoring mode — a human is already handling the conversation.
+  if (!isSilentMonitoring) {
+    try {
+      const onboardingResult = await handleOnboarding(supabase, conversation, message, settings);
+      if (onboardingResult === 'handled') {
+        // Onboarding produced a fixed reply (or routed conversation). Mark message processed
+        // and skip the AI pipeline entirely for this turn.
+        await supabase
+          .from('messages')
+          .update({ processed_by_nina: true })
+          .eq('id', message.id);
+        return;
+      }
+      // else 'continue' — fall through to normal AI handling below
+    } catch (obErr) {
+      console.error('[Nina] Onboarding handler error (continuing to AI):', obErr);
     }
-    // else 'continue' — fall through to normal AI handling below
-  } catch (obErr) {
-    console.error('[Nina] Onboarding handler error (continuing to AI):', obErr);
   }
 
-
-  // Check if auto-response is enabled
-  if (!settings?.auto_response_enabled) {
+  // Check if auto-response is enabled (skip in silent monitoring — we never reply to the customer there).
+  if (!settings?.auto_response_enabled && !isSilentMonitoring) {
     console.log('[Nina] Auto-response disabled, marking as processed without responding');
     await supabase
       .from('messages')
@@ -2151,6 +2155,18 @@ async function processQueueItem(
   const businessHoursBlock = formatBusinessHoursBlock(bhStatus);
   if (businessHoursBlock) {
     processedPrompt = `${processedPrompt}\n\n${businessHoursBlock}`;
+  }
+
+  // Silent monitoring directive: when a human is handling the conversation,
+  // the AI must not reply to the customer. It should only detect post-sale
+  // support issues and trigger the handoff tool.
+  if (isSilentMonitoring) {
+    processedPrompt = `${processedPrompt}\n\n[MODO MONITORAMENTO SILENCIOSO]\n` +
+      `Esta conversa está sendo conduzida por um atendente humano. Você está monitorando silenciosamente. ` +
+      `NÃO responda ao cliente. NUNCA envie texto para o cliente neste modo. ` +
+      `Se a mensagem indicar um problema pós-venda (reclamação, status de pedido, cancelamento/alteração, boleto/NF), ` +
+      `use a ferramenta request_human_handoff com reason pós-venda. ` +
+      `Caso contrário, não faça nada.`;
   }
 
   // Out-of-hours handling: the AI itself decides how to communicate based on
@@ -2550,24 +2566,37 @@ async function processQueueItem(
               await supabase.from('conversations').update(routeUpdate).eq('id', conversation.id);
             }
 
-            await supabase.from('support_cases').insert({
-              conversation_id: conversation.id,
-              contact_id: conversation.contact_id,
-              grupo_suporte: classification.group_key,
-              categoria_suporte: classification.category_key,
-              requer_agente_humano: true,
-              status_resolucao: 'encaminhado_agente',
-              responsavel_id: responsavelId,
-              causa: classification.causa,
-              resumo: classification.summary || args.summary || null,
-              sentimento: classification.sentiment_key,
-              order_number: null,
-              metadata: {
-                client_label: contactName,
-                triggered_by: 'donatella_handoff_tool',
-                handoff_reason: args.reason,
-              },
-            });
+            // Guard against duplicate open tickets for the same conversation.
+            const { data: existingOpenCase } = await supabase
+              .from('support_cases')
+              .select('id')
+              .eq('conversation_id', conversation.id)
+              .is('closed_at', null)
+              .limit(1)
+              .maybeSingle();
+
+            if (existingOpenCase) {
+              console.log('[Handoff] Open support case already exists for conversation', conversation.id, '- skipping insert');
+            } else {
+              await supabase.from('support_cases').insert({
+                conversation_id: conversation.id,
+                contact_id: conversation.contact_id,
+                grupo_suporte: classification.group_key,
+                categoria_suporte: classification.category_key,
+                requer_agente_humano: true,
+                status_resolucao: 'encaminhado_agente',
+                responsavel_id: responsavelId,
+                causa: classification.causa,
+                resumo: classification.summary || args.summary || null,
+                sentimento: classification.sentiment_key,
+                order_number: null,
+                metadata: {
+                  client_label: contactName,
+                  triggered_by: isSilentMonitoring ? 'donatella_silent_monitor' : 'donatella_handoff_tool',
+                  handoff_reason: args.reason,
+                },
+              });
+            }
 
             await dispatchSupportAlert(supabase, {
               contactId: conversation.contact_id,
@@ -2595,6 +2624,17 @@ async function processQueueItem(
         console.error('[Nina] Error parsing request_human_handoff arguments:', parseError, 'raw:', String(toolCall.function?.arguments).slice(0, 500));
       }
     }
+  }
+
+  // Silent monitoring: never send a reply to the customer. The handoff tool
+  // (if triggered) has already created the ticket/alert and moved the queue.
+  if (isSilentMonitoring) {
+    console.log('[Nina] Silent monitoring mode — skipping customer reply');
+    await supabase
+      .from('messages')
+      .update({ processed_by_nina: true })
+      .eq('id', message.id);
+    return;
   }
 
   // If no content and we only got tool calls, generate a default response
