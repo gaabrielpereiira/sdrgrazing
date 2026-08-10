@@ -183,8 +183,11 @@ serve(async (req) => {
           console.log(`[MessageGrouper] Updated audio message with transcription`);
         }
 
-        // If conversation is handled by Nina, queue for AI processing
-        if (conversation.status === 'nina') {
+        // If conversation is handled by Nina OR is being monitored while a human is assigned,
+        // queue for AI processing. Human conversations run in silent monitoring mode.
+        if (conversation.status === 'nina' || conversation.status === 'human') {
+          const isSilentMonitoring = conversation.status === 'human';
+
           // Idempotent insert — relies on unique partial index on message_id.
           // Race-safe: if another concurrent grouper already queued this message,
           // Postgres will reject the duplicate with code 23505 and we skip silently.
@@ -200,7 +203,8 @@ serve(async (req) => {
                 contact_name: conversation.contacts?.name || conversation.contacts?.call_name,
                 message_type: lastDbMessage.type,
                 grouped_count: messageIds.length,
-                combined_content: combinedContent
+                combined_content: combinedContent,
+                is_silent_monitoring: isSilentMonitoring
               }
             });
 
@@ -211,7 +215,7 @@ serve(async (req) => {
               console.error('[MessageGrouper] Error queuing for Nina:', ninaQueueError);
             }
           } else {
-            console.log('[MessageGrouper] Message queued for Nina processing');
+            console.log('[MessageGrouper] Message queued for Nina processing', isSilentMonitoring ? '(silent monitoring)' : '');
             // Trigger nina-orchestrator only when WE were the inserter
             fetch(`${supabaseUrl}/functions/v1/nina-orchestrator`, {
               method: 'POST',
