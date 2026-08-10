@@ -1361,7 +1361,7 @@ const ChatInterface: React.FC = () => {
               <LifeBuoy className="w-3.5 h-3.5" />
               Somente suporte
               <span className="min-w-[1.1rem] h-[1.1rem] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                {mainTab === 'arquivados' ? tabCounts.finishedSupport : tabCounts.activeSupport}
+                {mainTab === 'arquivados' ? tabCounts.finishedSupportTickets : tabCounts.activeSupportTickets}
               </span>
             </button>
           </div>
