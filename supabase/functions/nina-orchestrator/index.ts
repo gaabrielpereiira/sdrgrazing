@@ -941,6 +941,31 @@ function classifyNameCandidate(raw: string): NameCandidate {
   };
 }
 
+/**
+ * Mensagens agrupadas podem trazer o nome junto do pedido:
+ * "Anaisa Garcia\nRealizei um pedido via IFood...".
+ * Avalia cada segmento e devolve o primeiro que pareça nome.
+ */
+function classifyNameFromText(raw: string): NameCandidate {
+  const direct = classifyNameCandidate(raw);
+  if (direct.kind !== 'not_name') return direct;
+
+  const segments = (raw || '')
+    .split(/[\n\r]+|(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (segments.length <= 1) return direct;
+
+  let maybe: NameCandidate | null = null;
+  for (const seg of segments) {
+    const c = classifyNameCandidate(seg);
+    if (c.kind === 'name') return c;
+    if (c.kind === 'maybe' && !maybe) maybe = c;
+  }
+  return maybe || direct;
+}
+
 function isAffirmative(raw: string): boolean {
   const f = deaccent((raw || '').toLowerCase()).replace(/[^a-z\s👍]/g, ' ').trim();
   if (!f) return false;
