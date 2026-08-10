@@ -941,6 +941,31 @@ function classifyNameCandidate(raw: string): NameCandidate {
   };
 }
 
+/**
+ * Mensagens agrupadas podem trazer o nome junto do pedido:
+ * "Anaisa Garcia\nRealizei um pedido via IFood...".
+ * Avalia cada segmento e devolve o primeiro que pareça nome.
+ */
+function classifyNameFromText(raw: string): NameCandidate {
+  const direct = classifyNameCandidate(raw);
+  if (direct.kind !== 'not_name') return direct;
+
+  const segments = (raw || '')
+    .split(/[\n\r]+|(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (segments.length <= 1) return direct;
+
+  let maybe: NameCandidate | null = null;
+  for (const seg of segments) {
+    const c = classifyNameCandidate(seg);
+    if (c.kind === 'name') return c;
+    if (c.kind === 'maybe' && !maybe) maybe = c;
+  }
+  return maybe || direct;
+}
+
 function isAffirmative(raw: string): boolean {
   const f = deaccent((raw || '').toLowerCase()).replace(/[^a-z\s👍]/g, ' ').trim();
   if (!f) return false;
@@ -1418,6 +1443,7 @@ async function handleOnboarding(
   conversation: any,
   message: any,
   settings: any,
+  groupedText?: string | null,
 ): Promise<'handled' | 'continue'> {
   const onboarding = ((conversation.nina_context as any) || {}).onboarding;
   const step = onboarding?.step;
@@ -1431,6 +1457,9 @@ async function handleOnboarding(
     .maybeSingle();
 
   const userText = (message.content || '').trim();
+  // Para captura de nome usamos o texto agrupado (o nome pode ter vindo em uma
+  // mensagem anterior do mesmo bloco).
+  const nameText = ((groupedText || '').trim() || userText);
 
   // Company/agent labels for the opening directive
   const companyName = settings?.company_name || 'Grazing Table & Co.';
@@ -1467,7 +1496,7 @@ async function handleOnboarding(
 
   // STEP: await_name -> intenção vem antes de nome; só grava nome claro.
   if (step === 'await_name') {
-    const candidate = classifyNameCandidate(userText);
+    const candidate = classifyNameFromText(nameText);
 
     if (candidate.kind === 'name') {
       await persistName(candidate.fullName, candidate.firstName, candidate.lastName);
@@ -1508,7 +1537,7 @@ async function handleOnboarding(
   // STEP: confirm_name -> confirmação única de um nome duvidoso
   if (step === 'confirm_name') {
     const pending = onboarding?.pending_name;
-    const candidate = classifyNameCandidate(userText);
+    const candidate = classifyNameFromText(nameText);
 
     if (candidate.kind === 'name') {
       // Correção explícita ("não, é Bruna Lima")
@@ -1893,7 +1922,13 @@ async function processQueueItem(
   // Skip onboarding in silent monitoring mode — a human is already handling the conversation.
   if (!isSilentMonitoring) {
     try {
-      const onboardingResult = await handleOnboarding(supabase, conversation, message, settings);
+      const onboardingResult = await handleOnboarding(
+        supabase,
+        conversation,
+        message,
+        settings,
+        item.context_data?.combined_content || null,
+      );
       if (onboardingResult === 'handled') {
         // Onboarding produced a fixed reply (or routed conversation). Mark message processed
         // and skip the AI pipeline entirely for this turn.
