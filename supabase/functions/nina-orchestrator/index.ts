@@ -2157,6 +2157,18 @@ async function processQueueItem(
     processedPrompt = `${processedPrompt}\n\n${businessHoursBlock}`;
   }
 
+  // Silent monitoring directive: when a human is handling the conversation,
+  // the AI must not reply to the customer. It should only detect post-sale
+  // support issues and trigger the handoff tool.
+  if (isSilentMonitoring) {
+    processedPrompt = `${processedPrompt}\n\n[MODO MONITORAMENTO SILENCIOSO]\n` +
+      `Esta conversa está sendo conduzida por um atendente humano. Você está monitorando silenciosamente. ` +
+      `NÃO responda ao cliente. NUNCA envie texto para o cliente neste modo. ` +
+      `Se a mensagem indicar um problema pós-venda (reclamação, status de pedido, cancelamento/alteração, boleto/NF), ` +
+      `use a ferramenta request_human_handoff com reason pós-venda. ` +
+      `Caso contrário, não faça nada.`;
+  }
+
   // Out-of-hours handling: the AI itself decides how to communicate based on
   // the business-hours block injected into the system prompt. No fixed
   // auto-reply is sent separately.
