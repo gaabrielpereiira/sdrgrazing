@@ -1879,34 +1879,38 @@ async function processQueueItem(
     throw new Error('Conversation not found');
   }
 
-  // Check if conversation is still in Nina mode
-  if (conversation.status !== 'nina') {
-    console.log('[Nina] Conversation no longer in Nina mode, skipping');
+  const isSilentMonitoring = item.context_data?.is_silent_monitoring === true;
+
+  // Allow processing if Nina is active OR if we're silently monitoring a human-handled conversation.
+  if (conversation.status !== 'nina' && !isSilentMonitoring) {
+    console.log('[Nina] Conversation no longer in Nina mode and not silent monitoring, skipping');
     return;
   }
 
   // === OPENING / ONBOARDING FLOW ===
   // Driven by conversation.nina_context.onboarding.step.
   // Handles: ask name (new leads), triage buttons, support topic, handoff to Suporte/Produção.
-  try {
-    const onboardingResult = await handleOnboarding(supabase, conversation, message, settings);
-    if (onboardingResult === 'handled') {
-      // Onboarding produced a fixed reply (or routed conversation). Mark message processed
-      // and skip the AI pipeline entirely for this turn.
-      await supabase
-        .from('messages')
-        .update({ processed_by_nina: true })
-        .eq('id', message.id);
-      return;
+  // Skip onboarding in silent monitoring mode — a human is already handling the conversation.
+  if (!isSilentMonitoring) {
+    try {
+      const onboardingResult = await handleOnboarding(supabase, conversation, message, settings);
+      if (onboardingResult === 'handled') {
+        // Onboarding produced a fixed reply (or routed conversation). Mark message processed
+        // and skip the AI pipeline entirely for this turn.
+        await supabase
+          .from('messages')
+          .update({ processed_by_nina: true })
+          .eq('id', message.id);
+        return;
+      }
+      // else 'continue' — fall through to normal AI handling below
+    } catch (obErr) {
+      console.error('[Nina] Onboarding handler error (continuing to AI):', obErr);
     }
-    // else 'continue' — fall through to normal AI handling below
-  } catch (obErr) {
-    console.error('[Nina] Onboarding handler error (continuing to AI):', obErr);
   }
 
-
-  // Check if auto-response is enabled
-  if (!settings?.auto_response_enabled) {
+  // Check if auto-response is enabled (skip in silent monitoring — we never reply to the customer there).
+  if (!settings?.auto_response_enabled && !isSilentMonitoring) {
     console.log('[Nina] Auto-response disabled, marking as processed without responding');
     await supabase
       .from('messages')
