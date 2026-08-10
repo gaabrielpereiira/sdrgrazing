@@ -1922,7 +1922,13 @@ async function processQueueItem(
   // Skip onboarding in silent monitoring mode — a human is already handling the conversation.
   if (!isSilentMonitoring) {
     try {
-      const onboardingResult = await handleOnboarding(supabase, conversation, message, settings);
+      const onboardingResult = await handleOnboarding(
+        supabase,
+        conversation,
+        message,
+        settings,
+        item.context_data?.combined_content || null,
+      );
       if (onboardingResult === 'handled') {
         // Onboarding produced a fixed reply (or routed conversation). Mark message processed
         // and skip the AI pipeline entirely for this turn.
