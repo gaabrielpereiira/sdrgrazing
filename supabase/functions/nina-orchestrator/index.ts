@@ -1537,7 +1537,7 @@ async function handleOnboarding(
   // STEP: confirm_name -> confirmação única de um nome duvidoso
   if (step === 'confirm_name') {
     const pending = onboarding?.pending_name;
-    const candidate = classifyNameCandidate(userText);
+    const candidate = classifyNameFromText(nameText);
 
     if (candidate.kind === 'name') {
       // Correção explícita ("não, é Bruna Lima")
