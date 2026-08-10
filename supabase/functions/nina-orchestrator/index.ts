@@ -1443,6 +1443,7 @@ async function handleOnboarding(
   conversation: any,
   message: any,
   settings: any,
+  groupedText?: string | null,
 ): Promise<'handled' | 'continue'> {
   const onboarding = ((conversation.nina_context as any) || {}).onboarding;
   const step = onboarding?.step;
@@ -1456,6 +1457,9 @@ async function handleOnboarding(
     .maybeSingle();
 
   const userText = (message.content || '').trim();
+  // Para captura de nome usamos o texto agrupado (o nome pode ter vindo em uma
+  // mensagem anterior do mesmo bloco).
+  const nameText = ((groupedText || '').trim() || userText);
 
   // Company/agent labels for the opening directive
   const companyName = settings?.company_name || 'Grazing Table & Co.';
