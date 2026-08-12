@@ -49,7 +49,7 @@ export function useConversationTabCounts(
           .limit(5000),
         supabase
           .from('support_cases')
-          .select('id, closed_at')
+          .select('id, conversation_id, closed_at')
           .limit(5000),
       ]);
 
@@ -61,10 +61,17 @@ export function useConversationTabCounts(
         console.warn('[useConversationTabCounts] tickets error:', ticketsRes.error);
       }
 
-      const next = { ...ZERO };
+      const openTicketConversationIds = new Set<string>();
+      for (const row of (ticketsRes.data || []) as any[]) {
+        if (row.closed_at === null && row.conversation_id) {
+          openTicketConversationIds.add(row.conversation_id);
+        }
+      }
+
+      const next = { ...ZERO, openTicketConversationIds };
       for (const row of (convRes.data || []) as any[]) {
         if (restrictTeamId && row.assigned_team !== restrictTeamId) continue;
-        const isSupport = row.queue === 'support';
+        const isSupport = row.queue === 'support' || openTicketConversationIds.has(row.id);
         const isActive = row.is_active !== false;
         if (isActive) {
           next.activeTotal++;
@@ -78,12 +85,11 @@ export function useConversationTabCounts(
         }
       }
 
-      for (const row of (ticketsRes.data || []) as any[]) {
-        if (row.closed_at === null) next.activeSupportTickets++;
-        else next.finishedSupportTickets++;
-      }
+      next.activeSupportTickets = next.activeSupport;
+      next.finishedSupportTickets = next.finishedSupport;
 
       setCounts(next);
+
     } catch (e) {
       console.warn('[useConversationTabCounts] refresh failed:', e);
     }
