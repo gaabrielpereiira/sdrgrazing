@@ -11,6 +11,8 @@ export interface ConversationTabCounts {
   activeTotal: number;
   finishedTotal: number;
   mine: number;
+  /** Conversation ids that have at least one open support ticket */
+  openTicketConversationIds: Set<string>;
 }
 
 const ZERO: ConversationTabCounts = {
@@ -23,7 +25,9 @@ const ZERO: ConversationTabCounts = {
   activeTotal: 0,
   finishedTotal: 0,
   mine: 0,
+  openTicketConversationIds: new Set<string>(),
 };
+
 
 /**
  * Counts conversations grouped by queue (sales/support), is_active, and
