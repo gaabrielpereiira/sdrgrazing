@@ -177,10 +177,36 @@ const searchProductsTool = {
           description: "Quantos produtos retornar (padrão 8, máximo 15)."
         }
       },
-      required: []
-    }
-  }
 };
+
+// Builds reasonable variations of a product query term (plural/singular,
+// accent-stripped, individual keywords) so a single miss on the exact term
+// never becomes a categorical "we don't sell that".
+function buildProductQueryVariations(query: string): string[] {
+  const base = (query || '').trim();
+  if (!base) return [];
+  const variations: string[] = [];
+  const push = (v: string) => {
+    const t = v.trim();
+    if (t.length >= 3 && !variations.some((x) => x.toLowerCase() === t.toLowerCase())) variations.push(t);
+  };
+
+  push(base);
+  const noAccents = base.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  push(noAccents);
+
+  // singular/plural on the whole term and on each word
+  const words = noAccents.split(/\s+/).filter((w) => w.length >= 3);
+  const flip = (w: string) => (/s$/i.test(w) ? w.replace(/e?s$/i, '') : `${w}s`);
+  push(words.map(flip).join(' '));
+  for (const w of words) {
+    push(w);
+    push(flip(w));
+  }
+  // longest word first tends to be the most distinctive keyword
+  return variations.slice(0, 6);
+}
+
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
