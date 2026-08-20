@@ -177,6 +177,9 @@ const searchProductsTool = {
           description: "Quantos produtos retornar (padrão 8, máximo 15)."
         }
       },
+      required: []
+    }
+  }
 };
 
 // Builds reasonable variations of a product query term (plural/singular,
