@@ -3215,10 +3215,18 @@ function buildEnhancedPrompt(basePrompt: string, contact: any, memory: any, sett
   }
 
   if (settings?.wc_products_enabled === true) {
-    contextInfo += `\n\nCATÁLOGO DE PRODUTOS:\n` +
+    contextInfo += `\n\nCATÁLOGO DE PRODUTOS (REGRA CRÍTICA):\n` +
       `Você tem acesso ao catálogo real da loja via a ferramenta \`search_products\`. ` +
-      `Use-a PROATIVAMENTE sempre que o cliente demonstrar interesse em produtos, pedir sugestão, ` +
-      `comparar opções, perguntar preço/disponibilidade ou parecer indeciso sobre o que comprar. ` +
+      `SEMPRE que o cliente perguntar se um produto específico existe, está disponível ou pode ser pedido ` +
+      `(ex.: "vocês têm X?", "consigo pedir Y?", "vocês fazem Z?", "tem W em tal quantidade?"), ` +
+      `você é OBRIGADA a chamar \`search_products\` ANTES de responder. ` +
+      `É PROIBIDO responder esse tipo de pergunta com base em conhecimento geral, suposição ou texto de posicionamento da marca. ` +
+      `Frases de identidade da marca (ex.: "somos focados em tábuas de frios", "nosso universo é 100% grazing") servem apenas para contexto geral da conversa — ` +
+      `NUNCA para negar ou confirmar a existência de um produto. ` +
+      `Se a ferramenta retornar o produto, confirme usando apenas os dados reais (nome, descrição, preço, link). ` +
+      `Se não retornar nada, NÃO afirme categoricamente que o produto não existe: diga que não localizou o item no catálogo, ` +
+      `que vai confirmar com o time e, se apropriado, acione \`request_human_handoff\`. ` +
+      `Use-a também PROATIVAMENTE quando o cliente demonstrar interesse, pedir sugestão, comparar opções ou parecer indeciso. ` +
       `Nunca invente produtos, preços ou links — só fale do que a ferramenta retornar. ` +
       `Em toda recomendação, inclua o LINK do produto (campo url) em texto puro para o cliente clicar no WhatsApp.`;
   }
