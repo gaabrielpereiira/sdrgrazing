@@ -160,7 +160,7 @@ const searchProductsTool = {
   type: "function",
   function: {
     name: "search_products",
-    description: "Consulta o catálogo real da loja WooCommerce. Chame PROATIVAMENTE sempre que o cliente: (a) mencionar interesse em algum produto/categoria, (b) pedir sugestão/recomendação, (c) perguntar sobre preço, disponibilidade ou estoque, (d) comparar opções, (e) demonstrar dúvida sobre o que comprar. NUNCA invente produtos, preços ou URLs — chame esta ferramenta primeiro e responda apenas com base no que ela retornar. Sempre inclua o link (campo `url`) de cada produto sugerido na resposta ao cliente.",
+    description: "Consulta o catálogo real da loja WooCommerce. OBRIGATÓRIO chamar esta ferramenta ANTES de responder qualquer pergunta sobre a EXISTÊNCIA ou DISPONIBILIDADE de um produto (ex.: \"vocês têm X?\", \"consigo pedir Y?\", \"vocês fazem Z?\"). Chame também PROATIVAMENTE quando o cliente: (a) mencionar interesse em algum produto/categoria, (b) pedir sugestão/recomendação, (c) perguntar sobre preço, disponibilidade ou estoque, (d) comparar opções, (e) demonstrar dúvida sobre o que comprar. NUNCA invente, negue nem confirme produtos, preços ou URLs sem esta consulta — e NUNCA use frases de posicionamento de marca (ex.: \"nosso universo é 100% focado em...\") para negar a existência de um produto. Responda apenas com base no que a ferramenta retornar, incluindo o link (campo `url`) de cada produto sugerido.",
     parameters: {
       type: "object",
       properties: {
@@ -181,6 +181,35 @@ const searchProductsTool = {
     }
   }
 };
+
+// Builds reasonable variations of a product query term (plural/singular,
+// accent-stripped, individual keywords) so a single miss on the exact term
+// never becomes a categorical "we don't sell that".
+function buildProductQueryVariations(query: string): string[] {
+  const base = (query || '').trim();
+  if (!base) return [];
+  const variations: string[] = [];
+  const push = (v: string) => {
+    const t = v.trim();
+    if (t.length >= 3 && !variations.some((x) => x.toLowerCase() === t.toLowerCase())) variations.push(t);
+  };
+
+  push(base);
+  const noAccents = base.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  push(noAccents);
+
+  // singular/plural on the whole term and on each word
+  const words = noAccents.split(/\s+/).filter((w) => w.length >= 3);
+  const flip = (w: string) => (/s$/i.test(w) ? w.replace(/e?s$/i, '') : `${w}s`);
+  push(words.map(flip).join(' '));
+  for (const w of words) {
+    push(w);
+    push(flip(w));
+  }
+  // longest word first tends to be the most distinctive keyword
+  return variations.slice(0, 6);
+}
+
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -2304,42 +2333,73 @@ async function processQueueItem(
   const productToolCalls = toolCalls.filter((tc: any) => tc.function?.name === 'search_products');
   if (productToolCalls.length > 0) {
     const toolMessages: any[] = [];
+    const callWc = async (payload: any) => {
+      const wcRes = await fetch(`${supabaseUrl}/functions/v1/wc-products`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${supabaseServiceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      const json = await wcRes.json().catch(() => null);
+      return { ok: wcRes.ok, status: wcRes.status, json };
+    };
+
     for (const tc of productToolCalls) {
       let result: any;
       try {
         const args = JSON.parse(tc.function.arguments || '{}');
         const action = args.query ? 'search' : (args.category ? 'by_category' : 'list');
-        const wcRes = await fetch(`${supabaseUrl}/functions/v1/wc-products`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${supabaseServiceKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action,
-            search: args.query,
-            category: args.category,
-            limit: Math.min(Number(args.limit) || 8, 15),
-          }),
-        });
-        result = await wcRes.json();
-        if (!wcRes.ok || result?.success === false) {
-          console.warn('[Nina] wc-products returned error:', wcRes.status, result?.error);
+        const limit = Math.min(Number(args.limit) || 8, 15);
+        let res = await callWc({ action, search: args.query, category: args.category, limit });
+        const triedTerms: string[] = args.query ? [args.query] : [];
+
+        // If the exact term returned nothing, try reasonable variations before
+        // ever letting the assistant conclude the product does not exist.
+        if (res.ok && res.json?.success !== false && (res.json?.count ?? 0) === 0 && args.query) {
+          for (const variation of buildProductQueryVariations(args.query).slice(1)) {
+            const retry = await callWc({ action: 'search', search: variation, limit });
+            triedTerms.push(variation);
+            if (retry.ok && retry.json?.success !== false && (retry.json?.count ?? 0) > 0) {
+              res = retry;
+              break;
+            }
+          }
+        }
+
+        result = res.json;
+        if (!res.ok || result?.success === false) {
+          console.warn('[Nina] wc-products returned error:', res.status, result?.error);
           result = {
             success: false,
-            error: result?.error || `wc-products HTTP ${wcRes.status}`,
+            error: result?.error || `wc-products HTTP ${res.status}`,
             instructions_for_assistant:
-              'A busca de produtos falhou. Responda ao cliente em texto pedindo desculpas pelo problema técnico e oferecendo ajuda manual (ex.: pedir mais detalhes do que ele procura ou direcionar para um atendente). NÃO chame search_products novamente nesta mensagem.',
+              'A busca de produtos falhou. NÃO afirme que o produto não existe nem use frases de posicionamento de marca para negar. Responda pedindo desculpas pelo problema técnico e diga que vai confirmar com o time (ou ofereça ajuda manual pedindo mais detalhes). NÃO chame search_products novamente nesta mensagem.',
           };
+        } else if ((result?.count ?? 0) === 0) {
+          console.log('[Nina] wc-products: no results after variations for', triedTerms.join(' | '));
+          result.searched_terms = triedTerms;
+          result.instructions_for_assistant =
+            'A busca no catálogo real NÃO retornou resultados para: ' + triedTerms.join(', ') + '.\n' +
+            'REGRAS OBRIGATÓRIAS:\n' +
+            '• NUNCA afirme de forma categórica que o produto não existe ou que "não trabalhamos com isso".\n' +
+            '• NUNCA use frases de posicionamento/identidade da marca (ex.: "nosso universo é 100% focado em...") para negar a existência de um produto.\n' +
+            '• Diga, de forma cautelosa e simpática, que não localizou esse item no catálogo agora e que vai confirmar com o time antes de garantir qualquer coisa.\n' +
+            '• Pergunte um detalhe que ajude (quantidade, ocasião, se é para compor uma tábua/cesta) e/ou ofereça itens próximos SOMENTE se você já tiver dados reais da ferramenta.\n' +
+            '• Se o cliente insistir ou o pedido for relevante, use request_human_handoff para confirmação humana.\n' +
+            'NÃO chame search_products de novo nesta mensagem.';
         } else {
+          result.searched_terms = triedTerms;
           result.instructions_for_assistant =
             'Use APENAS estes produtos na resposta (nunca invente outros). Escolha 1 a 3 mais relevantes para o que o cliente pediu. Para CADA produto sugerido inclua, em texto puro (sem markdown [](), pois é WhatsApp):\n' +
             '• Nome do produto\n' +
             '• Preço em R$ (use `price`; se `on_sale` for true, mencione que está em promoção)\n' +
             '• Uma linha curta de benefício (baseada em `short_desc`)\n' +
             '• O link do produto (campo `url`) em linha separada, sem encurtar\n\n' +
-            'Se nenhum produto bater bem com o pedido, diga isso de forma honesta e ofereça alternativas próximas ou peça mais detalhes. Mantenha o tom da persona já definida no prompt do sistema. NÃO chame search_products de novo nesta mensagem.';
+            'Se o cliente perguntou pela existência/disponibilidade de um item específico, confirme com base apenas nestes dados reais. Se nenhum produto bater bem com o pedido, diga isso de forma cautelosa (sem negar categoricamente que o item exista, sem usar frases de posicionamento de marca), ofereça alternativas próximas destes resultados ou peça mais detalhes. Mantenha o tom da persona já definida no prompt do sistema. NÃO chame search_products de novo nesta mensagem.';
         }
+
       } catch (e) {
         console.error('[Nina] wc-products fetch threw:', e);
         result = {
@@ -3155,10 +3215,18 @@ function buildEnhancedPrompt(basePrompt: string, contact: any, memory: any, sett
   }
 
   if (settings?.wc_products_enabled === true) {
-    contextInfo += `\n\nCATÁLOGO DE PRODUTOS:\n` +
+    contextInfo += `\n\nCATÁLOGO DE PRODUTOS (REGRA CRÍTICA):\n` +
       `Você tem acesso ao catálogo real da loja via a ferramenta \`search_products\`. ` +
-      `Use-a PROATIVAMENTE sempre que o cliente demonstrar interesse em produtos, pedir sugestão, ` +
-      `comparar opções, perguntar preço/disponibilidade ou parecer indeciso sobre o que comprar. ` +
+      `SEMPRE que o cliente perguntar se um produto específico existe, está disponível ou pode ser pedido ` +
+      `(ex.: "vocês têm X?", "consigo pedir Y?", "vocês fazem Z?", "tem W em tal quantidade?"), ` +
+      `você é OBRIGADA a chamar \`search_products\` ANTES de responder. ` +
+      `É PROIBIDO responder esse tipo de pergunta com base em conhecimento geral, suposição ou texto de posicionamento da marca. ` +
+      `Frases de identidade da marca (ex.: "somos focados em tábuas de frios", "nosso universo é 100% grazing") servem apenas para contexto geral da conversa — ` +
+      `NUNCA para negar ou confirmar a existência de um produto. ` +
+      `Se a ferramenta retornar o produto, confirme usando apenas os dados reais (nome, descrição, preço, link). ` +
+      `Se não retornar nada, NÃO afirme categoricamente que o produto não existe: diga que não localizou o item no catálogo, ` +
+      `que vai confirmar com o time e, se apropriado, acione \`request_human_handoff\`. ` +
+      `Use-a também PROATIVAMENTE quando o cliente demonstrar interesse, pedir sugestão, comparar opções ou parecer indeciso. ` +
       `Nunca invente produtos, preços ou links — só fale do que a ferramenta retornar. ` +
       `Em toda recomendação, inclua o LINK do produto (campo url) em texto puro para o cliente clicar no WhatsApp.`;
   }
