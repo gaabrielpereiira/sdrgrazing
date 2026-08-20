@@ -2333,42 +2333,73 @@ async function processQueueItem(
   const productToolCalls = toolCalls.filter((tc: any) => tc.function?.name === 'search_products');
   if (productToolCalls.length > 0) {
     const toolMessages: any[] = [];
+    const callWc = async (payload: any) => {
+      const wcRes = await fetch(`${supabaseUrl}/functions/v1/wc-products`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${supabaseServiceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      const json = await wcRes.json().catch(() => null);
+      return { ok: wcRes.ok, status: wcRes.status, json };
+    };
+
     for (const tc of productToolCalls) {
       let result: any;
       try {
         const args = JSON.parse(tc.function.arguments || '{}');
         const action = args.query ? 'search' : (args.category ? 'by_category' : 'list');
-        const wcRes = await fetch(`${supabaseUrl}/functions/v1/wc-products`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${supabaseServiceKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action,
-            search: args.query,
-            category: args.category,
-            limit: Math.min(Number(args.limit) || 8, 15),
-          }),
-        });
-        result = await wcRes.json();
-        if (!wcRes.ok || result?.success === false) {
-          console.warn('[Nina] wc-products returned error:', wcRes.status, result?.error);
+        const limit = Math.min(Number(args.limit) || 8, 15);
+        let res = await callWc({ action, search: args.query, category: args.category, limit });
+        const triedTerms: string[] = args.query ? [args.query] : [];
+
+        // If the exact term returned nothing, try reasonable variations before
+        // ever letting the assistant conclude the product does not exist.
+        if (res.ok && res.json?.success !== false && (res.json?.count ?? 0) === 0 && args.query) {
+          for (const variation of buildProductQueryVariations(args.query).slice(1)) {
+            const retry = await callWc({ action: 'search', search: variation, limit });
+            triedTerms.push(variation);
+            if (retry.ok && retry.json?.success !== false && (retry.json?.count ?? 0) > 0) {
+              res = retry;
+              break;
+            }
+          }
+        }
+
+        result = res.json;
+        if (!res.ok || result?.success === false) {
+          console.warn('[Nina] wc-products returned error:', res.status, result?.error);
           result = {
             success: false,
-            error: result?.error || `wc-products HTTP ${wcRes.status}`,
+            error: result?.error || `wc-products HTTP ${res.status}`,
             instructions_for_assistant:
-              'A busca de produtos falhou. Responda ao cliente em texto pedindo desculpas pelo problema técnico e oferecendo ajuda manual (ex.: pedir mais detalhes do que ele procura ou direcionar para um atendente). NÃO chame search_products novamente nesta mensagem.',
+              'A busca de produtos falhou. NÃO afirme que o produto não existe nem use frases de posicionamento de marca para negar. Responda pedindo desculpas pelo problema técnico e diga que vai confirmar com o time (ou ofereça ajuda manual pedindo mais detalhes). NÃO chame search_products novamente nesta mensagem.',
           };
+        } else if ((result?.count ?? 0) === 0) {
+          console.log('[Nina] wc-products: no results after variations for', triedTerms.join(' | '));
+          result.searched_terms = triedTerms;
+          result.instructions_for_assistant =
+            'A busca no catálogo real NÃO retornou resultados para: ' + triedTerms.join(', ') + '.\n' +
+            'REGRAS OBRIGATÓRIAS:\n' +
+            '• NUNCA afirme de forma categórica que o produto não existe ou que "não trabalhamos com isso".\n' +
+            '• NUNCA use frases de posicionamento/identidade da marca (ex.: "nosso universo é 100% focado em...") para negar a existência de um produto.\n' +
+            '• Diga, de forma cautelosa e simpática, que não localizou esse item no catálogo agora e que vai confirmar com o time antes de garantir qualquer coisa.\n' +
+            '• Pergunte um detalhe que ajude (quantidade, ocasião, se é para compor uma tábua/cesta) e/ou ofereça itens próximos SOMENTE se você já tiver dados reais da ferramenta.\n' +
+            '• Se o cliente insistir ou o pedido for relevante, use request_human_handoff para confirmação humana.\n' +
+            'NÃO chame search_products de novo nesta mensagem.';
         } else {
+          result.searched_terms = triedTerms;
           result.instructions_for_assistant =
             'Use APENAS estes produtos na resposta (nunca invente outros). Escolha 1 a 3 mais relevantes para o que o cliente pediu. Para CADA produto sugerido inclua, em texto puro (sem markdown [](), pois é WhatsApp):\n' +
             '• Nome do produto\n' +
             '• Preço em R$ (use `price`; se `on_sale` for true, mencione que está em promoção)\n' +
             '• Uma linha curta de benefício (baseada em `short_desc`)\n' +
             '• O link do produto (campo `url`) em linha separada, sem encurtar\n\n' +
-            'Se nenhum produto bater bem com o pedido, diga isso de forma honesta e ofereça alternativas próximas ou peça mais detalhes. Mantenha o tom da persona já definida no prompt do sistema. NÃO chame search_products de novo nesta mensagem.';
+            'Se o cliente perguntou pela existência/disponibilidade de um item específico, confirme com base apenas nestes dados reais. Se nenhum produto bater bem com o pedido, diga isso de forma cautelosa (sem negar categoricamente que o item exista, sem usar frases de posicionamento de marca), ofereça alternativas próximas destes resultados ou peça mais detalhes. Mantenha o tom da persona já definida no prompt do sistema. NÃO chame search_products de novo nesta mensagem.';
         }
+
       } catch (e) {
         console.error('[Nina] wc-products fetch threw:', e);
         result = {
