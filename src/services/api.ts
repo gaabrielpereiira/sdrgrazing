@@ -1759,9 +1759,11 @@ export const api = {
           console.error(`[API] Error fetching messages for ${conv.id}:`, msgError);
         }
 
+        const withPreviews = await api._attachReplyPreviews((messages || []) as any[]);
+
         return transformDBToUIConversation(
           conv as unknown as DBConversation,
-          (messages || []) as unknown as DBMessage[]
+          withPreviews as unknown as DBMessage[]
         );
       })
     );
