@@ -210,6 +210,18 @@ function buildProductQueryVariations(query: string): string[] {
   return variations.slice(0, 6);
 }
 
+function isGenericQuantityOnlyQuery(query: string): boolean {
+  const normalized = (query || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\b\d+\b/g, '')
+    .replace(/\b(pessoa|pessoas|unidade|unidades|porcao|porcoes|tamanho|serve|servir|para|pra)\b/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  return normalized.length === 0;
+}
+
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -2379,13 +2391,16 @@ async function processQueueItem(
         const args = JSON.parse(tc.function.arguments || '{}');
         const action = args.query ? 'search' : (args.category ? 'by_category' : 'list');
         const limit = Math.min(Number(args.limit) || 8, 15);
-        let res = await callWc({ action, search: args.query, category: args.category, limit });
+        const genericVisualQuery = currentMessageHasImage && args.query && isGenericQuantityOnlyQuery(args.query);
+        let res = genericVisualQuery
+          ? { ok: true, status: 200, json: { success: true, count: 0, data: [] } }
+          : await callWc({ action, search: args.query, category: args.category, limit });
         const triedTerms: string[] = args.query ? [args.query] : [];
         allSearchedTerms.push(...triedTerms);
 
         // If the exact term returned nothing, try reasonable variations before
         // ever letting the assistant conclude the product does not exist.
-        if (res.ok && res.json?.success !== false && (res.json?.count ?? 0) === 0 && args.query) {
+        if (!genericVisualQuery && res.ok && res.json?.success !== false && (res.json?.count ?? 0) === 0 && args.query) {
           for (const variation of buildProductQueryVariations(args.query).slice(1)) {
             const retry = await callWc({ action: 'search', search: variation, limit });
             triedTerms.push(variation);
@@ -2422,6 +2437,7 @@ async function processQueueItem(
           result.searched_terms = triedTerms;
           result.instructions_for_assistant =
             'A busca no catálogo real NÃO retornou resultados para: ' + triedTerms.join(', ') + '.\n' +
+            (genericVisualQuery ? 'A consulta usou apenas quantidade e não identificou o produto visível na imagem. Não trate isso como evidência sobre o catálogo.\n' : '') +
             'REGRAS OBRIGATÓRIAS:\n' +
             '• NUNCA afirme de forma categórica que o produto não existe ou que "não trabalhamos com isso".\n' +
             '• NUNCA use frases de posicionamento/identidade da marca (ex.: "nosso universo é 100% focado em...") para negar a existência de um produto.\n' +

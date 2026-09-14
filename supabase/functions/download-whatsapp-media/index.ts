@@ -32,13 +32,19 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function fetchWithBoundedRetry(url: string, init: RequestInit): Promise<Response> {
   let lastResponse: Response | null = null;
+  let lastError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if (attempt > 0) await wait(750 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 250));
-    const response = await fetch(url, init);
-    lastResponse = response;
-    if (response.ok || (response.status !== 429 && response.status < 500)) return response;
+    try {
+      const response = await fetch(url, init);
+      lastResponse = response;
+      if (response.ok || (response.status !== 429 && response.status < 500)) return response;
+    } catch (error) {
+      lastError = error;
+    }
   }
-  return lastResponse as Response;
+  if (lastResponse) return lastResponse;
+  throw lastError instanceof Error ? lastError : new Error('Media request failed after retries');
 }
 
 Deno.serve(async (req) => {
