@@ -415,6 +415,22 @@ serve(async (req) => {
               messageContent = `[${message.type}]`;
           }
 
+          // 3.9 If the client replied quoting one of our messages, resolve the
+          // local message so the reply bubble shows up in the panel.
+          let quotedReplyToId: string | null = null;
+          const waContext = (message as any).context || null;
+          if (waContext?.id) {
+            const { data: quotedMsg } = await supabase
+              .from('messages')
+              .select('id')
+              .eq('whatsapp_message_id', waContext.id)
+              .maybeSingle();
+            quotedReplyToId = quotedMsg?.id || null;
+            if (!quotedReplyToId) {
+              console.warn('[Webhook] Quoted WA message not found locally:', waContext.id);
+            }
+          }
+
           // 4. Create message IMMEDIATELY (for realtime updates)
           const { data: dbMessage, error: msgError } = await supabase
             .from('messages')
