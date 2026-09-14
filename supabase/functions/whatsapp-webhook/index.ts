@@ -442,9 +442,11 @@ serve(async (req) => {
               from_type: 'user',
               status: 'sent',
               media_type: mediaType,
+              reply_to_id: quotedReplyToId,
               sent_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
               metadata: { 
                 original_type: message.type,
+                wa_context: waContext,
                 is_sticker: isSticker,
                 is_contacts: isContacts,
                 contacts: contactsPayload,
