@@ -361,6 +361,36 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
     to: recipient
   };
 
+  // If this message is a reply to another message, forward the WhatsApp
+  // context so the client sees the quoted bubble. Templates cannot be quoted.
+  if (!isTemplate && queueItem.message_id) {
+    try {
+      const { data: thisMsg } = await supabase
+        .from('messages')
+        .select('reply_to_id')
+        .eq('id', queueItem.message_id)
+        .maybeSingle();
+
+      if (thisMsg?.reply_to_id) {
+        const { data: quoted } = await supabase
+          .from('messages')
+          .select('whatsapp_message_id')
+          .eq('id', thisMsg.reply_to_id)
+          .maybeSingle();
+
+        if (quoted?.whatsapp_message_id) {
+          payload.context = { message_id: quoted.whatsapp_message_id };
+          console.log('[Sender] Replying to WA message:', quoted.whatsapp_message_id);
+        } else {
+          console.warn('[Sender] Quoted message has no whatsapp_message_id — sending without context');
+        }
+      }
+    } catch (e) {
+      console.warn('[Sender] Could not resolve reply context:', e);
+    }
+  }
+
+
   if (isTemplate) {
     const tpl = queueItem.metadata.template;
     payload.type = 'template';
