@@ -1833,7 +1833,30 @@ const ChatInterface: React.FC = () => {
                     let lastDayKey: string | null = null;
                     return activeChat.messages.map((msg) => {
                       const isOutgoing = msg.direction === MessageDirection.OUTGOING;
-                      const replied = msg.replyToId ? msgsById.get(msg.replyToId) : null;
+                      const loadedReplied = msg.replyToId ? msgsById.get(msg.replyToId) : null;
+                      // Fallback: quoted message may be outside the loaded window.
+                      // In that case use the lightweight preview attached by the API.
+                      const previewMeta = (msg.metadata as any)?.reply_preview;
+                      const replied: UIMessage | null = loadedReplied
+                        || (previewMeta
+                          ? ({
+                              id: previewMeta.id,
+                              content: previewMeta.content || '',
+                              timestamp: '',
+                              direction: previewMeta.from_type === 'user' ? MessageDirection.INCOMING : MessageDirection.OUTGOING,
+                              type: previewMeta.type === 'image' ? MessageType.IMAGE
+                                : previewMeta.type === 'audio' ? MessageType.AUDIO
+                                : previewMeta.type === 'document' ? MessageType.DOCUMENT
+                                : MessageType.TEXT,
+                              status: 'sent',
+                              fromType: previewMeta.from_type,
+                              mediaUrl: null,
+                              whatsappMessageId: null,
+                              metadata: {},
+                              sentAt: previewMeta.sent_at || msg.sentAt,
+                            } as UIMessage)
+                          : null);
+                      const repliedIsLoaded = !!loadedReplied;
                       const msgDate = new Date(msg.sentAt);
                       const currentKey = dayKey(msgDate);
                       const showSeparator = currentKey !== lastDayKey;
@@ -1913,7 +1936,7 @@ const ChatInterface: React.FC = () => {
                                 {replied && (
                                   <button
                                     type="button"
-                                    onClick={() => scrollToMessage(replied.id)}
+                                    onClick={() => { if (repliedIsLoaded) scrollToMessage(replied.id); }}
                                     className={`mb-2 w-full text-left px-2.5 py-1.5 rounded-md border-l-2 text-xs transition ${
                                       isOutgoing
                                         ? 'bg-white/10 border-white/60 hover:bg-white/15'
