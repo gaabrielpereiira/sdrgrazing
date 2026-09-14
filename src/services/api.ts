@@ -1677,6 +1677,39 @@ export const api = {
   },
 
   /**
+   * Attach a lightweight preview of quoted messages that fall outside the
+   * loaded message window, so the reply bubble stays visible in the UI.
+   */
+  _attachReplyPreviews: async (messages: any[]): Promise<any[]> => {
+    try {
+      const loadedIds = new Set(messages.map((m) => m.id));
+      const missing = Array.from(
+        new Set(
+          messages
+            .map((m) => m.reply_to_id)
+            .filter((id): id is string => !!id && !loadedIds.has(id)),
+        ),
+      );
+      if (missing.length === 0) return messages;
+
+      const { data: quoted } = await supabase
+        .from('messages')
+        .select('id, content, type, from_type, sent_at')
+        .in('id', missing);
+
+      const byId = new Map((quoted || []).map((q: any) => [q.id, q]));
+      return messages.map((m) => {
+        const q = m.reply_to_id ? byId.get(m.reply_to_id) : null;
+        if (!q) return m;
+        return { ...m, metadata: { ...(m.metadata || {}), reply_preview: q } };
+      });
+    } catch (err) {
+      console.warn('[API] Could not attach reply previews:', err);
+      return messages;
+    }
+  },
+
+  /**
    * Fetch conversations with messages from database
    */
   fetchConversations: async (opts?: { active?: boolean; queue?: 'sales' | 'support' | 'all' }): Promise<UIConversation[]> => {
