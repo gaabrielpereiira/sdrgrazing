@@ -1203,6 +1203,78 @@ export type Database = {
         }
         Relationships: []
       }
+      product_catalog_audit: {
+        Row: {
+          caption: string | null
+          catalog_results: Json
+          confidence: number | null
+          conversation_id: string
+          created_at: string
+          error_detail: string | null
+          final_response: string | null
+          handoff_requested: boolean
+          id: string
+          media_url: string | null
+          message_id: string | null
+          searched_terms: string[]
+          selected_product: Json | null
+          status: string
+          updated_at: string
+          visual_analysis: Json
+        }
+        Insert: {
+          caption?: string | null
+          catalog_results?: Json
+          confidence?: number | null
+          conversation_id: string
+          created_at?: string
+          error_detail?: string | null
+          final_response?: string | null
+          handoff_requested?: boolean
+          id?: string
+          media_url?: string | null
+          message_id?: string | null
+          searched_terms?: string[]
+          selected_product?: Json | null
+          status?: string
+          updated_at?: string
+          visual_analysis?: Json
+        }
+        Update: {
+          caption?: string | null
+          catalog_results?: Json
+          confidence?: number | null
+          conversation_id?: string
+          created_at?: string
+          error_detail?: string | null
+          final_response?: string | null
+          handoff_requested?: boolean
+          id?: string
+          media_url?: string | null
+          message_id?: string | null
+          searched_terms?: string[]
+          selected_product?: Json | null
+          status?: string
+          updated_at?: string
+          visual_analysis?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_catalog_audit_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_catalog_audit_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null

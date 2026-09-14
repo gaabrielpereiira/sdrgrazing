@@ -160,7 +160,7 @@ const searchProductsTool = {
   type: "function",
   function: {
     name: "search_products",
-    description: "Consulta o catálogo real da loja WooCommerce. OBRIGATÓRIO chamar esta ferramenta ANTES de responder qualquer pergunta sobre a EXISTÊNCIA ou DISPONIBILIDADE de um produto (ex.: \"vocês têm X?\", \"consigo pedir Y?\", \"vocês fazem Z?\"). Chame também PROATIVAMENTE quando o cliente: (a) mencionar interesse em algum produto/categoria, (b) pedir sugestão/recomendação, (c) perguntar sobre preço, disponibilidade ou estoque, (d) comparar opções, (e) demonstrar dúvida sobre o que comprar. NUNCA invente, negue nem confirme produtos, preços ou URLs sem esta consulta — e NUNCA use frases de posicionamento de marca (ex.: \"nosso universo é 100% focado em...\") para negar a existência de um produto. Responda apenas com base no que a ferramenta retornar, incluindo o link (campo `url`) de cada produto sugerido.",
+    description: "Consulta o catálogo real da loja WooCommerce. OBRIGATÓRIO antes de responder sobre produto, inclusive quando ele aparece em FOTO ou PRINT. Em imagem: leia primeiro o nome/texto visível e pesquise pelo NOME DO PRODUTO mostrado; nunca use apenas quantidade, como '2 pessoas', como termo principal. Separe a identificação do produto original do pedido de adaptação. NUNCA invente, negue ou confirme produto, capacidade, composição, personalização, preço ou disponibilidade sem evidência retornada pela ferramenta.",
     parameters: {
       type: "object",
       properties: {
@@ -208,6 +208,18 @@ function buildProductQueryVariations(query: string): string[] {
   }
   // longest word first tends to be the most distinctive keyword
   return variations.slice(0, 6);
+}
+
+function isGenericQuantityOnlyQuery(query: string): boolean {
+  const normalized = (query || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\b\d+\b/g, '')
+    .replace(/\b(pessoa|pessoas|unidade|unidades|porcao|porcoes|tamanho|serve|servir|para|pra)\b/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  return normalized.length === 0;
 }
 
 
@@ -2157,6 +2169,8 @@ async function processQueueItem(
   // Build conversation history for AI — include image_url for incoming images
   // that already have media_url, so Gemini can actually see them instead of
   // receiving an empty "[imagem recebida]" placeholder.
+  const currentMessageHasImage = (message.type === 'image' || String(message.media_type || '').startsWith('image'));
+  const currentImageUnavailable = currentMessageHasImage && !message.media_url;
   const conversationHistory = historySource
     .map((msg: any) => {
       const role = msg.from_type === 'user' ? 'user' : 'assistant';
@@ -2167,7 +2181,7 @@ async function processQueueItem(
         return {
           role,
           content: [
-            { type: 'text', text: caption || 'Imagem enviada pelo cliente.' },
+            { type: 'text', text: `${caption || 'Imagem enviada pelo cliente.'}\n\nINSTRUÇÃO VISUAL: transcreva o nome e os textos de produto visíveis. Se houver intenção comercial, identifique primeiro o produto original e chame search_products usando esse nome exato; trate quantidade ou adaptação como uma pergunta separada.` },
             { type: 'image_url', image_url: { url: msg.media_url } },
           ],
         };
@@ -2202,6 +2216,11 @@ async function processQueueItem(
   const openingDirective = (conversation as any).__opening_directive;
   if (openingDirective) {
     processedPrompt = `${processedPrompt}${openingDirective}`;
+  }
+
+
+  if (currentImageUnavailable) {
+    processedPrompt = `${processedPrompt}\n\n[IMAGEM INDISPONÍVEL]\nO arquivo da imagem atual não ficou disponível para análise. É PROIBIDO afirmar que viu, reconheceu ou identificou seu conteúdo. Informe brevemente que não conseguiu abrir a imagem e acione request_human_handoff para confirmação pelo Comercial.`;
   }
 
 
@@ -2331,7 +2350,27 @@ async function processQueueItem(
   // If the model called search_products, fetch the catalog, feed it back, and
   // re-call the AI so it can produce a real reply citing the actual products.
   const productToolCalls = toolCalls.filter((tc: any) => tc.function?.name === 'search_products');
+  const originalNonProductToolCalls = toolCalls.filter((tc: any) => tc.function?.name !== 'search_products');
+  let productAuditId: string | null = null;
+  const allSearchedTerms: string[] = [];
+  const allCatalogResults: any[] = [];
   if (productToolCalls.length > 0) {
+    const { data: audit } = await supabase.from('product_catalog_audit').insert({
+      conversation_id: conversation.id,
+      message_id: message.id,
+      media_url: currentMessageHasImage ? message.media_url || null : null,
+      caption: message.content || null,
+      visual_analysis: {
+        has_image: currentMessageHasImage,
+        image_available: !!message.media_url,
+        model: aiSettings.model,
+        requested_queries: productToolCalls.map((tc: any) => {
+          try { return JSON.parse(tc.function.arguments || '{}')?.query || null; } catch { return null; }
+        }).filter(Boolean),
+      },
+      status: 'started',
+    }).select('id').maybeSingle();
+    productAuditId = audit?.id || null;
     const toolMessages: any[] = [];
     const callWc = async (payload: any) => {
       const wcRes = await fetch(`${supabaseUrl}/functions/v1/wc-products`, {
@@ -2352,15 +2391,20 @@ async function processQueueItem(
         const args = JSON.parse(tc.function.arguments || '{}');
         const action = args.query ? 'search' : (args.category ? 'by_category' : 'list');
         const limit = Math.min(Number(args.limit) || 8, 15);
-        let res = await callWc({ action, search: args.query, category: args.category, limit });
+        const genericVisualQuery = currentMessageHasImage && args.query && isGenericQuantityOnlyQuery(args.query);
+        let res = genericVisualQuery
+          ? { ok: true, status: 200, json: { success: true, count: 0, data: [] } }
+          : await callWc({ action, search: args.query, category: args.category, limit });
         const triedTerms: string[] = args.query ? [args.query] : [];
+        allSearchedTerms.push(...triedTerms);
 
         // If the exact term returned nothing, try reasonable variations before
         // ever letting the assistant conclude the product does not exist.
-        if (res.ok && res.json?.success !== false && (res.json?.count ?? 0) === 0 && args.query) {
+        if (!genericVisualQuery && res.ok && res.json?.success !== false && (res.json?.count ?? 0) === 0 && args.query) {
           for (const variation of buildProductQueryVariations(args.query).slice(1)) {
             const retry = await callWc({ action: 'search', search: variation, limit });
             triedTerms.push(variation);
+            allSearchedTerms.push(variation);
             if (retry.ok && retry.json?.success !== false && (retry.json?.count ?? 0) > 0) {
               res = retry;
               break;
@@ -2369,6 +2413,7 @@ async function processQueueItem(
         }
 
         result = res.json;
+        if (Array.isArray(result?.data)) allCatalogResults.push(...result.data);
         if (!res.ok || result?.success === false) {
           console.warn('[Nina] wc-products returned error:', res.status, result?.error);
           result = {
@@ -2377,17 +2422,28 @@ async function processQueueItem(
             instructions_for_assistant:
               'A busca de produtos falhou. NÃO afirme que o produto não existe nem use frases de posicionamento de marca para negar. Responda pedindo desculpas pelo problema técnico e diga que vai confirmar com o time (ou ofereça ajuda manual pedindo mais detalhes). NÃO chame search_products novamente nesta mensagem.',
           };
-        } else if ((result?.count ?? 0) === 0) {
+        } else {
+          const relevantProducts = Array.isArray(result?.data)
+            ? result.data.filter((product: any) => Number(product.relevance || 0) >= 0.5)
+            : [];
+          if (args.query && relevantProducts.length === 0) {
+            result.data = [];
+            result.count = 0;
+          }
+        }
+
+        if (result?.success !== false && (result?.count ?? 0) === 0) {
           console.log('[Nina] wc-products: no results after variations for', triedTerms.join(' | '));
           result.searched_terms = triedTerms;
           result.instructions_for_assistant =
             'A busca no catálogo real NÃO retornou resultados para: ' + triedTerms.join(', ') + '.\n' +
+            (genericVisualQuery ? 'A consulta usou apenas quantidade e não identificou o produto visível na imagem. Não trate isso como evidência sobre o catálogo.\n' : '') +
             'REGRAS OBRIGATÓRIAS:\n' +
             '• NUNCA afirme de forma categórica que o produto não existe ou que "não trabalhamos com isso".\n' +
             '• NUNCA use frases de posicionamento/identidade da marca (ex.: "nosso universo é 100% focado em...") para negar a existência de um produto.\n' +
             '• Diga, de forma cautelosa e simpática, que não localizou esse item no catálogo agora e que vai confirmar com o time antes de garantir qualquer coisa.\n' +
             '• Pergunte um detalhe que ajude (quantidade, ocasião, se é para compor uma tábua/cesta) e/ou ofereça itens próximos SOMENTE se você já tiver dados reais da ferramenta.\n' +
-            '• Se o cliente insistir ou o pedido for relevante, use request_human_handoff para confirmação humana.\n' +
+            '• Use request_human_handoff para confirmação humana pelo Comercial nesta mesma mensagem.\n' +
             'NÃO chame search_products de novo nesta mensagem.';
         } else {
           result.searched_terms = triedTerms;
@@ -2418,8 +2474,8 @@ async function processQueueItem(
 
     console.log('[Nina] search_products handled, re-calling AI with tool results');
 
-    // IMPORTANT: do NOT pass `tools` here — force the model to produce a text reply
-    // instead of looping into another tool call.
+    // Keep non-catalog actions available in the second pass. search_products is
+    // intentionally omitted so the model cannot loop, while handoff remains possible.
     const followupBody: any = {
       model: aiSettings.model,
       messages: [
@@ -2431,6 +2487,8 @@ async function processQueueItem(
       temperature: aiSettings.temperature,
       // Same reasoning-token budget concern as the main call above.
       max_tokens: 4000,
+      tools: tools.filter((tool: any) => tool.function?.name !== 'search_products'),
+      tool_choice: 'auto',
     };
 
     const followupRes = await fetch(LOVABLE_AI_URL, {
@@ -2444,8 +2502,8 @@ async function processQueueItem(
       aiMessage = followupData.choices?.[0]?.message;
       let followupContent = aiMessage?.content || '';
       const followupFinish = followupData.choices?.[0]?.finish_reason;
-      // Replace tool_calls so downstream handlers see only NEW calls (e.g. handoff/appointment)
-      toolCalls = aiMessage?.tool_calls || [];
+      const followupToolCalls = aiMessage?.tool_calls || [];
+      toolCalls = [...originalNonProductToolCalls, ...followupToolCalls];
       console.log('[Nina] Follow-up AI reply length:', followupContent.length, ', new tool_calls:', toolCalls.length, ', finish_reason:', followupFinish);
 
       if (followupFinish === 'length' && followupContent) {
@@ -2460,14 +2518,14 @@ async function processQueueItem(
         aiContent = followupContent;
       } else {
         aiContent = '';
-        toolCalls = [];
+        toolCalls = originalNonProductToolCalls;
         console.warn('[Nina] Follow-up returned empty content — will skip send.');
       }
     } else {
       console.warn('[Nina] Follow-up AI call failed:', followupRes.status);
       // Same idea: don't let the generic "Entendi! Como posso ajudar?" go out.
       aiContent = '';
-      toolCalls = [];
+      toolCalls = originalNonProductToolCalls;
     }
   }
 
@@ -2819,6 +2877,23 @@ async function processQueueItem(
     aiContent = contactFirstName
       ? `Oi, ${contactFirstName}! 💛 Deixa eu te ajudar com isso. Pode me contar um pouquinho mais o que você precisa?`
       : 'Oi! 💛 Deixa eu te ajudar com isso. Pode me contar um pouquinho mais o que você precisa?';
+  }
+
+
+  if (productAuditId) {
+    const uniqueTerms = [...new Set(allSearchedTerms.filter(Boolean))];
+    const bestProduct = [...allCatalogResults].sort((a, b) => Number(b.relevance || 0) - Number(a.relevance || 0))[0] || null;
+    const confidence = bestProduct ? Number(bestProduct.relevance || 0) : 0;
+    await supabase.from('product_catalog_audit').update({
+      searched_terms: uniqueTerms,
+      catalog_results: allCatalogResults.slice(0, 30),
+      selected_product: confidence >= 0.5 ? bestProduct : null,
+      confidence,
+      final_response: aiContent,
+      handoff_requested: !!handoffRequested,
+      status: handoffRequested ? 'needs_human' : 'completed',
+      updated_at: new Date().toISOString(),
+    }).eq('id', productAuditId);
   }
 
   console.log('[Nina] Final response length:', aiContent.length);
@@ -3220,6 +3295,8 @@ function buildEnhancedPrompt(basePrompt: string, contact: any, memory: any, sett
       `SEMPRE que o cliente perguntar se um produto específico existe, está disponível ou pode ser pedido ` +
       `(ex.: "vocês têm X?", "consigo pedir Y?", "vocês fazem Z?", "tem W em tal quantidade?"), ` +
       `você é OBRIGADA a chamar \`search_products\` ANTES de responder. ` +
+      `Esta regra também vale para FOTO ou PRINT: leia o nome e os textos visíveis, pesquise primeiro pelo NOME DO PRODUTO da imagem e só depois responda sobre tamanho, quantidade ou adaptação. ` +
+      `Nunca pesquise apenas por uma quantidade genérica (como "2 pessoas") quando a imagem mostra um nome de produto. ` +
       `É PROIBIDO responder esse tipo de pergunta com base em conhecimento geral, suposição ou texto de posicionamento da marca. ` +
       `Frases de identidade da marca (ex.: "somos focados em tábuas de frios", "nosso universo é 100% grazing") servem apenas para contexto geral da conversa — ` +
       `NUNCA para negar ou confirmar a existência de um produto. ` +
@@ -3227,7 +3304,7 @@ function buildEnhancedPrompt(basePrompt: string, contact: any, memory: any, sett
       `Se não retornar nada, NÃO afirme categoricamente que o produto não existe: diga que não localizou o item no catálogo, ` +
       `que vai confirmar com o time e, se apropriado, acione \`request_human_handoff\`. ` +
       `Use-a também PROATIVAMENTE quando o cliente demonstrar interesse, pedir sugestão, comparar opções ou parecer indeciso. ` +
-      `Nunca invente produtos, preços ou links — só fale do que a ferramenta retornar. ` +
+      `Nunca invente produtos, capacidade, rendimento, composição, personalização, preços ou links — só fale do que a ferramenta retornar. ` +
       `Em toda recomendação, inclua o LINK do produto (campo url) em texto puro para o cliente clicar no WhatsApp.`;
   }
 

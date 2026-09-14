@@ -121,8 +121,8 @@ serve(async (req) => {
           continue;
         }
 
-        // If any image/video/document message still has no media_url and the
-        // group is fresh (<25s), defer processing 8s to let download finish.
+        // If media is still missing, actively retry its download and defer the
+        // group. Never silently send an image placeholder to Donatella.
         // This prevents Nina from seeing a media placeholder without the real
         // image and returning empty content (which previously triggered the
         // duplicated fallback greeting).
@@ -133,8 +133,21 @@ serve(async (req) => {
           ...messages.map((m: any) => new Date(m.created_at).getTime())
         );
         const ageMs = Date.now() - oldestQueuedAt;
-        if (needsMedia && ageMs < 25_000) {
-          const newProcessAfter = new Date(Date.now() + 8_000).toISOString();
+        if (needsMedia && ageMs < 120_000) {
+          const missingMedia = dbMessages.filter((m: any) =>
+            ['image', 'video', 'document'].includes(m.type) && !m.media_url && m.metadata?.media_id
+          );
+          for (const pending of missingMedia) {
+            fetch(`${supabaseUrl}/functions/v1/download-whatsapp-media`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseServiceKey}`,
+              },
+              body: JSON.stringify({ message_id: pending.id, media_id: pending.metadata.media_id }),
+            }).catch((err) => console.error('[MessageGrouper] Media retry failed:', err));
+          }
+          const newProcessAfter = new Date(Date.now() + 10_000).toISOString();
           console.log(
             `[MessageGrouper] Media not yet downloaded for ${phoneNumber} (age ${ageMs}ms), deferring to ${newProcessAfter}`
           );
@@ -143,6 +156,10 @@ serve(async (req) => {
             .update({ processed: false, process_after: newProcessAfter })
             .in('id', messages.map((m: any) => m.id));
           continue;
+        }
+
+        if (needsMedia) {
+          console.error(`[MessageGrouper] Media unavailable after ${ageMs}ms for ${phoneNumber}; continuing with an explicit unavailable-media marker`);
         }
 
 
@@ -203,7 +220,10 @@ serve(async (req) => {
                 contact_name: conversation.contacts?.name || conversation.contacts?.call_name,
                 message_type: lastDbMessage.type,
                 grouped_count: messageIds.length,
-                combined_content: combinedContent,
+                combined_content: needsMedia
+                  ? `${combinedContent}\n[ARQUIVO DE IMAGEM INDISPONÍVEL PARA ANÁLISE]`
+                  : combinedContent,
+                media_unavailable: needsMedia,
                 is_silent_monitoring: isSilentMonitoring
               }
             });
