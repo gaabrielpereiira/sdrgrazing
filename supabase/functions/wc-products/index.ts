@@ -16,7 +16,26 @@ function stripHtml(s: string | null | undefined): string {
   return s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 220);
 }
 
-function formatProduct(p: any) {
+function normalizeSearchText(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function relevanceScore(product: any, search?: string): number {
+  if (!search) return 1;
+  const queryWords = normalizeSearchText(search).split(' ').filter((word) => word.length >= 3);
+  if (queryWords.length === 0) return 0;
+  const name = normalizeSearchText(product.name || '');
+  const supporting = normalizeSearchText([
+    product.short_description,
+    ...(product.categories || []).map((item: any) => item.name),
+    ...(product.tags || []).map((item: any) => item.name),
+  ].filter(Boolean).join(' '));
+  const matched = queryWords.filter((word) => name.includes(word) || supporting.includes(word));
+  const nameMatched = queryWords.filter((word) => name.includes(word));
+  return Number(Math.min(1, (nameMatched.length * 0.75 + (matched.length - nameMatched.length) * 0.25) / queryWords.length).toFixed(4));
+}
+
+function formatProduct(p: any, search?: string) {
   return {
     id: p.id,
     name: p.name,
@@ -25,10 +44,18 @@ function formatProduct(p: any) {
     sale_price: p.sale_price,
     on_sale: p.on_sale,
     stock: p.stock_status,
+    stock_quantity: p.stock_quantity,
+    purchasable: p.purchasable,
+    type: p.type,
     categories: (p.categories || []).map((c: any) => c.name),
     short_desc: stripHtml(p.short_description),
+    description: stripHtml(p.description),
     tags: (p.tags || []).map((t: any) => t.name),
+    attributes: (p.attributes || []).map((a: any) => ({ name: a.name, options: a.options || [] })),
+    variations: p.variations || [],
+    image: p.images?.[0]?.src || null,
     url: p.permalink,
+    relevance: relevanceScore(p, search),
   };
 }
 
@@ -119,7 +146,9 @@ Deno.serve(async (req) => {
     const raw = await wcRes.json();
     const data = action === 'categories'
       ? (raw as any[]).map((c) => ({ id: c.id, name: c.name, slug: c.slug, count: c.count }))
-      : (raw as any[]).map(formatProduct);
+      : (raw as any[])
+          .map((product) => formatProduct(product, action === 'search' ? search : undefined))
+          .sort((a, b) => b.relevance - a.relevance);
 
     return new Response(JSON.stringify({ success: true, count: data.length, data }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

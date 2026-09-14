@@ -28,6 +28,19 @@ function extFromMime(mime: string): string {
   return guess?.split(";")[0] || "bin";
 }
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchWithBoundedRetry(url: string, init: RequestInit): Promise<Response> {
+  let lastResponse: Response | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) await wait(750 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 250));
+    const response = await fetch(url, init);
+    lastResponse = response;
+    if (response.ok || (response.status !== 429 && response.status < 500)) return response;
+  }
+  return lastResponse as Response;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -63,7 +76,7 @@ Deno.serve(async (req) => {
     const token = settings.whatsapp_access_token;
 
     // 2. Get media URL from Graph API
-    const metaRes = await fetch(`https://graph.facebook.com/v20.0/${media_id}`, {
+    const metaRes = await fetchWithBoundedRetry(`https://graph.facebook.com/v20.0/${media_id}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -88,7 +101,7 @@ Deno.serve(async (req) => {
     }
 
     // 3. Download binary
-    const binRes = await fetch(mediaUrl, {
+    const binRes = await fetchWithBoundedRetry(mediaUrl, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
