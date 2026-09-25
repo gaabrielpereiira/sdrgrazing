@@ -443,9 +443,18 @@ serve(async (req) => {
               status: 'sent',
               media_type: mediaType,
               reply_to_id: quotedReplyToId,
-              sent_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+              // Meta can redeliver messages hours late (retries). Using the original
+              // timestamp buries them in the chat and pushes the conversation down
+              // the list. If the delay is > 5 min, use the arrival time instead.
+              sent_at: (() => {
+                const waTs = parseInt(message.timestamp) * 1000;
+                return (Number.isFinite(waTs) && Date.now() - waTs <= 5 * 60 * 1000)
+                  ? new Date(waTs).toISOString()
+                  : new Date().toISOString();
+              })(),
               metadata: { 
                 original_type: message.type,
+                wa_timestamp: message.timestamp ? new Date(parseInt(message.timestamp) * 1000).toISOString() : null,
                 wa_context: waContext,
                 is_sticker: isSticker,
                 is_contacts: isContacts,
