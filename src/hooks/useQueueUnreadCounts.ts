@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface QueueUnreadCounts {
@@ -6,53 +6,65 @@ export interface QueueUnreadCounts {
   support: number;
 }
 
+const DEBOUNCE_MS = 2000;
+
 /**
  * Counts unread incoming messages grouped by conversation queue.
- * Refreshes on a 30s interval and on every realtime message INSERT/UPDATE.
+ * Counting happens in the database (get_queue_unread_counts). Realtime events
+ * are debounced and refreshes pause while the browser tab is hidden.
  */
 export function useQueueUnreadCounts(): QueueUnreadCounts {
   const [counts, setCounts] = useState<QueueUnreadCounts>({ sales: 0, support: 0 });
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightRef = useRef(false);
 
   const refresh = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('conversation_id, conversations!inner(queue)')
-        .eq('from_type', 'user')
-        .is('read_at', null)
-        .limit(5000);
+      const { data, error } = await (supabase as any).rpc('get_queue_unread_counts');
       if (error) {
         console.warn('[useQueueUnreadCounts] error:', error);
         return;
       }
-      let sales = 0, support = 0;
-      for (const row of (data || []) as any[]) {
-        const q = row.conversations?.queue;
-        if (q === 'support') support++;
-        else sales++;
-      }
-      setCounts({ sales, support });
+      const d = (data || {}) as { sales?: number; support?: number };
+      setCounts({ sales: Number(d.sales) || 0, support: Number(d.support) || 0 });
     } catch (e) {
       console.warn('[useQueueUnreadCounts] refresh failed:', e);
+    } finally {
+      inFlightRef.current = false;
     }
   }, []);
+
+  const scheduleRefresh = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      refresh();
+    }, DEBOUNCE_MS);
+  }, [refresh]);
 
   useEffect(() => {
     refresh();
     const interval = setInterval(refresh, 30_000);
+    const onVisible = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
 
     const channel = supabase
-      .channel('queue-unread-counts')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, refresh)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, refresh)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, refresh)
+      .channel(`queue-unread-counts-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, scheduleRefresh)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, scheduleRefresh)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, scheduleRefresh)
       .subscribe();
 
     return () => {
       clearInterval(interval);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      document.removeEventListener('visibilitychange', onVisible);
       supabase.removeChannel(channel);
     };
-  }, [refresh]);
+  }, [refresh, scheduleRefresh]);
 
   return counts;
 }

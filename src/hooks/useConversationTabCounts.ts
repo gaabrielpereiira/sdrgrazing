@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface ConversationTabCounts {
@@ -28,88 +28,87 @@ const ZERO: ConversationTabCounts = {
   openTicketConversationIds: new Set<string>(),
 };
 
+const DEBOUNCE_MS = 2000;
 
 /**
  * Counts conversations grouped by queue (sales/support), is_active, and
  * (optionally) the active conversations assigned to the current team_member.
- * Refreshes every 30s and on conversations realtime changes.
+ * Counting happens in the database (get_conversation_tab_counts). Realtime
+ * events are debounced and refreshes pause while the browser tab is hidden.
  */
 export function useConversationTabCounts(
   myMemberId?: string | null,
   restrictTeamId?: string | null,
 ): ConversationTabCounts {
   const [counts, setCounts] = useState<ConversationTabCounts>(ZERO);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightRef = useRef(false);
 
   const refresh = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
-      const [convRes, ticketsRes] = await Promise.all([
-        supabase
-          .from('conversations')
-          .select('id, queue, is_active, assigned_user_id, assigned_team')
-          .limit(5000),
-        supabase
-          .from('support_cases')
-          .select('id, conversation_id, closed_at')
-          .limit(5000),
-      ]);
-
-      if (convRes.error) {
-        console.warn('[useConversationTabCounts] conversations error:', convRes.error);
+      const { data, error } = await (supabase as any).rpc('get_conversation_tab_counts', {
+        _member_id: myMemberId || null,
+        _team_id: restrictTeamId || null,
+      });
+      if (error) {
+        console.warn('[useConversationTabCounts] error:', error);
         return;
       }
-      if (ticketsRes.error) {
-        console.warn('[useConversationTabCounts] tickets error:', ticketsRes.error);
-      }
-
-      const openTicketConversationIds = new Set<string>();
-      for (const row of (ticketsRes.data || []) as any[]) {
-        if (row.closed_at === null && row.conversation_id) {
-          openTicketConversationIds.add(row.conversation_id);
-        }
-      }
-
-      const next = { ...ZERO, openTicketConversationIds };
-      for (const row of (convRes.data || []) as any[]) {
-        if (restrictTeamId && row.assigned_team !== restrictTeamId) continue;
-        const isSupport = row.queue === 'support' || openTicketConversationIds.has(row.id);
-        const isActive = row.is_active !== false;
-        if (isActive) {
-          next.activeTotal++;
-          if (isSupport) next.activeSupport++;
-          else next.activeSales++;
-          if (myMemberId && row.assigned_user_id === myMemberId) next.mine++;
-        } else {
-          next.finishedTotal++;
-          if (isSupport) next.finishedSupport++;
-          else next.finishedSales++;
-        }
-      }
-
-      next.activeSupportTickets = next.activeSupport;
-      next.finishedSupportTickets = next.finishedSupport;
-
-      setCounts(next);
-
+      const d = (data || {}) as Record<string, any>;
+      const n = (k: string) => Number(d[k]) || 0;
+      const activeSupport = n('activeSupport');
+      const finishedSupport = n('finishedSupport');
+      setCounts({
+        activeSales: n('activeSales'),
+        finishedSales: n('finishedSales'),
+        activeSupport,
+        finishedSupport,
+        activeSupportTickets: activeSupport,
+        finishedSupportTickets: finishedSupport,
+        activeTotal: n('activeTotal'),
+        finishedTotal: n('finishedTotal'),
+        mine: n('mine'),
+        openTicketConversationIds: new Set<string>(
+          ((d.openTicketConversationIds || []) as string[]).filter(Boolean),
+        ),
+      });
     } catch (e) {
       console.warn('[useConversationTabCounts] refresh failed:', e);
+    } finally {
+      inFlightRef.current = false;
     }
   }, [myMemberId, restrictTeamId]);
+
+  const scheduleRefresh = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      refresh();
+    }, DEBOUNCE_MS);
+  }, [refresh]);
 
   useEffect(() => {
     refresh();
     const interval = setInterval(refresh, 30_000);
+    const onVisible = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
 
     const channel = supabase
-      .channel('conversation-tab-counts')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, refresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_cases' }, refresh)
+      .channel(`conversation-tab-counts-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_cases' }, scheduleRefresh)
       .subscribe();
 
     return () => {
       clearInterval(interval);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      document.removeEventListener('visibilitychange', onVisible);
       supabase.removeChannel(channel);
     };
-  }, [refresh]);
+  }, [refresh, scheduleRefresh]);
 
   return counts;
 }
