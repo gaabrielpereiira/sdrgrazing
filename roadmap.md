@@ -6,3 +6,6 @@
 - [x] Preservar encaminhamento humano após a consulta ao catálogo.
 - [x] Registrar a trilha de auditoria de imagens, buscas, resultados e respostas.
 - [x] Publicar e validar as funções atualizadas com consultas reais ao catálogo.
+
+## Lentidão do sistema
+- [x] Contadores de não lidas e abas calculados no banco, com índice e atualização agrupada.
