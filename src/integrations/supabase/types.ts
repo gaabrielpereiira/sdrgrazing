@@ -1968,6 +1968,10 @@ export type Database = {
         }[]
       }
       get_auth_user_id: { Args: never; Returns: string }
+      get_conversation_tab_counts: {
+        Args: { _member_id?: string; _team_id?: string }
+        Returns: Json
+      }
       get_or_create_conversation_state: {
         Args: { p_conversation_id: string }
         Returns: {
@@ -1987,6 +1991,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_queue_unread_counts: { Args: never; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

@@ -8,6 +8,13 @@
       "when": 1789405243169,
       "tag": "0000_create_product_catalog_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790856210818,
+      "tag": "0001_perf_unread_and_tab_counts",
+      "breakpoints": true
     }
   ]
 }
