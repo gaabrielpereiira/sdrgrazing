@@ -1967,6 +1967,12 @@ export type Database = {
           logs_deleted: number
         }[]
       }
+      donatella_migracao_confirmar: { Args: { ids: string[] }; Returns: number }
+      donatella_migracao_ler_lote: { Args: { limite?: number }; Returns: Json }
+      donatella_migracao_snapshot: {
+        Args: { apos?: Json; esquema: string; limite?: number; tabela: string }
+        Returns: Json
+      }
       get_auth_user_id: { Args: never; Returns: string }
       get_conversation_tab_counts: {
         Args: { _member_id?: string; _team_id?: string }
